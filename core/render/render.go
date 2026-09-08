@@ -112,7 +112,33 @@ var lanes = map[string]lane{
 			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
 			{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
 		},
-		delivery: k8sDelivery,
+		delivery: k8sDeliveryAWS,
+	},
+	"gcp/kubernetes": {
+		// GKE's built-in ingress class handles http; external-secrets via Workload
+		// Identity handles the app secret. Both wired in the delivery layer.
+		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry"},
+		wiring: map[string][]kv{
+			"runtime-k8s": {
+				{"network_id", "module.network.network_id"},
+				{"subnet_id", "module.network.subnet_id"},
+				{"secret_ids", "module.secrets.secret_ids"},
+			},
+			"postgres": {
+				{"network_id", "module.network.network_id"},
+				{"private_services_connection", "module.network.private_services_connection"},
+			},
+		},
+		requires:  stdRequires,
+		providers: gcpProviders,
+		outputs: []rootOutput{
+			{"cluster_name", "runtime-k8s", "module.runtime_k8s.cluster_name", "GKE cluster (delivery via Flux lands with the clusters layer)"},
+			{"cluster_endpoint", "runtime-k8s", "module.runtime_k8s.cluster_endpoint", "GKE API endpoint (public at M2; origin lockdown is a hardening roadmap item)"},
+			{"db_connection_name", "postgres", "module.postgres.connection_name", "Cloud SQL connection name (credentials: operator-set secret)"},
+			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
+			{"registry_url", "registry", "module.registry.repository_url", "Artifact Registry repository"},
+		},
+		delivery: k8sDeliveryGCP,
 	},
 	"gcp/serverless-containers": {
 		emitOrder: []string{"network", "runtime-serverless", "dns-ingress", "postgres", "storage", "secrets", "registry"},
@@ -499,6 +525,12 @@ func checkovConfig(cloud string) []byte {
 		},
 		"gcp": {
 			{"CKV_GCP_6", "TLS is enforced via ssl_mode = ENCRYPTED_ONLY; checkov still looks for the deprecated require_ssl field"},
+			{"CKV_GCP_12", "NetworkPolicy is enforced natively by Dataplane V2 (datapath_provider = ADVANCED_DATAPATH); checkov looks for the legacy network_policy addon block"},
+			{"CKV_GCP_20", "the GKE public endpoint is documented M2 posture (nodes are private); master authorized networks / private-only requires in-VPC CI runners or VPN — hardening roadmap, same as the EKS lane"},
+			{"CKV_GCP_61", "VPC flow logs + intranode visibility are log-cost decisions; regulated-tier roadmap (consistent with CKV_GCP_26)"},
+			{"CKV_GCP_65", "Google Groups RBAC is an org-level construct; lands with the founding path (M3)"},
+			{"CKV_GCP_66", "Binary Authorization is supply-chain roadmap; today's gate is trivy blocking HIGH/CRITICAL in CI (§10.1)"},
+			{"CKV_GCP_69", "GKE_METADATA is set on the node pool's workload_metadata_config; the default pool is removed — checkov also wants it on the cluster-level node_config that never creates nodes"},
 			{"CKV_GCP_26", "VPC flow logs are a log-cost decision; regulated-tier roadmap"},
 			{"CKV_GCP_79", "pinned to POSTGRES_17, the current major; checkov's latest-version list lags and pinning beats floating"},
 			{"CKV_GCP_84", "customer-managed encryption keys are regulated-tier roadmap; Google-managed encryption is on"},

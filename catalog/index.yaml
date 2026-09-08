@@ -62,6 +62,9 @@ clouds:
     providers:
       - name: hashicorp/google
         version: "7.2.0"    # placeholder pin
+    # On kubernetes, ingress is GKE's built-in class — no dns-ingress module (§3.3).
+    capabilities:
+      http-ingress/kubernetes: []
     modules:
       network:
         version: "0.1.0"

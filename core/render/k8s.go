@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/bealesh/neckbeard/core/blueprint"
@@ -17,7 +18,43 @@ import (
 // and the controllers layer (aws-load-balancer-controller makes Ingress real;
 // external-secrets materializes the app secret from Secrets Manager). Apps depend
 // on controllers in Flux, so nothing applies against missing CRDs.
-func k8sDelivery(bp *blueprint.Blueprint) []ownership.File {
+type k8sLaneConfig struct {
+	ingressClass string
+	// per-service ingress annotations (aws needs healthcheck-path; gce reads the
+	// readinessProbe instead — an honest per-cloud difference)
+	ingressAnnotations func(s blueprint.Service) []string
+	// controllers-layer resource files beyond app-secrets (helm repos + releases)
+	controllerFiles func(bp *blueprint.Blueprint, env blueprint.Environment) map[string][]byte
+	// ClusterSecretStore + ExternalSecret for the cloud's secret manager
+	appSecrets func(bp *blueprint.Blueprint, env blueprint.Environment) []byte
+}
+
+var awsK8s = k8sLaneConfig{
+	ingressClass: "alb",
+	ingressAnnotations: func(s blueprint.Service) []string {
+		return []string{
+			"alb.ingress.kubernetes.io/scheme: internet-facing",
+			"alb.ingress.kubernetes.io/target-type: ip",
+			"alb.ingress.kubernetes.io/healthcheck-path: " + s.HealthPath,
+		}
+	},
+	controllerFiles: awsControllerFiles,
+	appSecrets:      awsAppSecretsYAML,
+}
+
+var gcpK8s = k8sLaneConfig{
+	// GKE's built-in ingress: no controller install; healthchecks ride the
+	// readinessProbe.
+	ingressClass:       "gce",
+	ingressAnnotations: func(blueprint.Service) []string { return nil },
+	controllerFiles:    gcpControllerFiles,
+	appSecrets:         gcpAppSecretsYAML,
+}
+
+func k8sDeliveryAWS(bp *blueprint.Blueprint) []ownership.File { return k8sDelivery(bp, awsK8s) }
+func k8sDeliveryGCP(bp *blueprint.Blueprint) []ownership.File { return k8sDelivery(bp, gcpK8s) }
+
+func k8sDelivery(bp *blueprint.Blueprint, cfg k8sLaneConfig) []ownership.File {
 	files := []ownership.File{
 		{Path: "clusters/base/apps/kustomization.yaml", Content: baseKustomization(bp), Owner: ownership.OwnerGenerated},
 		{Path: "clusters/base/apps/namespace.yaml", Content: namespaceYAML(bp), Owner: ownership.OwnerGenerated},
@@ -28,7 +65,7 @@ func k8sDelivery(bp *blueprint.Blueprint) []ownership.File {
 			files = append(files,
 				ownership.File{Path: "clusters/base/apps/deployment-" + s.Name + ".yaml", Content: deploymentYAML(bp, s), Owner: ownership.OwnerGenerated},
 				ownership.File{Path: "clusters/base/apps/service-" + s.Name + ".yaml", Content: serviceYAML(bp, s), Owner: ownership.OwnerGenerated},
-				ownership.File{Path: "clusters/base/apps/ingress-" + s.Name + ".yaml", Content: ingressYAML(bp, s), Owner: ownership.OwnerGenerated},
+				ownership.File{Path: "clusters/base/apps/ingress-" + s.Name + ".yaml", Content: ingressYAML(bp, s, cfg), Owner: ownership.OwnerGenerated},
 			)
 		case "worker":
 			files = append(files,
@@ -46,12 +83,20 @@ func k8sDelivery(bp *blueprint.Blueprint) []ownership.File {
 			ownership.File{Path: dir + "/apps.yaml", Content: fluxKustomizationYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/apps/kustomization.yaml", Content: envKustomization(bp, env.Name), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/controllers.yaml", Content: fluxControllersYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/controllers/kustomization.yaml", Content: controllersKustomization(), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/controllers/helm-repositories.yaml", Content: helmRepositoriesYAML(), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/controllers/alb-controller.yaml", Content: albControllerYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/controllers/external-secrets.yaml", Content: externalSecretsYAML(), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/controllers/app-secrets.yaml", Content: appSecretsYAML(bp, env), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers/app-secrets.yaml", Content: cfg.appSecrets(bp, env), Owner: ownership.OwnerGenerated},
 		)
+		ctrl := cfg.controllerFiles(bp, env)
+		names := []string{"app-secrets.yaml"}
+		for name := range ctrl {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if content, ok := ctrl[name]; ok {
+				files = append(files, ownership.File{Path: dir + "/controllers/" + name, Content: content, Owner: ownership.OwnerGenerated})
+			}
+		}
+		files = append(files, ownership.File{Path: dir + "/controllers/kustomization.yaml", Content: controllersKustomization(names), Owner: ownership.OwnerGenerated})
 		if env.Name == "dev" {
 			// Image automation commits fresh digests to dev only; stg/prd move by
 			// promotion PR (§11.2).
@@ -169,20 +214,21 @@ spec:
 `, generatedYAMLManifestHeader, s.Name, appNS(bp), s.Name, s.Port)
 }
 
-func ingressYAML(bp *blueprint.Blueprint, s blueprint.Service) []byte {
-	return fmt.Appendf(nil, `%s# Requires the aws-load-balancer-controller (controllers layer, next increment):
-# until it is installed this Ingress is inert — no ALB is created.
-apiVersion: networking.k8s.io/v1
+func ingressYAML(bp *blueprint.Blueprint, s blueprint.Service, cfg k8sLaneConfig) []byte {
+	annotations := ""
+	if lines := cfg.ingressAnnotations(s); len(lines) > 0 {
+		annotations = "\n  annotations:"
+		for _, l := range lines {
+			annotations += "\n    " + l
+		}
+	}
+	return fmt.Appendf(nil, `%sapiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: %s
-  namespace: %s
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: %s
+  namespace: %s%s
 spec:
-  ingressClassName: alb
+  ingressClassName: %s
   rules:
     - http:
         paths:
@@ -193,7 +239,7 @@ spec:
                 name: %s
                 port:
                   number: 80
-`, generatedYAMLManifestHeader, s.Name, appNS(bp), s.HealthPath, s.Name)
+`, generatedYAMLManifestHeader, s.Name, appNS(bp), annotations, cfg.ingressClass, s.Name)
 }
 
 func cronJobYAML(bp *blueprint.Blueprint, s blueprint.Service) []byte {
@@ -269,18 +315,25 @@ spec:
 `, generatedYAMLManifestHeader, bp.App, env)
 }
 
-func controllersKustomization() []byte {
-	return []byte(generatedYAMLManifestHeader + `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - helm-repositories.yaml
-  - alb-controller.yaml
-  - external-secrets.yaml
-  - app-secrets.yaml
-`)
+func controllersKustomization(names []string) []byte {
+	var b strings.Builder
+	b.WriteString(generatedYAMLManifestHeader)
+	b.WriteString("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n")
+	for _, n := range names {
+		fmt.Fprintf(&b, "  - %s\n", n)
+	}
+	return []byte(b.String())
 }
 
-func helmRepositoriesYAML() []byte {
+func awsControllerFiles(bp *blueprint.Blueprint, env blueprint.Environment) map[string][]byte {
+	return map[string][]byte{
+		"helm-repositories.yaml": awsHelmRepositoriesYAML(),
+		"alb-controller.yaml":    albControllerYAML(bp, env.Name),
+		"external-secrets.yaml":  externalSecretsHelmYAML("external-secrets"),
+	}
+}
+
+func awsHelmRepositoriesYAML() []byte {
 	return []byte(generatedYAMLManifestHeader + `apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
@@ -330,9 +383,13 @@ spec:
 `, generatedYAMLManifestHeader, clusterName, bp.Region)
 }
 
-func externalSecretsYAML() []byte {
-	return []byte(generatedYAMLManifestHeader + `# Materializes the app secret from the cloud secrets manager. Identity: EKS Pod
-# Identity association created by the runtime-k8s module.
+func externalSecretsHelmYAML(extraValues string) []byte {
+	values := "    installCRDs: true\n"
+	if extraValues != "external-secrets" && extraValues != "" {
+		values += extraValues
+	}
+	return fmt.Appendf(nil, `%s# Materializes the app secret from the cloud secrets manager. Identity comes
+# from the runtime-k8s module (EKS Pod Identity / GKE Workload Identity).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -355,15 +412,77 @@ spec:
         name: external-secrets
         namespace: flux-system
   values:
-    installCRDs: true
+%s`, generatedYAMLManifestHeader, values)
+}
+
+// gcpControllerFiles: GKE ingress is built-in (no ALB controller); only
+// external-secrets installs, with its KSA annotated to the Workload Identity GSA
+// the runtime-k8s module creates (account id replicated from the module's
+// derivation: substr("<prefix>-eso", 0, 30)).
+func gcpControllerFiles(bp *blueprint.Blueprint, env blueprint.Environment) map[string][]byte {
+	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
+	gsa := prefix + "-eso"
+	if len(gsa) > 30 {
+		gsa = gsa[:30]
+	}
+	extraValues := fmt.Sprintf("    serviceAccount:\n      annotations:\n        iam.gke.io/gcp-service-account: %s@%s.iam.gserviceaccount.com\n", gsa, env.Container)
+	return map[string][]byte{
+		"helm-repositories.yaml": gcpHelmRepositoriesYAML(),
+		"external-secrets.yaml":  externalSecretsHelmYAML(extraValues),
+	}
+}
+
+func gcpHelmRepositoriesYAML() []byte {
+	return []byte(generatedYAMLManifestHeader + `apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: external-secrets
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://charts.external-secrets.io
 `)
 }
 
-// appSecretsYAML wires cloud secrets into the <app>-secrets k8s Secret the
+// gcpAppSecretsYAML: Secret Manager provider; secret ids use the gcp secrets
+// module's "<prefix>-<NAME>" naming (dash, not slash).
+func gcpAppSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
+	var b strings.Builder
+	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: %s
+spec:
+  provider:
+    gcpsm:
+      projectID: %s
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: %s-secrets
+  namespace: %s
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: %s
+  target:
+    name: %s-secrets
+  data:
+`, generatedYAMLManifestHeader, bp.App, env.Container, bp.App, appNS(bp), bp.App, bp.App)
+	for _, name := range secretNames(env) {
+		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s-%s\n", name, prefix, name)
+	}
+	return []byte(b.String())
+}
+
+// awsAppSecretsYAML wires cloud secrets into the <app>-secrets k8s Secret the
 // deployments reference. Values stay in the cloud secret store; only names are
 // rendered (DESIGN §8, §10.1). Until operators set values, pods stay Pending —
 // fail-closed by design.
-func appSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+func awsAppSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
 	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
 	var b strings.Builder
 	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1

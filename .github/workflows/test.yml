@@ -37,6 +37,10 @@ jobs:
       fail-fast: false
       matrix:
         cloud: [aws, gcp, azure]
+        runtime: [serverless-containers]
+        include:
+          - { cloud: aws, runtime: kubernetes }
+          - { cloud: gcp, runtime: kubernetes }
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +55,12 @@ jobs:
         run: pipx install checkov
       - name: Build neckbeard
         run: go build -o bin/neckbeard ./cmd/neckbeard
-      - name: Plan, scaffold, validate (${{ matrix.cloud }})
+      - name: Install kubeconform
+        if: matrix.runtime == 'kubernetes'
+        run: |
+          go install github.com/yannh/kubeconform/cmd/kubeconform@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Plan, scaffold, validate (${{ matrix.cloud }}/${{ matrix.runtime }})
         run: |
           set -eu
           LANE=$(mktemp -d)
@@ -70,6 +79,9 @@ jobs:
                 bellwether/neckbeard.yaml > "$LANE/neckbeard.yaml"
               printf 'containers:\n  dev: 00000000-0000-0000-0000-000000000001\n  stg: 00000000-0000-0000-0000-000000000002\n  prd: 00000000-0000-0000-0000-000000000003\n' >> "$LANE/neckbeard.yaml" ;;
           esac
+          if [ "${{ matrix.runtime }}" = "kubernetes" ]; then
+            sed -i 's/^runtime: serverless-containers/runtime: kubernetes/' "$LANE/neckbeard.yaml"
+          fi
           bin/neckbeard plan -config "$LANE/neckbeard.yaml" -profile "$LANE/app-profile.yaml" \
             -catalog catalog/index.yaml -out "$LANE/blueprint.yaml"
           cd "$LANE"
