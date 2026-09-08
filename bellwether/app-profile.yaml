@@ -1,0 +1,44 @@
+version: 1
+services:
+  - name: web
+    kind: http
+    port: 8080
+    health_path: /healthz
+    dockerfile: bellwether/Dockerfile
+  - name: worker
+    kind: worker
+    dockerfile: bellwether/Dockerfile
+  - name: nightly-report
+    kind: cron
+    schedule: "0 3 * * *"
+    dockerfile: bellwether/Dockerfile
+needs:
+  - capability: postgres
+    mode: provision
+    evidence:
+      - file: bellwether/main.go
+  - capability: secrets
+    mode: provision
+    evidence:
+      - file: bellwether/main.go
+secrets:
+  - name: DATABASE_URL
+facts:
+  - id: fact-postgres
+    statement: "App connects to PostgreSQL via DATABASE_URL when set (pgx stdlib driver)"
+    evidence:
+      - file: bellwether/main.go
+  - id: fact-health
+    statement: "GET /healthz reports status and database reachability"
+    evidence:
+      - file: bellwether/main.go
+inferences:
+  - id: inf-worker
+    statement: "Worker polls the notes table; no separate queue needed"
+    confidence: high
+    reasoning: "processPending is a DB-backed poll loop"
+    derived_from: [fact-postgres]
+confirmed:
+  - id: conf-traffic
+    question: "Expected sustained traffic?"
+    answer: "test harness only; single-digit rps"

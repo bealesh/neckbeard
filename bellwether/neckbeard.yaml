@@ -1,0 +1,12 @@
+version: 1
+app: bellwether
+org: neckbeard
+cloud: aws
+region: us-east-1
+vcs: github
+runtime: serverless-containers
+tier: solo
+entry_path: adopt
+finops:
+  currency: USD
+  monthly_budget_alert: 100
