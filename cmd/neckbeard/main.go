@@ -6,11 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/catalog"
 	"github.com/bealesh/neckbeard/core/config"
+	"github.com/bealesh/neckbeard/core/estimate"
 	"github.com/bealesh/neckbeard/core/ownership"
 	"github.com/bealesh/neckbeard/core/planner"
 	"github.com/bealesh/neckbeard/core/presets"
@@ -36,6 +39,8 @@ func main() {
 		err = runScaffold(os.Args[2:])
 	case "validate":
 		err = runValidate(os.Args[2:])
+	case "estimate":
+		err = runEstimate(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -51,6 +56,7 @@ func usage() {
 
 commands:
   plan      resolve app profile + config against the catalog into blueprint.yaml
+  estimate  cost report from the blueprint (rendered to scratch; no cloud creds)
   scaffold  render the blueprint into the repo under the ownership contract
   validate  V0 static checks over the rendered env roots (fmt, init, validate)
   version   print version`)
@@ -154,6 +160,54 @@ func runScaffold(args []string) error {
 		return fmt.Errorf("%d conflict(s): neckbeard never overwrites files it did not just generate — review each <file>%s diff, then either keep your edit (move it to an override or a custom.tf extension point) or replace the file with the %s version and re-run scaffold", len(res.Conflicts), ownership.NewSuffix, ownership.NewSuffix)
 	}
 	fmt.Printf("\nscaffold complete (blueprint %s)\n", bp.Hash)
+	return nil
+}
+
+func runEstimate(args []string) error {
+	fs := flag.NewFlagSet("estimate", flag.ExitOnError)
+	configPath := fs.String("config", "neckbeard.yaml", "path to neckbeard.yaml")
+	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
+	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "module source base (local path speeds estimation up)")
+	infracostBin := fs.String("infracost-bin", "infracost", "infracost 0.10.x binary")
+	outPath := fs.String("out", "costs/estimate.md", "report output path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, cfgDigest, err := config.Load(*configPath)
+	if err != nil {
+		return fmt.Errorf("loading %s: %w", *configPath, err)
+	}
+	bp, err := blueprint.Load(*blueprintPath)
+	if err != nil {
+		return err
+	}
+
+	res, err := estimate.Run(estimate.Options{
+		Config: cfg, ConfigDigest: cfgDigest, Blueprint: bp,
+		CatalogSource: *catalogSource, InfracostBin: *infracostBin,
+	})
+	if err != nil {
+		return err
+	}
+	report := estimate.Report(res, cfg, bp, time.Now())
+	if err := os.MkdirAll(filepath.Dir(*outPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(*outPath, report, 0o644); err != nil {
+		return err
+	}
+
+	for _, e := range res.Envs {
+		fmt.Printf("env %-4s baseline %8.2f   expected %8.2f   range %.2f–%.2f %s/mo\n",
+			e.Env+":", e.Costs["baseline"], e.Costs["expected"], e.Costs["low"], e.Costs["high"], res.Currency)
+	}
+	var total float64
+	for _, e := range res.Envs {
+		total += e.Costs["expected"]
+	}
+	fmt.Printf("\nexpected total: %.2f %s/mo (%.2f/yr) — full report: %s\n", total, res.Currency, total*12, *outPath)
+	fmt.Println("estimates ride on section 2's usage assumptions; budget alerts notify, they don't cap")
 	return nil
 }
 
