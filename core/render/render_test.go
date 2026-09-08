@@ -166,6 +166,48 @@ func TestGCPLaneRenders(t *testing.T) {
 	}
 }
 
+func TestK8sLaneRendersDeliveryLayer(t *testing.T) {
+	bp := testBlueprint(t)
+	bp.Runtime = "kubernetes"
+	bp.Environments[0].Modules = nil // module set irrelevant here; lane wiring drives infra files
+	ws, err := WriteSet(bp, testOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := map[string]string{}
+	for _, f := range ws {
+		byPath[f.Path] = string(f.Content)
+	}
+	for _, p := range []string{
+		"clusters/base/apps/kustomization.yaml",
+		"clusters/base/apps/deployment-web.yaml",
+		"clusters/base/apps/ingress-web.yaml",
+		"clusters/base/apps/cronjob-nightly-report.yaml",
+		"clusters/dev/apps.yaml",
+		"clusters/dev/image-automation.yaml",
+		"clusters/prd/apps/kustomization.yaml",
+	} {
+		if _, ok := byPath[p]; !ok {
+			t.Errorf("missing delivery file %s", p)
+		}
+	}
+	// Image automation is dev-only: stg/prd move by promotion PR (§11.2).
+	for _, env := range []string{"stg", "prd"} {
+		if _, ok := byPath["clusters/"+env+"/image-automation.yaml"]; ok {
+			t.Errorf("%s must not have image automation", env)
+		}
+	}
+	if !strings.Contains(byPath["clusters/base/apps/deployment-web.yaml"], `$imagepolicy`) {
+		t.Error("deployments need the image-policy marker for Flux automation")
+	}
+	if !strings.Contains(byPath["clusters/dev/apps/kustomization.yaml"], "newTag: bootstrap-pending") {
+		t.Error("env overlays must pin the placeholder tag for the release flow to own")
+	}
+	if strings.Contains(byPath["clusters/dev/apps/kustomization.yaml"], placeholderImage) {
+		t.Error("images transformer must match the tag-less repo name (kustomize double-tag bug)")
+	}
+}
+
 func TestUnsupportedLaneIsRefusedByName(t *testing.T) {
 	bp := testBlueprint(t)
 	bp.Cloud, bp.Runtime = "gcp", "kubernetes"

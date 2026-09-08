@@ -44,6 +44,9 @@ type lane struct {
 	rootResources func(bp *blueprint.Blueprint, env blueprint.Environment) string
 	providers     func(bp *blueprint.Blueprint, env blueprint.Environment) []byte
 	outputs       []rootOutput
+	// delivery renders the runtime's delivery layer (e.g. clusters/ + Flux for
+	// kubernetes lanes); nil for lanes where CI applies releases directly.
+	delivery func(bp *blueprint.Blueprint) []ownership.File
 }
 
 type rootOutput struct{ name, module, expr, desc string }
@@ -109,6 +112,7 @@ var lanes = map[string]lane{
 			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
 			{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
 		},
+		delivery: k8sDelivery,
 	},
 	"gcp/serverless-containers": {
 		emitOrder: []string{"network", "runtime-serverless", "dns-ingress", "postgres", "storage", "secrets", "registry"},
@@ -232,6 +236,9 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 			ownership.File{Path: dir + "/outputs.tf", Content: outputsTF(env, l), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/custom.tf", Content: customTFStub(env.Name), Owner: ownership.OwnerUser},
 		)
+	}
+	if l.delivery != nil {
+		files = append(files, l.delivery(bp)...)
 	}
 	return files, nil
 }

@@ -74,6 +74,7 @@ func StaticV0(root string, envs []string) ([]Check, error) {
 
 	checks = append(checks, pipelineChecks(root)...)
 	checks = append(checks, policyChecks(root, envs)...)
+	checks = append(checks, manifestChecks(root)...)
 
 	// What this run did NOT prove, stated instead of implied (DESIGN §12.1).
 	checks = append(checks,
@@ -137,6 +138,31 @@ func pipelineChecks(root string) []Check {
 		checks = append(checks, Check{Level: "V0", Name: "GitLab CI lint", Status: NotExercised, Detail: "requires a GitLab instance's CI lint API"})
 	}
 	return checks
+}
+
+// manifestChecks validates the kubernetes delivery layer (clusters/) with
+// kubeconform: core schemas plus the community CRD catalog for Flux resources.
+func manifestChecks(root string) []Check {
+	clustersDir := filepath.Join(root, "clusters")
+	if _, err := os.Stat(clustersDir); err != nil {
+		return nil // not a kubernetes lane
+	}
+	kubeconform, err := exec.LookPath("kubeconform")
+	if err != nil {
+		return []Check{{Level: "V0", Name: "kubeconform (clusters/)", Status: NotExercised, Detail: "kubeconform not installed (`brew install kubeconform`)"}}
+	}
+	cmd := exec.Command(kubeconform,
+		"-strict", "-summary",
+		"-schema-location", "default",
+		"-schema-location", "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+		clustersDir)
+	out, runErr := cmd.CombinedOutput()
+	c := Check{Level: "V0", Name: "kubeconform (clusters/)", Status: Passed}
+	if runErr != nil {
+		c.Status = Failed
+		c.Detail = lastLines(string(out), 8)
+	}
+	return []Check{c}
 }
 
 func AnyFailed(checks []Check) bool {
