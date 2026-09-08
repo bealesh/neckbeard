@@ -54,6 +54,25 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 		return nil, err
 	}
 
+	services := make([]blueprint.Service, 0, len(prof.Services))
+	for _, s := range prof.Services {
+		services = append(services, blueprint.Service{
+			Name: s.Name, Kind: s.Kind, Port: s.Port, HealthPath: s.HealthPath, Schedule: s.Schedule,
+		})
+	}
+	slices.SortFunc(services, func(a, b blueprint.Service) int { return strings.Compare(a.Name, b.Name) })
+
+	// The secrets module provisions named secret containers (names only — values are
+	// set out-of-band, never by neckbeard): the profile's declared secrets plus one
+	// connection secret per referenced external service.
+	secretNames := map[string]bool{}
+	for _, s := range prof.Secrets {
+		secretNames[s.Name] = true
+	}
+	for _, r := range refs {
+		secretNames[r.SecretName] = true
+	}
+
 	var envs []blueprint.Environment
 	for _, envName := range cfg.Environments {
 		env := blueprint.Environment{Name: envName}
@@ -63,6 +82,11 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 				return nil, fmt.Errorf("catalog cloud %q has no module %q required by this plan", cfg.Cloud, modName)
 			}
 			inputs := resolveInputs(cfg, tier, in.Presets, envName, modName, mod)
+			if modName == "secrets" && len(secretNames) > 0 {
+				inputs = insertInput(inputs, blueprint.Input{
+					Key: "secret_names", Value: slices.Sorted(maps.Keys(secretNames)), Provenance: "derived",
+				})
+			}
 			env.Modules = append(env.Modules, blueprint.ModuleUsage{
 				Name:    modName,
 				Source:  mod.Source,
@@ -97,6 +121,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 		Runtime:      cfg.Runtime,
 		VCS:          cfg.VCS,
 		Tier:         cfg.Tier,
+		Services:     services,
 		Environments: envs,
 		References:   refs,
 		Warnings:     warnings,
@@ -199,6 +224,12 @@ func resolveInputs(cfg *config.Config, tier presets.Tier, pre *presets.Set, envN
 		inputs = append(inputs, blueprint.Input{Key: k, Value: merged[k].value, Provenance: merged[k].provenance})
 	}
 	return inputs
+}
+
+// insertInput adds an input while preserving the sorted-by-key invariant.
+func insertInput(inputs []blueprint.Input, in blueprint.Input) []blueprint.Input {
+	i, _ := slices.BinarySearchFunc(inputs, in, func(a, b blueprint.Input) int { return strings.Compare(a.Key, b.Key) })
+	return slices.Insert(inputs, i, in)
 }
 
 func checkOverrides(cfg *config.Config, cloud catalog.Cloud, activeModules []string) error {

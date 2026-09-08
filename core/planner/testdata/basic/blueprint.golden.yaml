@@ -1,11 +1,11 @@
 version: 1
-blueprint_hash: sha256:2314ca3ffa7c877350c8a984f2795457d72903c32e9c5b0d9cfec527e8a8a6c8
+blueprint_hash: sha256:48f6740bf7513eb87c26e5de299bc99b1c5586475fe7db0476d3f32d7acc6504
 generated_from:
     neckbeard_yaml: sha256:ae827b77d56b970e89e92c87e232600d79682b437445e0eb985632ef2d4a6d00
     app_profile: sha256:fb76116a04786086ae499d604bb342a8682633df6267c5e16e959cb79c4c87b8
 pins:
     catalog: 0.1.0
-    opentofu: 1.10.3
+    opentofu: 1.12.6
     planner: test
     providers:
         - name: hashicorp/aws
@@ -17,6 +17,16 @@ region: us-east-1
 runtime: serverless-containers
 vcs: github
 tier: smallteam
+services:
+    - name: nightly-report
+      kind: cron
+      schedule: 0 3 * * *
+    - name: web
+      kind: http
+      port: 4000
+      health_path: /healthz
+    - name: worker
+      kind: worker
 environments:
     - name: dev
       modules:
@@ -95,7 +105,7 @@ environments:
               value: 15
               provenance: override-supported
             - key: memory_gb
-              value: 1
+              value: 2
               provenance: preset
             - key: min_instances
               value: 0
@@ -115,6 +125,11 @@ environments:
               provenance: derived
             - key: region
               value: us-east-1
+              provenance: derived
+            - key: secret_names
+              value:
+                - SECRET_KEY_BASE
+                - SMTP_PASSWORD
               provenance: derived
         - name: storage
           source: catalog/aws/storage
@@ -206,7 +221,7 @@ environments:
               value: 15
               provenance: override-supported
             - key: memory_gb
-              value: 1
+              value: 2
               provenance: preset
             - key: min_instances
               value: 0
@@ -226,6 +241,11 @@ environments:
               provenance: derived
             - key: region
               value: us-east-1
+              provenance: derived
+            - key: secret_names
+              value:
+                - SECRET_KEY_BASE
+                - SMTP_PASSWORD
               provenance: derived
         - name: storage
           source: catalog/aws/storage
@@ -320,7 +340,7 @@ environments:
               value: 15
               provenance: override-supported
             - key: memory_gb
-              value: 1
+              value: 2
               provenance: preset
             - key: min_instances
               value: 1
@@ -340,6 +360,11 @@ environments:
               provenance: derived
             - key: region
               value: us-east-1
+              provenance: derived
+            - key: secret_names
+              value:
+                - SECRET_KEY_BASE
+                - SMTP_PASSWORD
               provenance: derived
         - name: storage
           source: catalog/aws/storage

@@ -20,7 +20,7 @@ tiers:
       storage_growth_gb_month: 2
     modules:
       network: { nat_strategy: none, zones: 1 }
-      runtime-serverless: { min_instances: 0, max_instances: 3, cpu: "1", memory_gb: 0.5 }
+      runtime-serverless: { min_instances: 0, max_instances: 3, cpu: "0.5", memory_gb: 1 }
       runtime-k8s: { node_shape: small, min_nodes: 1, max_nodes: 2, spot: true }
       postgres: { instance_class: smallest, multi_zone: false, read_replicas: 0, backup_retention_days: 7, pitr: false }
       storage: { versioning: false }
@@ -42,7 +42,7 @@ tiers:
       storage_growth_gb_month: 10
     modules:
       network: { nat_strategy: single, zones: 2 }
-      runtime-serverless: { min_instances: 1, max_instances: 10, cpu: "1", memory_gb: 1 }
+      runtime-serverless: { min_instances: 1, max_instances: 10, cpu: "1", memory_gb: 2 }
       runtime-k8s: { node_shape: small, min_nodes: 2, max_nodes: 4, spot: false }
       postgres: { instance_class: small, multi_zone: true, read_replicas: 0, backup_retention_days: 14, pitr: true }
       storage: { versioning: true }
@@ -64,7 +64,7 @@ tiers:
       storage_growth_gb_month: 50
     modules:
       network: { nat_strategy: per-zone, zones: 3 }
-      runtime-serverless: { min_instances: 2, max_instances: 50, cpu: "2", memory_gb: 2 }
+      runtime-serverless: { min_instances: 2, max_instances: 50, cpu: "2", memory_gb: 4 }
       runtime-k8s: { node_shape: medium, min_nodes: 3, max_nodes: 10, spot: false }
       postgres: { instance_class: medium, multi_zone: true, read_replicas: 1, backup_retention_days: 30, pitr: true }
       storage: { versioning: true }
@@ -86,7 +86,7 @@ tiers:
       storage_growth_gb_month: 50
     modules:
       network: { nat_strategy: per-zone, zones: 3 }
-      runtime-serverless: { min_instances: 2, max_instances: 50, cpu: "2", memory_gb: 2 }
+      runtime-serverless: { min_instances: 2, max_instances: 50, cpu: "2", memory_gb: 4 }
       runtime-k8s: { node_shape: medium, min_nodes: 3, max_nodes: 10, spot: false }
       postgres: { instance_class: medium, multi_zone: true, read_replicas: 1, backup_retention_days: 35, pitr: true }
       storage: { versioning: true }

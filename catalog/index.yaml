@@ -4,9 +4,8 @@
 # migration path.
 version: "0.1.0"
 
-# Tool pins carried into every blueprint. PLACEHOLDER versions until M1 wires real
-# modules; bumped deliberately, never floated.
-opentofu: "1.10.3"
+# Tool pins carried into every blueprint; bumped deliberately, never floated.
+opentofu: "1.12.6"
 
 # capability -> module names (cloud-agnostic). "runtime" resolves to
 # runtime-serverless or runtime-k8s from neckbeard.yaml.

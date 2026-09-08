@@ -24,6 +24,7 @@ type Blueprint struct {
 	Runtime       string        `yaml:"runtime"`
 	VCS           string        `yaml:"vcs"`
 	Tier          string        `yaml:"tier"`
+	Services      []Service     `yaml:"services"`
 	Environments  []Environment `yaml:"environments"`
 	References    []Reference   `yaml:"references,omitempty"`
 	Warnings      []string      `yaml:"warnings,omitempty"`
@@ -45,6 +46,17 @@ type Pins struct {
 type Provider struct {
 	Name    string `yaml:"name"`
 	Version string `yaml:"version"`
+}
+
+// Service definitions are pre-deploy-known and flow from the app profile into the
+// lockfile so renderers can wire runtimes and ingress. Image digests are NOT here:
+// they are deploy-time values owned by the release flow (DESIGN §11.2).
+type Service struct {
+	Name       string `yaml:"name"`
+	Kind       string `yaml:"kind"`
+	Port       int    `yaml:"port,omitempty"`
+	HealthPath string `yaml:"health_path,omitempty"`
+	Schedule   string `yaml:"schedule,omitempty"`
 }
 
 type Environment struct {

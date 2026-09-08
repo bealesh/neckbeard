@@ -16,6 +16,7 @@ import (
 	"github.com/bealesh/neckbeard/core/presets"
 	"github.com/bealesh/neckbeard/core/profile"
 	"github.com/bealesh/neckbeard/core/render"
+	"github.com/bealesh/neckbeard/core/validate"
 	"github.com/bealesh/neckbeard/core/version"
 	"github.com/bealesh/neckbeard/schemas"
 )
@@ -33,6 +34,8 @@ func main() {
 		err = runPlan(os.Args[2:])
 	case "scaffold":
 		err = runScaffold(os.Args[2:])
+	case "validate":
+		err = runValidate(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -49,6 +52,7 @@ func usage() {
 commands:
   plan      resolve app profile + config against the catalog into blueprint.yaml
   scaffold  render the blueprint into the repo under the ownership contract
+  validate  V0 static checks over the rendered env roots (fmt, init, validate)
   version   print version`)
 }
 
@@ -111,6 +115,7 @@ func runScaffold(args []string) error {
 	fs := flag.NewFlagSet("scaffold", flag.ExitOnError)
 	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
 	root := fs.String("root", ".", "repository root to scaffold into")
+	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "module source base: a git go-getter base or a local path (dev)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -119,7 +124,11 @@ func runScaffold(args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := ownership.Apply(*root, bp.Hash, render.WriteSet(bp))
+	ws, err := render.WriteSet(bp, render.Options{CatalogSource: *catalogSource})
+	if err != nil {
+		return err
+	}
+	res, err := ownership.Apply(*root, bp.Hash, ws)
 	if err != nil {
 		return err
 	}
@@ -145,6 +154,42 @@ func runScaffold(args []string) error {
 		return fmt.Errorf("%d conflict(s): neckbeard never overwrites files it did not just generate — review each <file>%s diff, then either keep your edit (move it to an override or a custom.tf extension point) or replace the file with the %s version and re-run scaffold", len(res.Conflicts), ownership.NewSuffix, ownership.NewSuffix)
 	}
 	fmt.Printf("\nscaffold complete (blueprint %s)\n", bp.Hash)
+	return nil
+}
+
+func runValidate(args []string) error {
+	fs := flag.NewFlagSet("validate", flag.ExitOnError)
+	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
+	root := fs.String("root", ".", "repository root containing infra/envs/")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	bp, err := blueprint.Load(*blueprintPath)
+	if err != nil {
+		return err
+	}
+	envs := make([]string, 0, len(bp.Environments))
+	for _, e := range bp.Environments {
+		envs = append(envs, e.Name)
+	}
+
+	checks, err := validate.StaticV0(*root, envs)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%-3s  %-13s  %-32s  %s\n", "LVL", "STATUS", "CHECK", "DETAIL")
+	for _, c := range checks {
+		name := c.Name
+		if c.Env != "" {
+			name = c.Name + " [" + c.Env + "]"
+		}
+		fmt.Printf("%-3s  %-13s  %-32s  %s\n", c.Level, c.Status, name, c.Detail)
+	}
+	if validate.AnyFailed(checks) {
+		return fmt.Errorf("V0 static validation failed")
+	}
+	fmt.Println("\nV0 static checks passed. Passing V0 proves syntax, schema, and policy conformance only — not deployability or runtime behavior (V1/V2 not exercised).")
 	return nil
 }
 

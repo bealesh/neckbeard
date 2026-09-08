@@ -3,6 +3,7 @@ package render
 import (
 	"bytes"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bealesh/neckbeard/core/blueprint"
@@ -47,9 +48,15 @@ func testBlueprint(t *testing.T) *blueprint.Blueprint {
 	return bp
 }
 
+var testOpts = Options{CatalogSource: "../../../../catalog-src"}
+
 func TestWriteSetIsDeterministic(t *testing.T) {
 	bp := testBlueprint(t)
-	a, b := WriteSet(bp), WriteSet(bp)
+	a, errA := WriteSet(bp, testOpts)
+	b, errB := WriteSet(bp, testOpts)
+	if errA != nil || errB != nil {
+		t.Fatal(errA, errB)
+	}
 	if len(a) != len(b) {
 		t.Fatalf("lengths differ: %d vs %d", len(a), len(b))
 	}
@@ -62,7 +69,10 @@ func TestWriteSetIsDeterministic(t *testing.T) {
 
 func TestWriteSetShape(t *testing.T) {
 	bp := testBlueprint(t)
-	ws := WriteSet(bp)
+	ws, err := WriteSet(bp, testOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
 	byPath := map[string]ownership.File{}
 	for _, f := range ws {
 		byPath[f.Path] = f
@@ -81,6 +91,53 @@ func TestWriteSetShape(t *testing.T) {
 		f, ok := byPath["infra/envs/"+env+"/custom.tf"]
 		if !ok || f.Owner != ownership.OwnerUser {
 			t.Errorf("expected user-owned custom.tf for %s", env)
+		}
+		for _, gen := range []string{"backend.tf", "providers.tf", "main.tf", "outputs.tf"} {
+			f, ok := byPath["infra/envs/"+env+"/"+gen]
+			if !ok || f.Owner != ownership.OwnerGenerated {
+				t.Errorf("expected generated %s for %s", gen, env)
+			}
+		}
+	}
+
+	// Collapse alignment padding so assertions aren't whitespace-brittle.
+	main := strings.Join(strings.Fields(string(byPath["infra/envs/dev/main.tf"].Content)), " ")
+	for _, want := range []string{
+		`module "network" {`,
+		`module "runtime_serverless" {`,
+		`source = "../../../../catalog-src/catalog/aws/network"`,
+		`services = local.services`,
+		`allowed_security_group_ids = [module.runtime_serverless.service_security_group_id]`,
+	} {
+		if !strings.Contains(main, want) {
+			t.Errorf("dev main.tf missing %q", want)
+		}
+	}
+}
+
+func TestUnsupportedLaneIsRefusedByName(t *testing.T) {
+	bp := testBlueprint(t)
+	bp.Runtime = "kubernetes"
+	_, err := WriteSet(bp, testOpts)
+	if err == nil {
+		t.Fatal("expected refusal for unimplemented lane")
+	}
+	if !strings.Contains(err.Error(), "aws/kubernetes") || !strings.Contains(err.Error(), "no files were written") {
+		t.Errorf("refusal should name the lane and promise no writes, got: %v", err)
+	}
+}
+
+func TestGitCatalogSourcePinsRef(t *testing.T) {
+	bp := testBlueprint(t)
+	ws, err := WriteSet(bp, Options{CatalogSource: "git::https://github.com/bealesh/neckbeard.git"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range ws {
+		if f.Path == "infra/envs/dev/main.tf" {
+			if !strings.Contains(string(f.Content), `git::https://github.com/bealesh/neckbeard.git//catalog/aws/network?ref=catalog-v0.1.0`) {
+				t.Error("git module sources must pin ref=catalog-v<version>")
+			}
 		}
 	}
 }
