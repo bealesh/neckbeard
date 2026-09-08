@@ -11,9 +11,11 @@ import (
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/catalog"
 	"github.com/bealesh/neckbeard/core/config"
+	"github.com/bealesh/neckbeard/core/ownership"
 	"github.com/bealesh/neckbeard/core/planner"
 	"github.com/bealesh/neckbeard/core/presets"
 	"github.com/bealesh/neckbeard/core/profile"
+	"github.com/bealesh/neckbeard/core/render"
 	"github.com/bealesh/neckbeard/core/version"
 	"github.com/bealesh/neckbeard/schemas"
 )
@@ -29,6 +31,8 @@ func main() {
 		fmt.Println("neckbeard " + version.Version)
 	case "plan":
 		err = runPlan(os.Args[2:])
+	case "scaffold":
+		err = runScaffold(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -43,8 +47,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: neckbeard <command>
 
 commands:
-  plan     resolve app profile + config against the catalog into blueprint.yaml
-  version  print version`)
+  plan      resolve app profile + config against the catalog into blueprint.yaml
+  scaffold  render the blueprint into the repo under the ownership contract
+  version   print version`)
 }
 
 func runPlan(args []string) error {
@@ -99,6 +104,47 @@ func runPlan(args []string) error {
 	}
 
 	printSummary(bp, *outPath)
+	return nil
+}
+
+func runScaffold(args []string) error {
+	fs := flag.NewFlagSet("scaffold", flag.ExitOnError)
+	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
+	root := fs.String("root", ".", "repository root to scaffold into")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	bp, err := blueprint.Load(*blueprintPath)
+	if err != nil {
+		return err
+	}
+	res, err := ownership.Apply(*root, bp.Hash, render.WriteSet(bp))
+	if err != nil {
+		return err
+	}
+
+	report := func(label string, paths []string) {
+		for _, p := range paths {
+			fmt.Printf("%-10s %s\n", label, p)
+		}
+	}
+	report("created", res.Created)
+	report("updated", res.Updated)
+	report("unchanged", res.Unchanged)
+	report("adopted", res.Adopted)
+	report("yours", res.SkippedUser)
+	report("removed", res.RemovedStale)
+	report("kept", res.KeptStale)
+
+	if res.HasConflicts() {
+		fmt.Println()
+		for _, c := range res.Conflicts {
+			fmt.Printf("conflict   %s — %s; fresh render written to %s\n", c.Path, c.Reason, c.NewPath)
+		}
+		return fmt.Errorf("%d conflict(s): neckbeard never overwrites files it did not just generate — review each <file>%s diff, then either keep your edit (move it to an override or a custom.tf extension point) or replace the file with the %s version and re-run scaffold", len(res.Conflicts), ownership.NewSuffix, ownership.NewSuffix)
+	}
+	fmt.Printf("\nscaffold complete (blueprint %s)\n", bp.Hash)
 	return nil
 }
 

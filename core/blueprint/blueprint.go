@@ -4,8 +4,10 @@
 package blueprint
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"os"
 
 	"gopkg.in/yaml.v3"
 )
@@ -80,4 +82,32 @@ func (b *Blueprint) Finalize() ([]byte, error) {
 	}
 	b.Hash = fmt.Sprintf("sha256:%x", sha256.Sum256(unhashed))
 	return yaml.Marshal(b)
+}
+
+// Load reads a blueprint and verifies its hash. The blueprint is a generated
+// lockfile: a hash mismatch means it was hand-edited or corrupted, and the fix is
+// re-running `neckbeard plan` (or changing neckbeard.yaml), never editing it.
+func Load(path string) (*Blueprint, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	var b Blueprint
+	if err := dec.Decode(&b); err != nil {
+		return nil, fmt.Errorf("decoding blueprint: %w", err)
+	}
+	stored := b.Hash
+	b.Hash = ""
+	canonical, err := yaml.Marshal(&b)
+	if err != nil {
+		return nil, fmt.Errorf("re-canonicalizing blueprint: %w", err)
+	}
+	computed := fmt.Sprintf("sha256:%x", sha256.Sum256(canonical))
+	if stored != computed {
+		return nil, fmt.Errorf("blueprint hash mismatch (recorded %s, computed %s): %s is generated and must not be edited by hand — change neckbeard.yaml or app-profile.yaml and re-run `neckbeard plan`", stored, computed, path)
+	}
+	b.Hash = stored
+	return &b, nil
 }
