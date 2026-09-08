@@ -115,11 +115,11 @@ func Run(opts Options) (*Result, error) {
 	mapped := map[string]bool{}
 	for _, env := range opts.Blueprint.Environments {
 		envDir := filepath.Join(scratch, "infra", "envs", env.Name)
-		ee, envMapped, err := estimateEnv(binPath, scratch, envDir, env.Name, usage)
+		ee, types, err := estimateEnv(binPath, scratch, envDir, env.Name, usage)
 		if err != nil {
 			return nil, fmt.Errorf("estimating %s: %w", env.Name, err)
 		}
-		for k := range envMapped {
+		for k := range AppliedUsage(types) {
 			mapped[k] = true
 		}
 		res.Envs = append(res.Envs, *ee)
@@ -135,33 +135,21 @@ func Run(opts Options) (*Result, error) {
 
 func estimateEnv(bin, scratch, envDir, envName string, usage map[string]float64) (*EnvEstimate, map[string]bool, error) {
 	usageFile := filepath.Join(scratch, "usage-"+envName+".yml")
-	// Sync writes a skeleton with every resource address and its usage keys zeroed
-	// — the source of truth for which keys exist, instead of guessing.
-	if _, err := runInfracost(bin, "breakdown", "--path", envDir, "--format", "json",
-		"--sync-usage-file", "--usage-file", usageFile); err != nil {
-		return nil, nil, fmt.Errorf("usage sync: %w", err)
-	}
-	skeleton, err := os.ReadFile(usageFile)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	ee := &EnvEstimate{Env: envName, Costs: map[string]float64{}}
-	var mapped map[string]bool
+	types := map[string]bool{}
 	for _, sc := range scenarios {
-		filled, m, err := FillUsage(skeleton, usage, sc.Multiplier)
+		uf, err := BuildUsageFile(usage, sc.Multiplier)
 		if err != nil {
-			return nil, nil, fmt.Errorf("filling usage file: %w", err)
+			return nil, nil, fmt.Errorf("building usage file: %w", err)
 		}
-		mapped = m
-		if err := os.WriteFile(usageFile, filled, 0o644); err != nil {
+		if err := os.WriteFile(usageFile, uf, 0o644); err != nil {
 			return nil, nil, err
 		}
 		out, err := runInfracost(bin, "breakdown", "--path", envDir, "--format", "json", "--usage-file", usageFile)
 		if err != nil {
 			return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
 		}
-		total, resources, unpriced, err := parseBreakdown(out)
+		total, resources, resourceTypes, unpriced, err := parseBreakdown(out)
 		if err != nil {
 			return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
 		}
@@ -169,9 +157,10 @@ func estimateEnv(bin, scratch, envDir, envName string, usage map[string]float64)
 		if sc.Name == "expected" {
 			ee.Resources = resources
 			ee.Unpriced = unpriced
+			types = resourceTypes
 		}
 	}
-	return ee, mapped, nil
+	return ee, types, nil
 }
 
 func runInfracost(bin string, args ...string) ([]byte, error) {
@@ -201,14 +190,15 @@ func infracostVersion(bin string) (string, error) {
 }
 
 // parseBreakdown extracts the totals from infracost's JSON output.
-func parseBreakdown(out []byte) (total float64, resources []ResourceCost, unpriced []string, err error) {
+func parseBreakdown(out []byte) (total float64, resources []ResourceCost, resourceTypes map[string]bool, unpriced []string, err error) {
 	var doc struct {
 		TotalMonthlyCost string `json:"totalMonthlyCost"`
 		Projects         []struct {
 			Breakdown struct {
 				Resources []struct {
-					Name        string  `json:"name"`
-					MonthlyCost *string `json:"monthlyCost"`
+					Name         string  `json:"name"`
+					ResourceType string  `json:"resourceType"`
+					MonthlyCost  *string `json:"monthlyCost"`
 				} `json:"resources"`
 			} `json:"breakdown"`
 		} `json:"projects"`
@@ -218,9 +208,10 @@ func parseBreakdown(out []byte) (total float64, resources []ResourceCost, unpric
 		} `json:"summary"`
 	}
 	if err := json.Unmarshal(out, &doc); err != nil {
-		return 0, nil, nil, fmt.Errorf("parsing infracost JSON: %w", err)
+		return 0, nil, nil, nil, fmt.Errorf("parsing infracost JSON: %w", err)
 	}
 	total, _ = strconv.ParseFloat(doc.TotalMonthlyCost, 64)
+	resourceTypes = map[string]bool{}
 	for _, p := range doc.Projects {
 		for _, r := range p.Breakdown.Resources {
 			cost := 0.0
@@ -228,6 +219,7 @@ func parseBreakdown(out []byte) (total float64, resources []ResourceCost, unpric
 				cost, _ = strconv.ParseFloat(*r.MonthlyCost, 64)
 			}
 			resources = append(resources, ResourceCost{Address: r.Name, Monthly: cost})
+			resourceTypes[r.ResourceType] = true
 		}
 	}
 	sortResources(resources)
@@ -238,7 +230,7 @@ func parseBreakdown(out []byte) (total float64, resources []ResourceCost, unpric
 		unpriced = append(unpriced, fmt.Sprintf("%s ×%d (free / no price)", t, n))
 	}
 	sortStrings(unpriced)
-	return total, resources, unpriced, nil
+	return total, resources, resourceTypes, unpriced, nil
 }
 
 func resolveUsage(tier presets.Tier, cfg *config.Config) (map[string]float64, map[string]string) {

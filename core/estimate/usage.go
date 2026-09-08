@@ -1,123 +1,103 @@
 package estimate
 
 import (
-	"fmt"
-	"strings"
-
 	"gopkg.in/yaml.v3"
 )
 
-// usageMapping ties an infracost usage key on a resource type to one of our named
-// usage assumptions (DESIGN §13.2 — the tier numbers), with an optional factor
-// where the semantics need translation. Keys not mapped here stay zero, and
-// assumptions that map to nothing are reported as unmodeled — never silently
-// dropped either way.
-type usageMapping struct {
+// mapEntry ties one infracost usage key on a resource type to one of our named
+// usage assumptions (DESIGN §13.2 — the tier numbers), with a factor where the
+// semantics need translation. The usage file is generated with
+// resource_type_default_usage, so an assumption applies to every resource of the
+// type — exactly the tier-assumption semantic. Keys not mapped stay unset (zero),
+// and assumptions whose types are absent from an env are reported as unmodeled —
+// never silently dropped either way.
+//
+// Key names verified against infracost 0.10.45 sync output for AWS
+// (2026-09-08); GCP/Azure names follow infracost's documented usage schemas and
+// harmlessly no-op if a name drifts (the type simply never matches).
+type mapEntry struct {
+	Type   string
+	Path   []string // nested path within the type's usage block
 	OurKey string
 	Factor float64
 }
 
-var mappings = map[string]map[string]usageMapping{
-	// AWS
-	"aws_nat_gateway": {
-		"monthly_data_processed_gb": {OurKey: "nat_processed_gb", Factor: 1},
-	},
-	"aws_cloudwatch_log_group": {
-		"monthly_data_ingested_gb": {OurKey: "log_ingest_gb", Factor: 1},
-		// ~one retention window resident at steady state (30d retention).
-		"storage_gb": {OurKey: "log_ingest_gb", Factor: 1},
-	},
-	"aws_db_instance": {
-		"additional_backup_storage_gb": {OurKey: "backup_gb", Factor: 1},
-	},
-	"aws_s3_bucket": {
-		// Steady-state volume after a year of growth.
-		"storage_gb": {OurKey: "storage_growth_gb_month", Factor: 12},
-	},
-	"aws_lb": {
-		"processed_bytes_gb": {OurKey: "egress_gb", Factor: 1},
-	},
+var usageMap = []mapEntry{
+	// AWS — verified against real sync output.
+	{"aws_nat_gateway", []string{"monthly_data_processed_gb"}, "nat_processed_gb", 1},
+	// The no-NAT strategy routes the same traffic through VPC endpoints instead.
+	{"aws_vpc_endpoint", []string{"monthly_data_processed_gb"}, "nat_processed_gb", 1},
+	{"aws_cloudwatch_log_group", []string{"monthly_data_ingested_gb"}, "log_ingest_gb", 1},
+	// ~one 30-day retention window resident at steady state.
+	{"aws_cloudwatch_log_group", []string{"storage_gb"}, "log_ingest_gb", 1},
+	{"aws_db_instance", []string{"additional_backup_storage_gb"}, "backup_gb", 1},
+	// Steady-state volume after a year of growth.
+	{"aws_s3_bucket", []string{"standard", "storage_gb"}, "storage_growth_gb_month", 12},
+	{"aws_lb", []string{"processed_bytes_gb"}, "egress_gb", 1},
+	{"aws_ecr_repository", []string{"storage_gb"}, "registry_storage_gb_fixed", 1},
+
 	// GCP
-	"google_compute_router_nat": {
-		"monthly_data_processed_gb": {OurKey: "nat_processed_gb", Factor: 1},
-	},
-	"google_cloud_run_v2_service": {
-		"monthly_requests": {OurKey: "requests_per_month", Factor: 1},
-	},
-	"google_storage_bucket": {
-		"storage_gb": {OurKey: "storage_growth_gb_month", Factor: 12},
-	},
-	"google_sql_database_instance": {
-		"backup_storage_gb": {OurKey: "backup_gb", Factor: 1},
-	},
-	"google_compute_global_forwarding_rule": {
-		"monthly_ingress_data_gb": {OurKey: "egress_gb", Factor: 1},
-	},
+	{"google_compute_router_nat", []string{"monthly_data_processed_gb"}, "nat_processed_gb", 1},
+	{"google_cloud_run_v2_service", []string{"monthly_requests"}, "requests_per_month", 1},
+	{"google_storage_bucket", []string{"storage_gb"}, "storage_growth_gb_month", 12},
+	{"google_sql_database_instance", []string{"backup_storage_gb"}, "backup_gb", 1},
+
 	// Azure
-	"azurerm_postgresql_flexible_server": {
-		"additional_backup_storage_gb": {OurKey: "backup_gb", Factor: 1},
-	},
-	"azurerm_storage_account": {
-		"storage_gb":  {OurKey: "storage_growth_gb_month", Factor: 12},
-		"capacity_gb": {OurKey: "storage_growth_gb_month", Factor: 12},
-	},
-	"azurerm_nat_gateway": {
-		"monthly_data_processed_gb": {OurKey: "nat_processed_gb", Factor: 1},
-	},
-	"azurerm_log_analytics_workspace": {
-		"monthly_log_data_ingestion_gb": {OurKey: "log_ingest_gb", Factor: 1},
-	},
+	{"azurerm_postgresql_flexible_server", []string{"additional_backup_storage_gb"}, "backup_gb", 1},
+	{"azurerm_storage_account", []string{"capacity_gb"}, "storage_growth_gb_month", 12},
+	{"azurerm_nat_gateway", []string{"monthly_data_processed_gb"}, "nat_processed_gb", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_log_data_ingestion_gb"}, "log_ingest_gb", 1},
 }
 
-// FillUsage takes the skeleton produced by --sync-usage-file (every resource
-// address with its usage keys zeroed — the ground truth for which keys exist) and
-// fills the keys we can honestly map, scaled by the scenario multiplier. Returns
-// the filled YAML and the set of our usage keys that actually attached somewhere.
-func FillUsage(skeleton []byte, usage map[string]float64, multiplier float64) ([]byte, map[string]bool, error) {
-	var doc map[string]any
-	if err := yaml.Unmarshal(skeleton, &doc); err != nil {
-		return nil, nil, fmt.Errorf("parsing usage skeleton: %w", err)
-	}
-	applied := map[string]bool{}
-	if ru, ok := doc["resource_usage"].(map[string]any); ok {
-		for addr, node := range ru {
-			entry, ok := mappings[resourceType(addr)]
-			if !ok {
+// fixedAssumptions are small constants that are not tier dimensions but keep
+// lines from silently reading as free.
+var fixedAssumptions = map[string]float64{
+	"registry_storage_gb_fixed": 10, // a handful of image versions resident
+}
+
+// BuildUsageFile emits an infracost usage file using resource_type_default_usage,
+// scaled by the scenario multiplier.
+func BuildUsageFile(usage map[string]float64, multiplier float64) ([]byte, error) {
+	defaults := map[string]any{}
+	for _, e := range usageMap {
+		base, ok := usage[e.OurKey]
+		if !ok {
+			if base, ok = fixedAssumptions[e.OurKey]; !ok {
 				continue
 			}
-			fillNode(node, entry, usage, multiplier, applied)
 		}
+		node, _ := defaults[e.Type].(map[string]any)
+		if node == nil {
+			node = map[string]any{}
+			defaults[e.Type] = node
+		}
+		cur := node
+		for _, seg := range e.Path[:len(e.Path)-1] {
+			next, _ := cur[seg].(map[string]any)
+			if next == nil {
+				next = map[string]any{}
+				cur[seg] = next
+			}
+			cur = next
+		}
+		cur[e.Path[len(e.Path)-1]] = base * e.Factor * multiplier
 	}
-	out, err := yaml.Marshal(doc)
-	return out, applied, err
+	return yaml.Marshal(map[string]any{
+		"version":                     "0.1",
+		"resource_type_default_usage": defaults,
+	})
 }
 
-func fillNode(node any, entry map[string]usageMapping, usage map[string]float64, multiplier float64, applied map[string]bool) {
-	m, ok := node.(map[string]any)
-	if !ok {
-		return
-	}
-	for k, v := range m {
-		if child, ok := v.(map[string]any); ok {
-			fillNode(child, entry, usage, multiplier, applied)
-			continue
-		}
-		if um, ok := entry[k]; ok {
-			if base, ok := usage[um.OurKey]; ok {
-				m[k] = base * um.Factor * multiplier
-				applied[um.OurKey] = true
+// AppliedUsage reports which of our usage assumptions actually attached to a
+// resource type present in the environment.
+func AppliedUsage(resourceTypes map[string]bool) map[string]bool {
+	applied := map[string]bool{}
+	for _, e := range usageMap {
+		if resourceTypes[e.Type] && e.OurKey != "" {
+			if _, fixed := fixedAssumptions[e.OurKey]; !fixed {
+				applied[e.OurKey] = true
 			}
 		}
 	}
-}
-
-// resourceType extracts the provider resource type from an infracost usage
-// address like module.network.aws_nat_gateway.this[0].
-func resourceType(addr string) string {
-	for _, seg := range strings.Split(addr, ".") {
-		if strings.HasPrefix(seg, "aws_") || strings.HasPrefix(seg, "google_") || strings.HasPrefix(seg, "azurerm_") {
-			return seg
-		}
-	}
-	return ""
+	return applied
 }
