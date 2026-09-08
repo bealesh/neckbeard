@@ -27,6 +27,10 @@ type k8sLaneConfig struct {
 	controllerFiles func(bp *blueprint.Blueprint, env blueprint.Environment) map[string][]byte
 	// ClusterSecretStore + ExternalSecret for the cloud's secret manager
 	appSecrets func(bp *blueprint.Blueprint, env blueprint.Environment) []byte
+	// extra spec appended to the controllers Flux Kustomization (e.g. Azure's
+	// postBuild substitution for apply-time values like the workload-identity
+	// client id, published by bootstrap into neckbeard-cluster-vars)
+	controllersPostBuild string
 }
 
 var awsK8s = k8sLaneConfig{
@@ -51,8 +55,23 @@ var gcpK8s = k8sLaneConfig{
 	appSecrets:         gcpAppSecretsYAML,
 }
 
-func k8sDeliveryAWS(bp *blueprint.Blueprint) []ownership.File { return k8sDelivery(bp, awsK8s) }
-func k8sDeliveryGCP(bp *blueprint.Blueprint) []ownership.File { return k8sDelivery(bp, gcpK8s) }
+var azureK8s = k8sLaneConfig{
+	// AKS app-routing addon: managed nginx, no controller install.
+	ingressClass:       "webapprouting.kubernetes.azure.com",
+	ingressAnnotations: func(blueprint.Service) []string { return nil },
+	controllerFiles:    azureControllerFiles,
+	appSecrets:         azureAppSecretsYAML,
+	controllersPostBuild: `  postBuild:
+    substituteFrom:
+      # Bootstrap publishes apply-time values (external-secrets client id) here.
+      - kind: ConfigMap
+        name: neckbeard-cluster-vars
+`,
+}
+
+func k8sDeliveryAWS(bp *blueprint.Blueprint) []ownership.File   { return k8sDelivery(bp, awsK8s) }
+func k8sDeliveryGCP(bp *blueprint.Blueprint) []ownership.File   { return k8sDelivery(bp, gcpK8s) }
+func k8sDeliveryAzure(bp *blueprint.Blueprint) []ownership.File { return k8sDelivery(bp, azureK8s) }
 
 func k8sDelivery(bp *blueprint.Blueprint, cfg k8sLaneConfig) []ownership.File {
 	files := []ownership.File{
@@ -82,7 +101,7 @@ func k8sDelivery(bp *blueprint.Blueprint, cfg k8sLaneConfig) []ownership.File {
 		files = append(files,
 			ownership.File{Path: dir + "/apps.yaml", Content: fluxKustomizationYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/apps/kustomization.yaml", Content: envKustomization(bp, env.Name), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/controllers.yaml", Content: fluxControllersYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers.yaml", Content: fluxControllersYAML(bp, env.Name, cfg), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/controllers/app-secrets.yaml", Content: cfg.appSecrets(bp, env), Owner: ownership.OwnerGenerated},
 		)
 		ctrl := cfg.controllerFiles(bp, env)
@@ -195,6 +214,9 @@ spec:
       labels:
         app: %s
     spec:
+      # Tolerates AKS Spot pools; a no-op on clusters without that taint.
+      tolerations:
+        - { key: kubernetes.azure.com/scalesetpriority, operator: Equal, value: spot, effect: NoSchedule }
       containers:
 %s`, generatedYAMLManifestHeader, s.Name, appNS(bp), replicas, s.Name, s.Name, containerYAML(bp, s, "        "))
 }
@@ -256,6 +278,8 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          tolerations:
+            - { key: kubernetes.azure.com/scalesetpriority, operator: Equal, value: spot, effect: NoSchedule }
           containers:
 %s`, generatedYAMLManifestHeader, s.Name, appNS(bp), s.Schedule, containerYAML(bp, s, "            "))
 }
@@ -297,7 +321,7 @@ spec:
 
 // fluxControllersYAML is the controllers Kustomization; the apps Kustomization
 // depends on it so app manifests never race controller CRDs.
-func fluxControllersYAML(bp *blueprint.Blueprint, env string) []byte {
+func fluxControllersYAML(bp *blueprint.Blueprint, env string, cfg k8sLaneConfig) []byte {
 	return fmt.Appendf(nil, `%sapiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -312,7 +336,7 @@ spec:
     name: flux-system
   timeout: 5m
   wait: true
-`, generatedYAMLManifestHeader, bp.App, env)
+%s`, generatedYAMLManifestHeader, bp.App, env, cfg.controllersPostBuild)
 }
 
 func controllersKustomization(names []string) []byte {
@@ -474,6 +498,61 @@ spec:
 `, generatedYAMLManifestHeader, bp.App, env.Container, bp.App, appNS(bp), bp.App, bp.App)
 	for _, name := range secretNames(env) {
 		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s-%s\n", name, prefix, name)
+	}
+	return []byte(b.String())
+}
+
+func azureControllerFiles(bp *blueprint.Blueprint, env blueprint.Environment) map[string][]byte {
+	extraValues := "    serviceAccount:\n      annotations:\n        azure.workload.identity/client-id: ${EXTERNAL_SECRETS_CLIENT_ID}\n    podLabels:\n      azure.workload.identity/use: \"true\"\n"
+	return map[string][]byte{
+		"helm-repositories.yaml": gcpHelmRepositoriesYAML(), // external-secrets repo only, same as gcp
+		"external-secrets.yaml":  externalSecretsHelmYAML(extraValues),
+	}
+}
+
+// azureVaultName replicates catalog/azure/secrets: trimsuffix(substr(prefix,0,24),"-").
+func azureVaultName(prefix string) string {
+	if len(prefix) > 24 {
+		prefix = prefix[:24]
+	}
+	return strings.TrimSuffix(prefix, "-")
+}
+
+// azureAppSecretsYAML: Key Vault provider over workload identity. Vault secret
+// names forbid underscores, so remoteRef keys are sanitized (DATABASE_URL lives
+// as DATABASE-URL) while env var names keep the original spelling.
+func azureAppSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
+	var b strings.Builder
+	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: %s
+spec:
+  provider:
+    azurekv:
+      authType: WorkloadIdentity
+      vaultUrl: https://%s.vault.azure.net
+      serviceAccountRef:
+        name: external-secrets
+        namespace: external-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: %s-secrets
+  namespace: %s
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: %s
+  target:
+    name: %s-secrets
+  data:
+`, generatedYAMLManifestHeader, bp.App, azureVaultName(prefix), bp.App, appNS(bp), bp.App, bp.App)
+	for _, name := range secretNames(env) {
+		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s\n", name, strings.ReplaceAll(name, "_", "-"))
 	}
 	return []byte(b.String())
 }

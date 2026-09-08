@@ -167,6 +167,43 @@ var lanes = map[string]lane{
 			{"registry_url", "registry", "module.registry.repository_url", "Artifact Registry repository"},
 		},
 	},
+	"azure/kubernetes": {
+		// AKS app-routing addon handles ingress; external-secrets over workload
+		// identity handles the app secret (client id lands via Flux postBuild
+		// substitution from the bootstrap-published ConfigMap).
+		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry"},
+		wiring: map[string][]kv{
+			"network": {
+				{"resource_group_name", "azurerm_resource_group.this.name"},
+				{"runtime", `"kubernetes"`},
+			},
+			"runtime-k8s": {
+				{"resource_group_name", "azurerm_resource_group.this.name"},
+				{"subnet_id", "module.network.aks_subnet_id"},
+				{"key_vault_id", "module.secrets.key_vault_id"},
+			},
+			"postgres": {
+				{"resource_group_name", "azurerm_resource_group.this.name"},
+				{"delegated_subnet_id", "module.network.db_subnet_id"},
+				{"private_dns_zone_id", "module.network.postgres_dns_zone_id"},
+			},
+			"storage":  {{"resource_group_name", "azurerm_resource_group.this.name"}},
+			"secrets":  {{"resource_group_name", "azurerm_resource_group.this.name"}},
+			"registry": {{"resource_group_name", "azurerm_resource_group.this.name"}},
+		},
+		requires:      stdRequires,
+		providers:     azureProviders,
+		rootResources: azureResourceGroup,
+		outputs: []rootOutput{
+			{"cluster_name", "runtime-k8s", "module.runtime_k8s.cluster_name", "AKS cluster (delivery via Flux lands with the clusters layer)"},
+			{"cluster_endpoint", "runtime-k8s", "module.runtime_k8s.cluster_endpoint", "AKS API endpoint (public at M2; origin lockdown is a hardening roadmap item)"},
+			{"external_secrets_client_id", "runtime-k8s", "module.runtime_k8s.external_secrets_client_id", "Bootstrap publishes this into neckbeard-cluster-vars for Flux substitution"},
+			{"db_fqdn", "postgres", "module.postgres.fqdn", "PostgreSQL flexible server FQDN (credentials: operator-set secret)"},
+			{"storage_account", "storage", "module.storage.account_name", "Application object storage account"},
+			{"registry_url", "registry", "module.registry.login_server", "Container registry"},
+		},
+		delivery: k8sDeliveryAzure,
+	},
 	"azure/serverless-containers": {
 		// No dns-ingress module: Container Apps provides HTTPS ingress natively —
 		// an honest per-cloud difference (§3.3), declared in the catalog's azure
@@ -557,6 +594,14 @@ func checkovConfig(cloud string) []byte {
 			{"CKV_AZURE_43", "false positive: the account name is derived with replace()/substr() and adheres to the rules; checkov cannot evaluate the expression"},
 			{"CKV_AZURE_59", "anonymous blob access is off (allow_nested_items_to_be_public = false); disabling the public ENDPOINT would sever Container Apps' data-plane access — private endpoints are post-M1, same as Key Vault"},
 			{"CKV_AZURE_206", "LRS is the catalog cost floor; blob redundancy (ZRS/GRS) as an availability-preset input is a roadmap item and an online upgrade"},
+			{"CKV_AZURE_115", "the AKS public endpoint is documented M2 posture, same as EKS/GKE; private clusters need in-VPC CI runners or VPN — hardening roadmap"},
+			{"CKV_AZURE_6", "same as CKV_AZURE_115: API authorized IP ranges land with the origin-lockdown hardening work"},
+			{"CKV_AZURE_116", "the Azure Policy addon is an org-guardrail construct; lands with the founding path (M3)"},
+			{"CKV_AZURE_117", "disk encryption sets are customer-managed-key territory; regulated-tier roadmap (platform-managed encryption is on)"},
+			{"CKV_AZURE_172", "N/A: secrets flow through external-secrets with a refreshInterval, not the Secrets Store CSI driver this check targets"},
+			{"CKV_AZURE_226", "ephemeral OS disks need VM sizes with cache disks; the catalog's Dads_v5 shapes have none — revisit with the size map"},
+			{"CKV_AZURE_227", "encryption-at-host requires the subscription's EncryptionAtHost feature registration — a bootstrap (M3) step; enabled then"},
+			{"CKV_AZURE_232", "single-pool topologies at small tiers run workloads on the default pool by design; spot mode isolates system pods on it"},
 		},
 	}
 	var b strings.Builder

@@ -1,6 +1,10 @@
+output "aks_subnet_id" {
+  description = "AKS node subnet (kubernetes runtime only; empty otherwise)."
+  value       = one(azurerm_subnet.aks[*].id)
+}
+
 output "app_subnet_id" {
-  description = "Subnet delegated to Microsoft.App/environments; the runtime module injects the Container Apps environment here."
-  value       = azurerm_subnet.apps.id
+  value = one(azurerm_subnet.apps[*].id)
 }
 
 output "db_subnet_id" {

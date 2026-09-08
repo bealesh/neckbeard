@@ -41,6 +41,7 @@ jobs:
         include:
           - { cloud: aws, runtime: kubernetes }
           - { cloud: gcp, runtime: kubernetes }
+          - { cloud: azure, runtime: kubernetes }
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

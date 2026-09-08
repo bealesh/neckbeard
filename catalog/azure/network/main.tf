@@ -14,6 +14,7 @@ resource "azurerm_virtual_network" "this" {
 # subnet to be delegated to Microsoft.App/environments and at least /27; we use /23
 # so the environment never runs out of infrastructure addresses as apps scale.
 resource "azurerm_subnet" "apps" {
+  count                = var.runtime == "serverless-containers" ? 1 : 0
   name                 = "${var.name_prefix}-apps"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.this.name
@@ -30,6 +31,16 @@ resource "azurerm_subnet" "apps" {
 
 # PostgreSQL flexible server subnet: private access requires a subnet delegated to
 # the service; the server gets no public endpoint at all.
+# AKS node subnet: no delegation (AKS joins subnets directly; a Container
+# Apps-delegated subnet cannot be reused for it).
+resource "azurerm_subnet" "aks" {
+  count                = var.runtime == "kubernetes" ? 1 : 0
+  name                 = "${var.name_prefix}-aks"
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.this.name
+  address_prefixes     = ["10.0.4.0/22"]
+}
+
 resource "azurerm_subnet" "db" {
   name                 = "${var.name_prefix}-db"
   resource_group_name  = var.resource_group_name
@@ -95,8 +106,8 @@ resource "azurerm_nat_gateway_public_ip_association" "this" {
   public_ip_address_id = azurerm_public_ip.nat[0].id
 }
 
-resource "azurerm_subnet_nat_gateway_association" "apps" {
+resource "azurerm_subnet_nat_gateway_association" "workload" {
   count          = local.nat_count
-  subnet_id      = azurerm_subnet.apps.id
+  subnet_id      = var.runtime == "kubernetes" ? azurerm_subnet.aks[0].id : azurerm_subnet.apps[0].id
   nat_gateway_id = azurerm_nat_gateway.this[0].id
 }

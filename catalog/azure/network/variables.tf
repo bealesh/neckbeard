@@ -30,3 +30,13 @@ variable "resource_group_name" {
   description = "Resource group all module resources land in. The env root owns the group (azurerm_resource_group.this); modules never create resource groups."
   type        = string
 }
+
+variable "runtime" {
+  description = "Which workload subnet to shape: serverless-containers (Container Apps-delegated) or kubernetes (undelegated AKS subnet). Wired by the lane, not a preset."
+  type        = string
+  default     = "serverless-containers"
+  validation {
+    condition     = contains(["serverless-containers", "kubernetes"], var.runtime)
+    error_message = "runtime must be serverless-containers or kubernetes."
+  }
+}
