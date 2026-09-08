@@ -210,12 +210,12 @@ func TestK8sLaneRendersDeliveryLayer(t *testing.T) {
 
 func TestUnsupportedLaneIsRefusedByName(t *testing.T) {
 	bp := testBlueprint(t)
-	bp.Cloud, bp.Runtime = "gcp", "kubernetes"
+	bp.Cloud, bp.Runtime = "azure", "kubernetes" // the one lane still unimplemented
 	_, err := WriteSet(bp, testOpts)
 	if err == nil {
 		t.Fatal("expected refusal for unimplemented lane")
 	}
-	if !strings.Contains(err.Error(), "gcp/kubernetes") || !strings.Contains(err.Error(), "no files were written") {
+	if !strings.Contains(err.Error(), "azure/kubernetes") || !strings.Contains(err.Error(), "no files were written") {
 		t.Errorf("refusal should name the lane and promise no writes, got: %v", err)
 	}
 }
