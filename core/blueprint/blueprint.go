@@ -57,6 +57,7 @@ type Service struct {
 	Port       int    `yaml:"port,omitempty"`
 	HealthPath string `yaml:"health_path,omitempty"`
 	Schedule   string `yaml:"schedule,omitempty"`
+	Dockerfile string `yaml:"dockerfile,omitempty"`
 }
 
 type Environment struct {

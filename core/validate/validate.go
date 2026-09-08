@@ -72,6 +72,8 @@ func StaticV0(root string, envs []string) ([]Check, error) {
 		}
 	}
 
+	checks = append(checks, pipelineChecks(root)...)
+
 	// What this run did NOT prove, stated instead of implied (DESIGN §12.1).
 	checks = append(checks,
 		Check{Level: "V0", Name: "policy checks (checkov/conftest)", Status: NotExercised, Detail: "lands later in M1"},
@@ -79,6 +81,31 @@ func StaticV0(root string, envs []string) ([]Check, error) {
 		Check{Level: "V2", Name: "deployment verification", Status: NotExercised, Detail: "release-harness only for now"},
 	)
 	return checks, nil
+}
+
+// pipelineChecks lints generated CI files with what is locally available and is
+// explicit about what is not: GitLab's CI lint needs a GitLab instance.
+func pipelineChecks(root string) []Check {
+	var checks []Check
+	if workflows, err := filepath.Glob(filepath.Join(root, ".github", "workflows", "neckbeard-*.yml")); err == nil && len(workflows) > 0 {
+		if actionlint, lookErr := exec.LookPath("actionlint"); lookErr == nil {
+			cmd := exec.Command(actionlint, workflows...)
+			cmd.Dir = root
+			out, runErr := cmd.CombinedOutput()
+			c := Check{Level: "V0", Name: "actionlint (GitHub workflows)", Status: Passed}
+			if runErr != nil {
+				c.Status = Failed
+				c.Detail = lastLines(string(out), 6)
+			}
+			checks = append(checks, c)
+		} else {
+			checks = append(checks, Check{Level: "V0", Name: "actionlint (GitHub workflows)", Status: NotExercised, Detail: "actionlint not installed"})
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".gitlab-ci.yml")); err == nil {
+		checks = append(checks, Check{Level: "V0", Name: "GitLab CI lint", Status: NotExercised, Detail: "requires a GitLab instance's CI lint API"})
+	}
+	return checks
 }
 
 func AnyFailed(checks []Check) bool {

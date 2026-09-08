@@ -15,6 +15,7 @@ import (
 
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/ownership"
+	"github.com/bealesh/neckbeard/core/pipeline"
 )
 
 type Options struct {
@@ -37,8 +38,27 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 		return nil, fmt.Errorf("rendering for lane %s/%s is not implemented yet — M1 covers aws/serverless-containers first; the planner accepted your blueprint and no files were written", bp.Cloud, bp.Runtime)
 	}
 
+	model, err := pipeline.Build(bp)
+	if err != nil {
+		return nil, err
+	}
+
 	files := []ownership.File{
 		{Path: "docs/topology.md", Content: topologyDoc(bp), Owner: ownership.OwnerGenerated},
+		{Path: ".neckbeard/hooks/test.sh", Content: testHookStub(), Owner: ownership.OwnerUser, Mode: 0o755},
+	}
+	switch bp.VCS {
+	case "github":
+		files = append(files,
+			ownership.File{Path: ".github/workflows/neckbeard-ci.yml", Content: pipeline.RenderGitHubCI(model), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: ".github/workflows/neckbeard-infra.yml", Content: pipeline.RenderGitHubInfra(model), Owner: ownership.OwnerGenerated},
+		)
+	case "gitlab":
+		files = append(files,
+			ownership.File{Path: ".gitlab-ci.yml", Content: pipeline.RenderGitLab(model), Owner: ownership.OwnerGenerated},
+		)
+	default:
+		return nil, fmt.Errorf("unknown vcs %q in blueprint", bp.VCS)
 	}
 	for _, env := range bp.Environments {
 		dir := "infra/envs/" + env.Name
@@ -264,6 +284,18 @@ func hclValue(v any) string {
 		// else is a planner bug and must fail loudly at render time.
 		panic(fmt.Sprintf("unrenderable blueprint value %T (%v)", v, v))
 	}
+}
+
+func testHookStub() []byte {
+	return []byte(`#!/usr/bin/env sh
+# .neckbeard/hooks/test.sh — user-owned test hook, run by the generated CI test job.
+# neckbeard created this file once and will never regenerate it.
+#
+# Replace the lines below with your real test command(s), e.g.:
+#   go test ./...        or        mix test        or        npm test
+echo "neckbeard test hook: no tests configured yet — edit .neckbeard/hooks/test.sh"
+exit 0
+`)
 }
 
 func customTFStub(env string) []byte {

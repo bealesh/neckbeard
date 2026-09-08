@@ -63,7 +63,8 @@
           "kind": { "enum": ["http", "worker", "cron"] },
           "port": { "type": "integer" },
           "health_path": { "type": "string" },
-          "schedule": { "type": "string" }
+          "schedule": { "type": "string" },
+          "dockerfile": { "type": "string" }
         }
       }
     },

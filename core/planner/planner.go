@@ -58,6 +58,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 	for _, s := range prof.Services {
 		services = append(services, blueprint.Service{
 			Name: s.Name, Kind: s.Kind, Port: s.Port, HealthPath: s.HealthPath, Schedule: s.Schedule,
+			Dockerfile: s.Dockerfile,
 		})
 	}
 	slices.SortFunc(services, func(a, b blueprint.Service) int { return strings.Compare(a.Name, b.Name) })

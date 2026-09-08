@@ -46,11 +46,12 @@ type FileEntry struct {
 }
 
 // File is one entry of a renderer's write-set. Path is slash-separated and
-// relative to the apply root.
+// relative to the apply root. Mode 0 means the default 0644.
 type File struct {
 	Path    string
 	Content []byte
 	Owner   Owner
+	Mode    os.FileMode
 }
 
 type Conflict struct {
@@ -107,7 +108,7 @@ func Apply(root, blueprintHash string, files []File) (*Result, error) {
 				next.Files[f.Path] = FileEntry{Owner: OwnerUser, SHA256: hashBytes(disk)}
 				continue
 			}
-			if err := writeFile(full, f.Content); err != nil {
+			if err := writeFile(full, f.Content, f.Mode); err != nil {
 				return nil, err
 			}
 			res.Created = append(res.Created, f.Path)
@@ -117,7 +118,7 @@ func Apply(root, blueprintHash string, files []File) (*Result, error) {
 
 		switch {
 		case !exists:
-			if err := writeFile(full, f.Content); err != nil {
+			if err := writeFile(full, f.Content, f.Mode); err != nil {
 				return nil, err
 			}
 			res.Created = append(res.Created, f.Path)
@@ -134,7 +135,7 @@ func Apply(root, blueprintHash string, files []File) (*Result, error) {
 
 		case old.Files[f.Path].SHA256 == hashBytes(disk):
 			// Tracked and unmodified since we wrote it: regenerate freely.
-			if err := writeFile(full, f.Content); err != nil {
+			if err := writeFile(full, f.Content, f.Mode); err != nil {
 				return nil, err
 			}
 			res.Updated = append(res.Updated, f.Path)
@@ -147,7 +148,7 @@ func Apply(root, blueprintHash string, files []File) (*Result, error) {
 				reason = "file exists but was not created by neckbeard"
 			}
 			newPath := f.Path + NewSuffix
-			if err := writeFile(filepath.Join(root, filepath.FromSlash(newPath)), f.Content); err != nil {
+			if err := writeFile(filepath.Join(root, filepath.FromSlash(newPath)), f.Content, f.Mode); err != nil {
 				return nil, err
 			}
 			res.Conflicts = append(res.Conflicts, Conflict{Path: f.Path, Reason: reason, NewPath: newPath})
@@ -249,14 +250,17 @@ func saveManifest(root string, m Manifest) error {
 	if err != nil {
 		return err
 	}
-	return writeFile(filepath.Join(root, filepath.FromSlash(ManifestPath)), append(data, '\n'))
+	return writeFile(filepath.Join(root, filepath.FromSlash(ManifestPath)), append(data, '\n'), 0)
 }
 
-func writeFile(full string, content []byte) error {
+func writeFile(full string, content []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(full, content, 0o644)
+	if mode == 0 {
+		mode = 0o644
+	}
+	return os.WriteFile(full, content, mode)
 }
 
 func hashBytes(b []byte) string {

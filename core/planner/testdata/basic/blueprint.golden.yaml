@@ -1,5 +1,5 @@
 version: 1
-blueprint_hash: sha256:48f6740bf7513eb87c26e5de299bc99b1c5586475fe7db0476d3f32d7acc6504
+blueprint_hash: sha256:048b3025af83b44c00f4c5337ecaf6ebe45a14b0973798155f88500460f3d8a3
 generated_from:
     neckbeard_yaml: sha256:ae827b77d56b970e89e92c87e232600d79682b437445e0eb985632ef2d4a6d00
     app_profile: sha256:fb76116a04786086ae499d604bb342a8682633df6267c5e16e959cb79c4c87b8
@@ -21,12 +21,15 @@ services:
     - name: nightly-report
       kind: cron
       schedule: 0 3 * * *
+      dockerfile: Dockerfile
     - name: web
       kind: http
       port: 4000
       health_path: /healthz
+      dockerfile: Dockerfile
     - name: worker
       kind: worker
+      dockerfile: Dockerfile
 environments:
     - name: dev
       modules:
