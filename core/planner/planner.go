@@ -127,6 +127,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 		Region:       cfg.Region,
 		Runtime:      cfg.Runtime,
 		VCS:          cfg.VCS,
+		Repo:         cfg.Repo,
 		Tier:         cfg.Tier,
 		Services:     services,
 		Environments: envs,

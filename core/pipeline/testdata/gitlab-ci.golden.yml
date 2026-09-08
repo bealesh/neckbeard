@@ -41,13 +41,13 @@ build:
     - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity HIGH,CRITICAL --exit-code 1 "neckbeard-build:$CI_COMMIT_SHA"
     - |
       if [ -z "$REGISTRY" ]; then
-        echo "NECKBEARD_REGISTRY_DEV is not set (bootstrap pending) — build ran, push skipped"
+        echo "NECKBEARD_REGISTRY_DEV is not set (bootstrap pending, see docs/bootstrap.md) — build ran, push skipped"
         exit 0
       fi
+      apk add --no-cache curl jq >/dev/null
       apk add --no-cache aws-cli >/dev/null
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
-      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token
-      export AWS_ROLE_ARN="$NECKBEARD_AWS_APPLY_ROLE_DEV"
+      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$NECKBEARD_AWS_APPLY_ROLE_DEV"
       aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${REGISTRY%%/*}"
       docker tag "neckbeard-build:$CI_COMMIT_SHA" "$REGISTRY:$CI_COMMIT_SHA"
       docker push "$REGISTRY:$CI_COMMIT_SHA"
@@ -70,15 +70,13 @@ infra-dev:
     - tofu -chdir=infra/envs/dev init -backend=false -input=false
     - tofu -chdir=infra/envs/dev validate
     - |
-      ROLE="$NECKBEARD_AWS_PLAN_ROLE_DEV"
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_DEV"; fi
-      if [ ! -f infra/envs/dev/backend.hcl ] || [ -z "$ROLE" ]; then
-        echo "bootstrap pending for dev (backend.hcl or CI roles missing) — validate-only run; plan/apply NOT EXERCISED"
+      if [ ! -f infra/envs/dev/backend.hcl ] || [ -z "$NECKBEARD_AWS_PLAN_ROLE_DEV" ]; then
+        echo "bootstrap pending for dev (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED"
         exit 0
       fi
+      ROLE="$NECKBEARD_AWS_PLAN_ROLE_DEV"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_DEV"; fi
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
-      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token
-      export AWS_ROLE_ARN="$ROLE"
+      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
       tofu -chdir=infra/envs/dev init -reconfigure -input=false -backend-config=backend.hcl
       tofu -chdir=infra/envs/dev plan -input=false -out=tfplan
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
@@ -101,15 +99,13 @@ infra-stg:
     - tofu -chdir=infra/envs/stg init -backend=false -input=false
     - tofu -chdir=infra/envs/stg validate
     - |
-      ROLE="$NECKBEARD_AWS_PLAN_ROLE_STG"
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_STG"; fi
-      if [ ! -f infra/envs/stg/backend.hcl ] || [ -z "$ROLE" ]; then
-        echo "bootstrap pending for stg (backend.hcl or CI roles missing) — validate-only run; plan/apply NOT EXERCISED"
+      if [ ! -f infra/envs/stg/backend.hcl ] || [ -z "$NECKBEARD_AWS_PLAN_ROLE_STG" ]; then
+        echo "bootstrap pending for stg (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED"
         exit 0
       fi
+      ROLE="$NECKBEARD_AWS_PLAN_ROLE_STG"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_STG"; fi
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
-      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token
-      export AWS_ROLE_ARN="$ROLE"
+      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
       tofu -chdir=infra/envs/stg init -reconfigure -input=false -backend-config=backend.hcl
       tofu -chdir=infra/envs/stg plan -input=false -out=tfplan
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
@@ -133,15 +129,13 @@ infra-prd:
     - tofu -chdir=infra/envs/prd init -backend=false -input=false
     - tofu -chdir=infra/envs/prd validate
     - |
-      ROLE="$NECKBEARD_AWS_PLAN_ROLE_PRD"
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_PRD"; fi
-      if [ ! -f infra/envs/prd/backend.hcl ] || [ -z "$ROLE" ]; then
-        echo "bootstrap pending for prd (backend.hcl or CI roles missing) — validate-only run; plan/apply NOT EXERCISED"
+      if [ ! -f infra/envs/prd/backend.hcl ] || [ -z "$NECKBEARD_AWS_PLAN_ROLE_PRD" ]; then
+        echo "bootstrap pending for prd (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED"
         exit 0
       fi
+      ROLE="$NECKBEARD_AWS_PLAN_ROLE_PRD"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_PRD"; fi
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
-      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token
-      export AWS_ROLE_ARN="$ROLE"
+      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
       tofu -chdir=infra/envs/prd init -reconfigure -input=false -backend-config=backend.hcl
       tofu -chdir=infra/envs/prd plan -input=false -out=tfplan
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then

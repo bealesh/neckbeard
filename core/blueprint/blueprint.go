@@ -23,6 +23,7 @@ type Blueprint struct {
 	Region        string        `yaml:"region"`
 	Runtime       string        `yaml:"runtime"`
 	VCS           string        `yaml:"vcs"`
+	Repo          string        `yaml:"repo"`
 	Tier          string        `yaml:"tier"`
 	Services      []Service     `yaml:"services"`
 	Environments  []Environment `yaml:"environments"`

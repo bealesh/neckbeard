@@ -41,9 +41,19 @@ func StaticV0(root string, envs []string) ([]Check, error) {
 	}
 
 	var checks []Check
+	roots := make([]struct{ env, dir string }, 0, len(envs)*2)
 	for _, env := range envs {
-		dir := filepath.Join(root, "infra", "envs", env)
+		roots = append(roots,
+			struct{ env, dir string }{env, filepath.Join(root, "infra", "envs", env)},
+			struct{ env, dir string }{env + " bootstrap", filepath.Join(root, "infra", "bootstrap", env)},
+		)
+	}
+	for _, r := range roots {
+		env, dir := r.env, r.dir
 		if _, statErr := os.Stat(dir); statErr != nil {
+			if strings.Contains(env, "bootstrap") {
+				continue // bootstrap roots are optional in older scaffolds
+			}
 			checks = append(checks, Check{Level: "V0", Name: "env root exists", Env: env, Status: Failed, Detail: dir + " missing — run `neckbeard scaffold`"})
 			continue
 		}
@@ -93,8 +103,15 @@ func policyChecks(root string, envs []string) []Check {
 		return []Check{{Level: "V0", Name: "policy checks (checkov)", Status: NotExercised, Detail: "checkov not installed (`brew install checkov` / pipx install checkov)"}}
 	}
 	var checks []Check
+	dirs := make([]struct{ env, dir string }, 0, len(envs)*2)
 	for _, env := range envs {
-		dir := filepath.Join(root, "infra", "envs", env)
+		dirs = append(dirs,
+			struct{ env, dir string }{env, filepath.Join(root, "infra", "envs", env)},
+			struct{ env, dir string }{env + " bootstrap", filepath.Join(root, "infra", "bootstrap", env)},
+		)
+	}
+	for _, d := range dirs {
+		env, dir := d.env, d.dir
 		if _, statErr := os.Stat(dir); statErr != nil {
 			continue // the missing root is already reported by the tofu steps
 		}

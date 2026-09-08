@@ -14,9 +14,6 @@ on:
 permissions:
   contents: read
 
-env:
-  AWS_REGION: us-east-1
-
 jobs:
   infra-dev:
     runs-on: ubuntu-latest
@@ -33,16 +30,16 @@ jobs:
         run: |
           tofu -chdir=infra/envs/dev init -backend=false -input=false
           tofu -chdir=infra/envs/dev validate
-      - name: Federate to AWS (dev) — plan role on PRs, apply role on main
+      - name: Federate to AWS (dev) — plan role on PRs, apply role on pushes
         if: vars.NECKBEARD_AWS_PLAN_ROLE_DEV != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ github.event_name == 'push' && vars.NECKBEARD_AWS_APPLY_ROLE_DEV || vars.NECKBEARD_AWS_PLAN_ROLE_DEV }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Plan, and apply on main (V1; needs bootstrap backend config)
+          aws-region: us-east-1
+      - name: Plan, and apply on main (V1; needs bootstrap, see docs/bootstrap.md)
         run: |
           if [ ! -f infra/envs/dev/backend.hcl ] || [ -z "${{ vars.NECKBEARD_AWS_PLAN_ROLE_DEV }}" ]; then
-            echo "::warning::bootstrap pending for dev (backend.hcl or CI roles missing) — validate-only run; plan/apply NOT EXERCISED"
+            echo "::warning::bootstrap pending for dev (backend.hcl or CI variables missing) — validate-only run; plan/apply NOT EXERCISED"
             exit 0
           fi
           tofu -chdir=infra/envs/dev init -reconfigure -input=false -backend-config=backend.hcl
@@ -66,16 +63,16 @@ jobs:
         run: |
           tofu -chdir=infra/envs/stg init -backend=false -input=false
           tofu -chdir=infra/envs/stg validate
-      - name: Federate to AWS (stg) — plan role on PRs, apply role on main
+      - name: Federate to AWS (stg) — plan role on PRs, apply role on pushes
         if: vars.NECKBEARD_AWS_PLAN_ROLE_STG != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ github.event_name == 'push' && vars.NECKBEARD_AWS_APPLY_ROLE_STG || vars.NECKBEARD_AWS_PLAN_ROLE_STG }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Plan, and apply on main (V1; needs bootstrap backend config)
+          aws-region: us-east-1
+      - name: Plan, and apply on main (V1; needs bootstrap, see docs/bootstrap.md)
         run: |
           if [ ! -f infra/envs/stg/backend.hcl ] || [ -z "${{ vars.NECKBEARD_AWS_PLAN_ROLE_STG }}" ]; then
-            echo "::warning::bootstrap pending for stg (backend.hcl or CI roles missing) — validate-only run; plan/apply NOT EXERCISED"
+            echo "::warning::bootstrap pending for stg (backend.hcl or CI variables missing) — validate-only run; plan/apply NOT EXERCISED"
             exit 0
           fi
           tofu -chdir=infra/envs/stg init -reconfigure -input=false -backend-config=backend.hcl
@@ -99,16 +96,16 @@ jobs:
         run: |
           tofu -chdir=infra/envs/prd init -backend=false -input=false
           tofu -chdir=infra/envs/prd validate
-      - name: Federate to AWS (prd) — plan role on PRs, apply role on main
+      - name: Federate to AWS (prd) — plan role on PRs, apply role on pushes
         if: vars.NECKBEARD_AWS_PLAN_ROLE_PRD != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ github.event_name == 'push' && vars.NECKBEARD_AWS_APPLY_ROLE_PRD || vars.NECKBEARD_AWS_PLAN_ROLE_PRD }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Plan, and apply on main (V1; needs bootstrap backend config)
+          aws-region: us-east-1
+      - name: Plan, and apply on main (V1; needs bootstrap, see docs/bootstrap.md)
         run: |
           if [ ! -f infra/envs/prd/backend.hcl ] || [ -z "${{ vars.NECKBEARD_AWS_PLAN_ROLE_PRD }}" ]; then
-            echo "::warning::bootstrap pending for prd (backend.hcl or CI roles missing) — validate-only run; plan/apply NOT EXERCISED"
+            echo "::warning::bootstrap pending for prd (backend.hcl or CI variables missing) — validate-only run; plan/apply NOT EXERCISED"
             exit 0
           fi
           tofu -chdir=infra/envs/prd init -reconfigure -input=false -backend-config=backend.hcl

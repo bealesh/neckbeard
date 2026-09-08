@@ -300,6 +300,7 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 			ownership.File{Path: dir + "/custom.tf", Content: customTFStub(env.Name), Owner: ownership.OwnerUser},
 		)
 	}
+	files = append(files, bootstrapFiles(bp, l, opts)...)
 	if l.delivery != nil {
 		files = append(files, l.delivery(bp)...)
 	}
@@ -559,6 +560,8 @@ func checkovConfig(cloud string) []byte {
 			{"CKV_AWS_338", "30-day log retention is a tier cost decision; the estimate names log ingestion/retention as a usage assumption"},
 			{"CKV_AWS_353", "performance insights is enabled from the 'small' class up; the smallest shared-core class does not support it"},
 			{"CKV_AWS_354", "customer-managed KMS keys are regulated-tier roadmap; performance insights uses AWS-managed encryption"},
+			{"CKV_AWS_109", "the bootstrap apply role's iam:* is constrained to the app's name-prefix ARNs — the constraint checkov wants, expressed as resource scoping; least-privilege refinement is release-harness roadmap"},
+			{"CKV_AWS_356", "the wildcard statement is read-only IAM lookups (Get/List); every write is prefix-scoped"},
 		},
 		"gcp": {
 			{"CKV_GCP_6", "TLS is enforced via ssl_mode = ENCRYPTED_ONLY; checkov still looks for the deprecated require_ssl field"},
@@ -568,6 +571,9 @@ func checkovConfig(cloud string) []byte {
 			{"CKV_GCP_65", "Google Groups RBAC is an org-level construct; lands with the founding path (M3)"},
 			{"CKV_GCP_66", "Binary Authorization is supply-chain roadmap; today's gate is trivy blocking HIGH/CRITICAL in CI (§10.1)"},
 			{"CKV_GCP_69", "GKE_METADATA is set on the node pool's workload_metadata_config; the default pool is removed — checkov also wants it on the cluster-level node_config that never creates nodes"},
+			{"CKV_GCP_117", "the bootstrap CI identities use viewer (plan) and editor (apply) at project level; decomposing into predefined roles is release-harness roadmap, and Path A's per-env project bounds the blast radius"},
+			{"CKV_GCP_49", "the apply identity manages service accounts because catalog modules create them (runtime SAs, workload identity); same refinement roadmap as CKV_GCP_117"},
+			{"CKV_GCP_62", "state-bucket access logging is Cloud Audit Logs territory — landing-zone posture (M3); a log bucket for the log bucket is not the M3 slice"},
 			{"CKV_GCP_26", "VPC flow logs are a log-cost decision; regulated-tier roadmap"},
 			{"CKV_GCP_79", "pinned to POSTGRES_17, the current major; checkov's latest-version list lags and pinning beats floating"},
 			{"CKV_GCP_84", "customer-managed encryption keys are regulated-tier roadmap; Google-managed encryption is on"},

@@ -102,6 +102,8 @@ clouds:
     providers:
       - name: hashicorp/azurerm
         version: "4.30.0"   # placeholder pin
+      - name: hashicorp/azuread
+        version: "3.4.0"    # app registrations + federated credentials (bootstrap)
     # Honest per-cloud difference (§3.3): Container Apps provides HTTPS ingress
     # natively, so http-ingress needs no extra module on Azure.
     capabilities:

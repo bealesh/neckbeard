@@ -12,9 +12,6 @@ on:
 permissions:
   contents: read
 
-env:
-  AWS_REGION: us-east-1
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -40,17 +37,17 @@ jobs:
         id: bootstrap
         run: |
           if [ -z "$REGISTRY" ]; then
-            echo "::warning::NECKBEARD_REGISTRY_DEV is not set (bootstrap pending) — build runs, push is skipped"
+            echo "::warning::NECKBEARD_REGISTRY_DEV is not set (bootstrap pending, see docs/bootstrap.md) — build runs, push is skipped"
             echo "push=false" >> "$GITHUB_OUTPUT"
           else
             echo "push=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Federate to AWS (dev)
+      - name: Federate to AWS (dev) — plan role on PRs, apply role on pushes
         if: steps.bootstrap.outputs.push == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.NECKBEARD_AWS_APPLY_ROLE_DEV }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-east-1
       - name: Build image
         run: docker build -f bellwether/Dockerfile -t "neckbeard-build:${GITHUB_SHA}" .
       - name: Scan image (HIGH/CRITICAL block the merge gate)
@@ -60,7 +57,7 @@ jobs:
       - name: Push (immutable tag; promotion moves digests, never rebuilds)
         if: steps.bootstrap.outputs.push == 'true'
         run: |
-          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${REGISTRY%%/*}"
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${REGISTRY%%/*}"
           docker tag "neckbeard-build:${GITHUB_SHA}" "${REGISTRY}:${GITHUB_SHA}"
           docker push "${REGISTRY}:${GITHUB_SHA}"
           echo "Pushed digest:"

@@ -7,6 +7,7 @@ vcs: github
 runtime: serverless-containers
 tier: solo
 entry_path: adopt
+repo: bealesh/neckbeard
 finops:
   currency: USD
   monthly_budget_alert: 100

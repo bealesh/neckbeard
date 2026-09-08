@@ -7,6 +7,7 @@ package pipeline
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bealesh/neckbeard/core/blueprint"
 )
@@ -15,6 +16,7 @@ import (
 // renderer needs, nothing it must infer.
 type Model struct {
 	App           string
+	Cloud         string // drives the federation and registry-login steps
 	DefaultBranch string
 	Region        string
 	TofuVersion   string
@@ -23,14 +25,36 @@ type Model struct {
 }
 
 // CI configuration names the pipelines expect, set once by bootstrap (per env):
-// GitHub repository/environment variables or GitLab CI/CD variables. Bootstrap
-// (M2/M3) writes them; until then the generated pipelines degrade to validate-only
-// and say so.
+// GitHub repository/environment variables or GitLab CI/CD variables (the bootstrap
+// modules' ci_variables outputs are exactly these). Until they exist the generated
+// pipelines degrade to validate-only and say so.
 const (
 	VarPlanRole  = "NECKBEARD_AWS_PLAN_ROLE"  // + _<ENV>
 	VarApplyRole = "NECKBEARD_AWS_APPLY_ROLE" // + _<ENV>
 	VarRegistry  = "NECKBEARD_REGISTRY"       // + _<ENV>
+
+	VarGCPProvider = "NECKBEARD_GCP_WIF_PROVIDER" // + _<ENV>
+	VarGCPPlanSA   = "NECKBEARD_GCP_PLAN_SA"      // + _<ENV>
+	VarGCPApplySA  = "NECKBEARD_GCP_APPLY_SA"     // + _<ENV>
+
+	VarAzureTenant      = "NECKBEARD_AZURE_TENANT_ID"
+	VarAzureSub         = "NECKBEARD_AZURE_SUBSCRIPTION" // + _<ENV>
+	VarAzurePlanClient  = "NECKBEARD_AZURE_PLAN_CLIENT"  // + _<ENV>
+	VarAzureApplyClient = "NECKBEARD_AZURE_APPLY_CLIENT" // + _<ENV>
 )
+
+// GateVar is the variable whose absence means "bootstrap pending" for a cloud.
+func GateVar(cloud, env string) string {
+	e := strings.ToUpper(env)
+	switch cloud {
+	case "gcp":
+		return VarGCPProvider + "_" + e
+	case "azure":
+		return VarAzurePlanClient + "_" + e
+	default:
+		return VarPlanRole + "_" + e
+	}
+}
 
 func Build(bp *blueprint.Blueprint) (Model, error) {
 	dockerfiles := map[string]bool{}
@@ -56,6 +80,7 @@ func Build(bp *blueprint.Blueprint) (Model, error) {
 	}
 	return Model{
 		App:           bp.App,
+		Cloud:         bp.Cloud,
 		DefaultBranch: "main",
 		Region:        bp.Region,
 		TofuVersion:   bp.Pins.OpenTofu,

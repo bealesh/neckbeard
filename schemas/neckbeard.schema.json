@@ -4,7 +4,7 @@
   "title": "neckbeard.yaml — user-owned configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "app", "org", "cloud", "region", "vcs", "runtime", "tier", "entry_path"],
+  "required": ["version", "app", "org", "cloud", "region", "vcs", "runtime", "tier", "entry_path", "repo"],
   "properties": {
     "version": { "const": 1 },
     "app": { "$ref": "#/$defs/name" },
@@ -15,6 +15,11 @@
     "runtime": { "enum": ["kubernetes", "serverless-containers"] },
     "tier": { "enum": ["solo", "smallteam", "established", "regulated"] },
     "entry_path": { "enum": ["adopt", "found"] },
+    "repo": {
+      "description": "VCS repository slug (owner/name on GitHub, group/project on GitLab). OIDC trust conditions bind CI identities to exactly this repository.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+$"
+    },
     "environments": {
       "description": "Fixed at launch; present for forward compatibility.",
       "type": "array",

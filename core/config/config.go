@@ -21,6 +21,7 @@ type Config struct {
 	Runtime      string                    `yaml:"runtime"`
 	Tier         string                    `yaml:"tier"`
 	EntryPath    string                    `yaml:"entry_path"`
+	Repo         string                    `yaml:"repo"`
 	Environments []string                  `yaml:"environments,omitempty"`
 	ManifestRef  string                    `yaml:"manifest_ref,omitempty"`
 	Containers   map[string]string         `yaml:"containers,omitempty"`

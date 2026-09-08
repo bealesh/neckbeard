@@ -1,7 +1,7 @@
 version: 1
-blueprint_hash: sha256:048b3025af83b44c00f4c5337ecaf6ebe45a14b0973798155f88500460f3d8a3
+blueprint_hash: sha256:97bf15845056a9e4a88b7e2a2ac33b853dadb7d568918d0d050a5834f0c28865
 generated_from:
-    neckbeard_yaml: sha256:ae827b77d56b970e89e92c87e232600d79682b437445e0eb985632ef2d4a6d00
+    neckbeard_yaml: sha256:afd4959a9151ab1a71af789f9804029159bfe8a9873e86ccad193f65a079f4da
     app_profile: sha256:fb76116a04786086ae499d604bb342a8682633df6267c5e16e959cb79c4c87b8
 pins:
     catalog: 0.1.0
@@ -16,6 +16,7 @@ cloud: aws
 region: us-east-1
 runtime: serverless-containers
 vcs: github
+repo: bealesh/neckbeard
 tier: smallteam
 services:
     - name: nightly-report
