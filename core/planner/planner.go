@@ -142,7 +142,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.Index) ([]string, []blueprint.Reference, []string, error) {
 	set := map[string]bool{}
 	addCap := func(capability string) error {
-		mods, ok := idx.CapabilityModules(cfg.Cloud, capability)
+		mods, ok := idx.CapabilityModules(cfg.Cloud, cfg.Runtime, capability)
 		if !ok {
 			return fmt.Errorf("capability %q is not in the catalog (supported: %s); neckbeard does not force-fit unsupported needs — see the workload contract in DESIGN §3", capability, keysCSV(idx.Capabilities))
 		}

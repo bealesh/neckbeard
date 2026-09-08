@@ -26,13 +26,21 @@ type Cloud struct {
 	Capabilities map[string][]string `yaml:"capabilities,omitempty"`
 }
 
-// CapabilityModules resolves a capability for one cloud: the cloud's override
-// wins, otherwise the index-level map applies.
-func (idx *Index) CapabilityModules(cloud, capability string) ([]string, bool) {
+// CapabilityModules resolves a capability for one cloud and runtime. Lookup
+// order: the cloud's "<capability>/<runtime>" override (honest per-lane
+// differences, e.g. kubernetes ingress lives in-cluster), the cloud's plain
+// override, then the index-level map.
+func (idx *Index) CapabilityModules(cloud, runtime, capability string) ([]string, bool) {
 	if c, ok := idx.Clouds[cloud]; ok {
+		if mods, ok := c.Capabilities[capability+"/"+runtime]; ok {
+			return mods, true
+		}
 		if mods, ok := c.Capabilities[capability]; ok {
 			return mods, true
 		}
+	}
+	if mods, ok := idx.Capabilities[capability+"/"+runtime]; ok {
+		return mods, true
 	}
 	mods, ok := idx.Capabilities[capability]
 	return mods, ok

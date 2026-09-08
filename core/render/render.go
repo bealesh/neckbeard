@@ -82,6 +82,34 @@ var lanes = map[string]lane{
 			{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
 		},
 	},
+	"aws/kubernetes": {
+		// No dns-ingress module: kubernetes ingress is in-cluster
+		// (aws-load-balancer-controller via Flux), delivered with the clusters/
+		// layer. This lane renders the platform: cluster, data services, network.
+		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry"},
+		wiring: map[string][]kv{
+			"runtime-k8s": {
+				{"vpc_id", "module.network.vpc_id"},
+				{"private_subnet_ids", "module.network.private_subnet_ids"},
+			},
+			"postgres": {
+				{"vpc_id", "module.network.vpc_id"},
+				{"private_subnet_ids", "module.network.private_subnet_ids"},
+				{"allowed_security_group_ids", "[module.runtime_k8s.cluster_security_group_id]"},
+			},
+		},
+		requires:  stdRequires,
+		providers: awsProviders,
+		outputs: []rootOutput{
+			{"cluster_name", "runtime-k8s", "module.runtime_k8s.cluster_name", "EKS cluster (delivery via Flux lands with the clusters layer)"},
+			{"cluster_endpoint", "runtime-k8s", "module.runtime_k8s.cluster_endpoint", "EKS API endpoint (public at M2; origin lockdown is a hardening roadmap item)"},
+			{"oidc_issuer", "runtime-k8s", "module.runtime_k8s.oidc_issuer", "Cluster OIDC issuer for workload identity"},
+			{"db_endpoint", "postgres", "module.postgres.endpoint", "PostgreSQL endpoint (credentials: RDS-managed secret)"},
+			{"db_master_user_secret_arn", "postgres", "module.postgres.master_user_secret_arn", "RDS-managed master credentials secret"},
+			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
+			{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
+		},
+	},
 	"gcp/serverless-containers": {
 		emitOrder: []string{"network", "runtime-serverless", "dns-ingress", "postgres", "storage", "secrets", "registry"},
 		wiring: map[string][]kv{
@@ -150,6 +178,7 @@ var stdRequires = map[string]string{
 	"module.network.":            "network",
 	"module.dns_ingress.":        "dns-ingress",
 	"module.runtime_serverless.": "runtime-serverless",
+	"module.runtime_k8s.":        "runtime-k8s",
 	"module.secrets.":            "secrets",
 	"module.postgres.":           "postgres",
 	"local.services":             "runtime-serverless",
@@ -443,6 +472,10 @@ func checkovConfig(cloud string) []byte {
 	perCloud := map[string][]kv{
 		"aws": {
 			{"CKV_AWS_2", "M1 ingress is HTTP :80 by design; TLS + custom domains land with the environment manifest (M2) — documented in the topology doc"},
+			{"CKV_AWS_37", "EKS control-plane logging is enabled for api + audit; the full set (authenticator/controllerManager/scheduler) is a log-cost decision, regulated-tier roadmap"},
+			{"CKV_AWS_38", "the EKS public endpoint is documented M2 posture (private access is also enabled); origin allowlisting/private-only requires in-VPC CI runners or VPN — hardening roadmap, stated in the module and outputs"},
+			{"CKV_AWS_39", "same as CKV_AWS_38: public endpoint stays on until in-VPC access paths exist"},
+			{"CKV_AWS_58", "EKS encrypts secrets at rest by default on current platform versions; customer-managed envelope KMS keys are regulated-tier roadmap"},
 			{"CKV_AWS_260", "same as CKV_AWS_2: the :80 listener is the documented M1 limitation"},
 			{"CKV_AWS_91", "ALB access logging (log bucket + lifecycle) is on the M2 roadmap"},
 			{"CKV_AWS_118", "RDS enhanced monitoring is on the roadmap; base CloudWatch metrics + postgres log exports are on"},

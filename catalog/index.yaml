@@ -21,6 +21,10 @@ clouds:
     providers:
       - name: hashicorp/aws
         version: "6.14.0"   # placeholder pin
+    # On kubernetes, ingress is in-cluster (aws-load-balancer-controller via Flux,
+    # delivered with the clusters/ layer) — no dns-ingress module (§3.3).
+    capabilities:
+      http-ingress/kubernetes: []
     modules:
       network:
         version: "0.1.0"

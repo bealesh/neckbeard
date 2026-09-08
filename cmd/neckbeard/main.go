@@ -168,7 +168,7 @@ func runEstimate(args []string) error {
 	configPath := fs.String("config", "neckbeard.yaml", "path to neckbeard.yaml")
 	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
 	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "module source base (local path speeds estimation up)")
-	infracostBin := fs.String("infracost-bin", "infracost", "infracost 0.10.x binary")
+	infracostBin := fs.String("infracost-bin", "", "infracost 0.10.x binary (default: infracost-0.10, then infracost, from PATH)")
 	outPath := fs.String("out", "costs/estimate.md", "report output path")
 	if err := fs.Parse(args); err != nil {
 		return err

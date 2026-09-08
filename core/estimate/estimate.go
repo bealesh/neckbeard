@@ -65,13 +65,17 @@ type Result struct {
 }
 
 func Run(opts Options) (*Result, error) {
-	bin := opts.InfracostBin
-	if bin == "" {
-		bin = "infracost"
+	// Discovery order: explicit flag, then the classic CLI installed as
+	// infracost-0.10 (the v2 SaaS CLI often shadows `infracost`), then PATH.
+	var binPath string
+	var err error
+	if opts.InfracostBin != "" {
+		binPath, err = exec.LookPath(opts.InfracostBin)
+	} else if binPath, err = exec.LookPath("infracost-0.10"); err != nil {
+		binPath, err = exec.LookPath("infracost")
 	}
-	binPath, err := exec.LookPath(bin)
 	if err != nil {
-		return nil, fmt.Errorf("infracost not found (%q): install the 0.10.x CLI and run `infracost auth login`, or pass -infracost-bin", bin)
+		return nil, fmt.Errorf("infracost not found: install the 0.10.x CLI (as `infracost-0.10` or `infracost`) and run its `auth login`, or pass -infracost-bin")
 	}
 	version, err := infracostVersion(binPath)
 	if err != nil {
