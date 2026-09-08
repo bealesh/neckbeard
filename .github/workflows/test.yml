@@ -29,3 +29,49 @@ jobs:
           tofu_version: 1.12.6
       - name: catalog modules are fmt-clean
         run: tofu fmt -check -recursive catalog/
+
+  # V0 the supported lanes end-to-end: plan → scaffold → fmt/init/validate + checkov,
+  # per env, against the real providers (no cloud credentials involved).
+  lanes:
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: [aws, gcp, azure]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - name: Install checkov
+        run: pipx install checkov
+      - name: Build neckbeard
+        run: go build -o bin/neckbeard ./cmd/neckbeard
+      - name: Plan, scaffold, validate (${{ matrix.cloud }})
+        run: |
+          set -eu
+          LANE=$(mktemp -d)
+          cp bellwether/app-profile.yaml "$LANE/"
+          case "${{ matrix.cloud }}" in
+            aws)
+              cp bellwether/neckbeard.yaml "$LANE/" ;;
+            gcp)
+              sed -e 's/^cloud: aws/cloud: gcp/' -e 's/^region: us-east-1/region: us-central1/' \
+                bellwether/neckbeard.yaml > "$LANE/neckbeard.yaml"
+              printf 'containers:\n  dev: ci-dev\n  stg: ci-stg\n  prd: ci-prd\n' >> "$LANE/neckbeard.yaml" ;;
+            azure)
+              # gitlab VCS here so both pipeline renderers stay exercised in CI
+              sed -e 's/^cloud: aws/cloud: azure/' -e 's/^region: us-east-1/region: eastus2/' \
+                  -e 's/^vcs: github/vcs: gitlab/' \
+                bellwether/neckbeard.yaml > "$LANE/neckbeard.yaml"
+              printf 'containers:\n  dev: 00000000-0000-0000-0000-000000000001\n  stg: 00000000-0000-0000-0000-000000000002\n  prd: 00000000-0000-0000-0000-000000000003\n' >> "$LANE/neckbeard.yaml" ;;
+          esac
+          bin/neckbeard plan -config "$LANE/neckbeard.yaml" -profile "$LANE/app-profile.yaml" \
+            -catalog catalog/index.yaml -out "$LANE/blueprint.yaml"
+          cd "$LANE"
+          "$GITHUB_WORKSPACE/bin/neckbeard" scaffold -catalog-source "$GITHUB_WORKSPACE"
+          "$GITHUB_WORKSPACE/bin/neckbeard" validate
