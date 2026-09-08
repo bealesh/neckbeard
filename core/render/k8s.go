@@ -13,11 +13,10 @@ import (
 // Kustomization CRs per env, image automation into dev, PR-based digest bumps for
 // stg/prd (DESIGN §11.2).
 //
-// Delivered here: namespaces, deployments, services, cronjobs, ingress, Flux CRs.
-// NOT here yet (in-cluster controllers layer, next increment): the
-// aws-load-balancer-controller HelmRelease that makes Ingress real, and
-// external-secrets to materialize the app secret. Pods reference the secret and
-// stay Pending until it exists — fail-closed, not silently unconfigured.
+// Delivered here: namespaces, deployments, services, cronjobs, ingress, Flux CRs,
+// and the controllers layer (aws-load-balancer-controller makes Ingress real;
+// external-secrets materializes the app secret from Secrets Manager). Apps depend
+// on controllers in Flux, so nothing applies against missing CRDs.
 func k8sDelivery(bp *blueprint.Blueprint) []ownership.File {
 	files := []ownership.File{
 		{Path: "clusters/base/apps/kustomization.yaml", Content: baseKustomization(bp), Owner: ownership.OwnerGenerated},
@@ -42,9 +41,16 @@ func k8sDelivery(bp *blueprint.Blueprint) []ownership.File {
 		}
 	}
 	for _, env := range bp.Environments {
+		dir := "clusters/" + env.Name
 		files = append(files,
-			ownership.File{Path: "clusters/" + env.Name + "/apps.yaml", Content: fluxKustomizationYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: "clusters/" + env.Name + "/apps/kustomization.yaml", Content: envKustomization(bp, env.Name), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/apps.yaml", Content: fluxKustomizationYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/apps/kustomization.yaml", Content: envKustomization(bp, env.Name), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers.yaml", Content: fluxControllersYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers/kustomization.yaml", Content: controllersKustomization(), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers/helm-repositories.yaml", Content: helmRepositoriesYAML(), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers/alb-controller.yaml", Content: albControllerYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers/external-secrets.yaml", Content: externalSecretsYAML(), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers/app-secrets.yaml", Content: appSecretsYAML(bp, env), Owner: ownership.OwnerGenerated},
 		)
 		if env.Name == "dev" {
 			// Image automation commits fresh digests to dev only; stg/prd move by
@@ -231,6 +237,8 @@ metadata:
   namespace: flux-system
 spec:
   interval: 5m
+  dependsOn:
+    - name: %s-controllers
   path: ./clusters/%s/apps
   prune: %s
   sourceRef:
@@ -238,7 +246,181 @@ spec:
     name: flux-system
   timeout: 3m
   wait: true
-`, generatedYAMLManifestHeader, env, bp.App, env, prune)
+`, generatedYAMLManifestHeader, env, bp.App, bp.App, env, prune)
+}
+
+// fluxControllersYAML is the controllers Kustomization; the apps Kustomization
+// depends on it so app manifests never race controller CRDs.
+func fluxControllersYAML(bp *blueprint.Blueprint, env string) []byte {
+	return fmt.Appendf(nil, `%sapiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: %s-controllers
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./clusters/%s/controllers
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  timeout: 5m
+  wait: true
+`, generatedYAMLManifestHeader, bp.App, env)
+}
+
+func controllersKustomization() []byte {
+	return []byte(generatedYAMLManifestHeader + `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - helm-repositories.yaml
+  - alb-controller.yaml
+  - external-secrets.yaml
+  - app-secrets.yaml
+`)
+}
+
+func helmRepositoriesYAML() []byte {
+	return []byte(generatedYAMLManifestHeader + `apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: eks-charts
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://aws.github.io/eks-charts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: external-secrets
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://charts.external-secrets.io
+`)
+}
+
+func albControllerYAML(bp *blueprint.Blueprint, env string) []byte {
+	clusterName := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env)
+	return fmt.Appendf(nil, `%s# Makes the ALB-class Ingress real. Identity: EKS Pod Identity association
+# created by the runtime-k8s module for kube-system/aws-load-balancer-controller.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: aws-load-balancer-controller
+  namespace: kube-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: aws-load-balancer-controller
+      # TODO(catalog): pin exact once the release harness exercises upgrades.
+      version: ">=1.8.0"
+      sourceRef:
+        kind: HelmRepository
+        name: eks-charts
+        namespace: flux-system
+  values:
+    clusterName: %s
+    region: %s
+    serviceAccount:
+      create: true
+      name: aws-load-balancer-controller
+`, generatedYAMLManifestHeader, clusterName, bp.Region)
+}
+
+func externalSecretsYAML() []byte {
+	return []byte(generatedYAMLManifestHeader + `# Materializes the app secret from the cloud secrets manager. Identity: EKS Pod
+# Identity association created by the runtime-k8s module.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-secrets
+  namespace: external-secrets
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: external-secrets
+      # TODO(catalog): pin exact once the release harness exercises upgrades.
+      version: ">=0.10.0"
+      sourceRef:
+        kind: HelmRepository
+        name: external-secrets
+        namespace: flux-system
+  values:
+    installCRDs: true
+`)
+}
+
+// appSecretsYAML wires cloud secrets into the <app>-secrets k8s Secret the
+// deployments reference. Values stay in the cloud secret store; only names are
+// rendered (DESIGN §8, §10.1). Until operators set values, pods stay Pending —
+// fail-closed by design.
+func appSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
+	var b strings.Builder
+	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: %s
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: %s
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: %s-secrets
+  namespace: %s
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: %s
+  target:
+    name: %s-secrets
+  data:
+`, generatedYAMLManifestHeader, bp.App, bp.Region, bp.App, appNS(bp), bp.App, bp.App)
+	for _, name := range secretNames(env) {
+		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s/%s\n", name, prefix, name)
+	}
+	return []byte(b.String())
+}
+
+// secretNames pulls the derived secret_names input off the env's secrets module.
+func secretNames(env blueprint.Environment) []string {
+	for _, m := range env.Modules {
+		if m.Name != "secrets" {
+			continue
+		}
+		for _, in := range m.Inputs {
+			if in.Key != "secret_names" {
+				continue
+			}
+			switch v := in.Value.(type) {
+			case []string:
+				return v
+			case []any:
+				out := make([]string, 0, len(v))
+				for _, e := range v {
+					if s, ok := e.(string); ok {
+						out = append(out, s)
+					}
+				}
+				return out
+			}
+		}
+	}
+	return nil
 }
 
 func imageAutomationYAML(bp *blueprint.Blueprint) []byte {
