@@ -77,6 +77,10 @@
         "required": ["name", "modules"],
         "properties": {
           "name": { "enum": ["dev", "stg", "prd"] },
+          "container": {
+            "description": "GCP project id / Azure subscription id for this environment; absent on AWS (account implied by credentials).",
+            "type": "string"
+          },
           "modules": {
             "type": "array",
             "items": {

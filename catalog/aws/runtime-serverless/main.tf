@@ -98,6 +98,7 @@ resource "aws_security_group" "service" {
 resource "aws_vpc_security_group_ingress_rule" "from_alb" {
   for_each                     = var.alb_security_group_id == "" ? {} : local.http_services
   security_group_id            = aws_security_group.service.id
+  description                  = "service port from the ingress ALB"
   referenced_security_group_id = var.alb_security_group_id
   from_port                    = each.value.port
   to_port                      = each.value.port
@@ -106,6 +107,7 @@ resource "aws_vpc_security_group_ingress_rule" "from_alb" {
 
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.service.id
+  description       = "task egress (images, logs, secrets, external APIs)"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
 }

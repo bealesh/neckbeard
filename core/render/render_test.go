@@ -115,6 +115,57 @@ func TestWriteSetShape(t *testing.T) {
 	}
 }
 
+func TestGCPLaneRenders(t *testing.T) {
+	base := filepath.Join("..", "planner", "testdata", "basic")
+	cfg, cfgDigest, err := config.Load(filepath.Join(base, "neckbeard.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Cloud, cfg.Region, cfg.Overrides = "gcp", "us-central1", nil
+	cfg.Containers = map[string]string{"dev": "p-dev", "stg": "p-stg", "prd": "p-prd"}
+	prof, profDigest, err := profile.Load(filepath.Join(base, "app-profile.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := catalog.Load(filepath.Join("..", "..", "catalog", "index.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre, err := presets.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bp, err := planner.Plan(planner.Inputs{
+		Config: cfg, ConfigDigest: cfgDigest, Profile: prof, ProfileDigest: profDigest,
+		Catalog: cat, Presets: pre, PlannerVersion: "test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bp.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := WriteSet(bp, testOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var providers, main string
+	for _, f := range ws {
+		switch f.Path {
+		case "infra/envs/dev/providers.tf":
+			providers = string(f.Content)
+		case "infra/envs/dev/main.tf":
+			main = strings.Join(strings.Fields(string(f.Content)), " ")
+		}
+	}
+	if !strings.Contains(providers, `project = "p-dev"`) {
+		t.Error("gcp providers.tf must set the env's project")
+	}
+	if !strings.Contains(main, "private_services_connection = module.network.private_services_connection") {
+		t.Error("gcp postgres wiring missing private services connection")
+	}
+}
+
 func TestUnsupportedLaneIsRefusedByName(t *testing.T) {
 	bp := testBlueprint(t)
 	bp.Runtime = "kubernetes"

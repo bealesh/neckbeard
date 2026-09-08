@@ -24,6 +24,17 @@
       "description": "Pinned reference to an environment manifest published by a platform repo (Path F consumers).",
       "type": "string"
     },
+    "containers": {
+      "description": "Per-environment isolation container ids: GCP project ids or Azure subscription ids (required for those clouds); AWS accounts are implied by the federated credentials.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dev", "stg", "prd"],
+      "properties": {
+        "dev": { "type": "string", "minLength": 1 },
+        "stg": { "type": "string", "minLength": 1 },
+        "prd": { "type": "string", "minLength": 1 }
+      }
+    },
     "finops": {
       "type": "object",
       "additionalProperties": false,

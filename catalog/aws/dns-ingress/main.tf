@@ -14,6 +14,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_vpc_security_group_ingress_rule" "http" {
   security_group_id = aws_security_group.alb.id
+  description       = "public HTTP (TLS + custom domains land with the environment manifest, M2)"
   cidr_ipv4         = "0.0.0.0/0"
   from_port         = 80
   to_port           = 80
@@ -22,6 +23,7 @@ resource "aws_vpc_security_group_ingress_rule" "http" {
 
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.alb.id
+  description       = "ALB to targets"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
 }
@@ -32,6 +34,8 @@ resource "aws_lb" "this" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = var.public_subnet_ids
+  # Strip malformed headers before they reach targets.
+  drop_invalid_header_fields = true
 }
 
 resource "aws_lb_target_group" "service" {

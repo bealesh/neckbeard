@@ -189,6 +189,40 @@ func TestReferenceModeProvisionsNothing(t *testing.T) {
 	}
 }
 
+func TestNonAWSCloudsRequireContainers(t *testing.T) {
+	in := loadInputs(t, filepath.Join("testdata", "basic"))
+	in.Config.Cloud = "gcp"
+	in.Config.Overrides = nil
+	_, err := Plan(in)
+	if err == nil || !strings.Contains(err.Error(), "containers") {
+		t.Errorf("gcp without containers should be refused with guidance, got: %v", err)
+	}
+	in.Config.Containers = map[string]string{"dev": "p-dev", "stg": "p-stg", "prd": "p-prd"}
+	bp, err := Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bp.Environments[0].Container != "p-dev" {
+		t.Errorf("blueprint env should carry its container, got %q", bp.Environments[0].Container)
+	}
+}
+
+func TestAzureCapabilityOverrideDropsIngressModule(t *testing.T) {
+	in := loadInputs(t, filepath.Join("testdata", "basic"))
+	in.Config.Cloud = "azure"
+	in.Config.Overrides = nil
+	in.Config.Containers = map[string]string{"dev": "s1", "stg": "s2", "prd": "s3"}
+	bp, err := Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range bp.Environments[0].Modules {
+		if m.Name == "dns-ingress" {
+			t.Error("azure must not plan a dns-ingress module (Container Apps ingress is native)")
+		}
+	}
+}
+
 func TestKubernetesRuntimeSwapsModuleAndWarns(t *testing.T) {
 	in := loadInputs(t, filepath.Join("testdata", "basic"))
 	in.Config.Runtime = "kubernetes"

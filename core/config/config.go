@@ -23,6 +23,7 @@ type Config struct {
 	EntryPath    string                    `yaml:"entry_path"`
 	Environments []string                  `yaml:"environments,omitempty"`
 	ManifestRef  string                    `yaml:"manifest_ref,omitempty"`
+	Containers   map[string]string         `yaml:"containers,omitempty"`
 	FinOps       FinOps                    `yaml:"finops,omitempty"`
 	Overrides    map[string]map[string]any `yaml:"overrides,omitempty"`
 }

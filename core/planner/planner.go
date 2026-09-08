@@ -49,6 +49,12 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 		return nil, err
 	}
 
+	// GCP and Azure need an explicit isolation container per environment; AWS
+	// accounts are implied by the federated credentials.
+	if cfg.Cloud != "aws" && len(cfg.Containers) == 0 {
+		return nil, fmt.Errorf("cloud %q requires per-environment container ids (GCP project ids / Azure subscription ids); set containers: {dev: …, stg: …, prd: …} in neckbeard.yaml", cfg.Cloud)
+	}
+
 	// Overrides must target modules the plan actually uses and allowlisted inputs.
 	if err := checkOverrides(cfg, cloud, moduleNames); err != nil {
 		return nil, err
@@ -76,7 +82,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 
 	var envs []blueprint.Environment
 	for _, envName := range cfg.Environments {
-		env := blueprint.Environment{Name: envName}
+		env := blueprint.Environment{Name: envName, Container: cfg.Containers[envName]}
 		for _, modName := range moduleNames {
 			mod, ok := cloud.Modules[modName]
 			if !ok {
@@ -136,7 +142,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.Index) ([]string, []blueprint.Reference, []string, error) {
 	set := map[string]bool{}
 	addCap := func(capability string) error {
-		mods, ok := idx.Capabilities[capability]
+		mods, ok := idx.CapabilityModules(cfg.Cloud, capability)
 		if !ok {
 			return fmt.Errorf("capability %q is not in the catalog (supported: %s); neckbeard does not force-fit unsupported needs — see the workload contract in DESIGN §3", capability, keysCSV(idx.Capabilities))
 		}

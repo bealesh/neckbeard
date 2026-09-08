@@ -113,6 +113,7 @@ resource "aws_security_group" "vpc_endpoints" {
 resource "aws_vpc_security_group_ingress_rule" "vpc_endpoints_https" {
   count             = var.nat_strategy == "none" ? 1 : 0
   security_group_id = aws_security_group.vpc_endpoints[0].id
+  description       = "HTTPS from the VPC to AWS service endpoints"
   cidr_ipv4         = aws_vpc.this.cidr_block
   from_port         = 443
   to_port           = 443

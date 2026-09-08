@@ -61,8 +61,9 @@ type Service struct {
 }
 
 type Environment struct {
-	Name    string        `yaml:"name"`
-	Modules []ModuleUsage `yaml:"modules"`
+	Name      string        `yaml:"name"`
+	Container string        `yaml:"container,omitempty"`
+	Modules   []ModuleUsage `yaml:"modules"`
 }
 
 type ModuleUsage struct {

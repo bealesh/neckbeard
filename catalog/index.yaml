@@ -95,6 +95,10 @@ clouds:
     providers:
       - name: hashicorp/azurerm
         version: "4.30.0"   # placeholder pin
+    # Honest per-cloud difference (§3.3): Container Apps provides HTTPS ingress
+    # natively, so http-ingress needs no extra module on Azure.
+    capabilities:
+      http-ingress: []
     modules:
       network:
         version: "0.1.0"
@@ -124,7 +128,3 @@ clouds:
         version: "0.1.0"
         source: catalog/azure/registry
         overridable: []
-      dns-ingress:                   # Azure DNS + Application Gateway
-        version: "0.1.0"
-        source: catalog/azure/dns-ingress
-        overridable: [waf_enabled]

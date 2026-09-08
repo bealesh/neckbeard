@@ -73,14 +73,45 @@ func StaticV0(root string, envs []string) ([]Check, error) {
 	}
 
 	checks = append(checks, pipelineChecks(root)...)
+	checks = append(checks, policyChecks(root, envs)...)
 
 	// What this run did NOT prove, stated instead of implied (DESIGN §12.1).
 	checks = append(checks,
-		Check{Level: "V0", Name: "policy checks (checkov/conftest)", Status: NotExercised, Detail: "lands later in M1"},
 		Check{Level: "V1", Name: "authenticated plan", Status: NotExercised, Detail: "requires cloud credentials"},
 		Check{Level: "V2", Name: "deployment verification", Status: NotExercised, Detail: "release-harness only for now"},
 	)
 	return checks, nil
+}
+
+// policyChecks runs checkov over each env root. Skips live in the generated
+// .checkov.yaml, each with a written reason — a skip without a reason is a lie
+// about the security posture.
+func policyChecks(root string, envs []string) []Check {
+	checkov, err := exec.LookPath("checkov")
+	if err != nil {
+		return []Check{{Level: "V0", Name: "policy checks (checkov)", Status: NotExercised, Detail: "checkov not installed (`brew install checkov` / pipx install checkov)"}}
+	}
+	var checks []Check
+	for _, env := range envs {
+		dir := filepath.Join(root, "infra", "envs", env)
+		if _, statErr := os.Stat(dir); statErr != nil {
+			continue // the missing root is already reported by the tofu steps
+		}
+		args := []string{"-d", dir, "--quiet", "--compact", "--framework", "terraform"}
+		if _, cfgErr := os.Stat(filepath.Join(root, ".checkov.yaml")); cfgErr == nil {
+			args = append(args, "--config-file", filepath.Join(root, ".checkov.yaml"))
+		}
+		cmd := exec.Command(checkov, args...)
+		cmd.Dir = root
+		out, runErr := cmd.CombinedOutput()
+		c := Check{Level: "V0", Name: "checkov policy", Env: env, Status: Passed}
+		if runErr != nil {
+			c.Status = Failed
+			c.Detail = lastLines(string(out), 8)
+		}
+		checks = append(checks, c)
+	}
+	return checks
 }
 
 // pipelineChecks lints generated CI files with what is locally available and is

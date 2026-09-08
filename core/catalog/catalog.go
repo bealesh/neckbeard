@@ -20,6 +20,22 @@ type Index struct {
 type Cloud struct {
 	Providers []Provider        `yaml:"providers"`
 	Modules   map[string]Module `yaml:"modules"`
+	// Capabilities overrides the index-level capability map for this cloud, for
+	// honest per-cloud differences (e.g. Azure Container Apps provides ingress
+	// natively, so http-ingress maps to no extra module there).
+	Capabilities map[string][]string `yaml:"capabilities,omitempty"`
+}
+
+// CapabilityModules resolves a capability for one cloud: the cloud's override
+// wins, otherwise the index-level map applies.
+func (idx *Index) CapabilityModules(cloud, capability string) ([]string, bool) {
+	if c, ok := idx.Clouds[cloud]; ok {
+		if mods, ok := c.Capabilities[capability]; ok {
+			return mods, true
+		}
+	}
+	mods, ok := idx.Capabilities[capability]
+	return mods, ok
 }
 
 type Provider struct {

@@ -1,9 +1,10 @@
 // Package render turns a blueprint into a write-set: a pure function of the
 // blueprint, byte-identical on every call (DESIGN §9).
 //
-// M1 scope: OpenTofu env roots for the aws / serverless-containers lane, plus the
-// topology document and user-owned extension points. Unsupported lanes are refused
-// by name — never rendered as guesses.
+// Lane wiring (which module outputs feed which module inputs, per cloud/runtime)
+// is deterministic code in this package, never agent judgment. Unsupported lanes
+// are refused by name — never rendered as guesses. Meaningful per-cloud
+// differences (§3.3) show up here as different wiring, not hidden equivalences.
 package render
 
 import (
@@ -29,13 +30,145 @@ type Options struct {
 // catalog version.
 const DefaultCatalogSource = "git::https://github.com/bealesh/neckbeard.git"
 
+type kv struct{ k, v string }
+
+// lane holds the deterministic wiring for one (cloud, runtime) pair.
+type lane struct {
+	emitOrder []string
+	wiring    map[string][]kv
+	// requires maps expression fragments to the module that must be present for a
+	// wiring line to be emitted.
+	requires map[string]string
+	// rootResources are raw HCL resources owned by the env root itself (e.g. the
+	// Azure resource group everything else lands in).
+	rootResources func(bp *blueprint.Blueprint, env blueprint.Environment) string
+	providers     func(bp *blueprint.Blueprint, env blueprint.Environment) []byte
+	outputs       []rootOutput
+}
+
+type rootOutput struct{ name, module, expr, desc string }
+
+var lanes = map[string]lane{
+	"aws/serverless-containers": {
+		emitOrder: []string{"network", "dns-ingress", "runtime-serverless", "postgres", "storage", "secrets", "registry"},
+		wiring: map[string][]kv{
+			"dns-ingress": {
+				{"vpc_id", "module.network.vpc_id"},
+				{"public_subnet_ids", "module.network.public_subnet_ids"},
+				{"http_services", `[for s in local.services : { name = s.name, port = s.port, health_path = s.health_path } if s.kind == "http"]`},
+			},
+			"runtime-serverless": {
+				{"services", "local.services"},
+				{"vpc_id", "module.network.vpc_id"},
+				{"private_subnet_ids", "module.network.private_subnet_ids"},
+				{"alb_security_group_id", "module.dns_ingress.alb_security_group_id"},
+				{"target_group_arns", "module.dns_ingress.target_group_arns"},
+				{"secret_arns", "module.secrets.secret_arns"},
+			},
+			"postgres": {
+				{"vpc_id", "module.network.vpc_id"},
+				{"private_subnet_ids", "module.network.private_subnet_ids"},
+				{"allowed_security_group_ids", "[module.runtime_serverless.service_security_group_id]"},
+			},
+		},
+		requires:  stdRequires,
+		providers: awsProviders,
+		outputs: []rootOutput{
+			{"alb_dns_name", "dns-ingress", "module.dns_ingress.alb_dns_name", "Public entry point (HTTP, M1)"},
+			{"cluster_name", "runtime-serverless", "module.runtime_serverless.cluster_name", "ECS cluster running the services"},
+			{"db_endpoint", "postgres", "module.postgres.endpoint", "PostgreSQL endpoint (credentials: RDS-managed secret)"},
+			{"db_master_user_secret_arn", "postgres", "module.postgres.master_user_secret_arn", "RDS-managed master credentials secret"},
+			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
+			{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
+		},
+	},
+	"gcp/serverless-containers": {
+		emitOrder: []string{"network", "runtime-serverless", "dns-ingress", "postgres", "storage", "secrets", "registry"},
+		wiring: map[string][]kv{
+			"runtime-serverless": {
+				{"services", "local.services"},
+				{"subnet_id", "module.network.subnet_id"},
+				{"secret_ids", "module.secrets.secret_ids"},
+			},
+			"dns-ingress": {
+				{"http_services", `[for s in local.services : { name = s.name, port = s.port, health_path = s.health_path } if s.kind == "http"]`},
+				{"service_names", "module.runtime_serverless.service_names"},
+			},
+			"postgres": {
+				{"network_id", "module.network.network_id"},
+				{"private_services_connection", "module.network.private_services_connection"},
+			},
+		},
+		requires:  stdRequires,
+		providers: gcpProviders,
+		outputs: []rootOutput{
+			{"lb_ip_address", "dns-ingress", "module.dns_ingress.lb_ip_address", "Public entry point (HTTP, M1)"},
+			{"service_urls", "runtime-serverless", "module.runtime_serverless.service_urls", "Cloud Run service URLs (direct, pre-LB)"},
+			{"db_connection_name", "postgres", "module.postgres.connection_name", "Cloud SQL connection name (credentials: operator-set secret)"},
+			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
+			{"registry_url", "registry", "module.registry.repository_url", "Artifact Registry repository"},
+		},
+	},
+	"azure/serverless-containers": {
+		// No dns-ingress module: Container Apps provides HTTPS ingress natively —
+		// an honest per-cloud difference (§3.3), declared in the catalog's azure
+		// capability override.
+		emitOrder: []string{"network", "runtime-serverless", "postgres", "storage", "secrets", "registry"},
+		wiring: map[string][]kv{
+			"network": {
+				{"resource_group_name", "azurerm_resource_group.this.name"},
+			},
+			"runtime-serverless": {
+				{"services", "local.services"},
+				{"resource_group_name", "azurerm_resource_group.this.name"},
+				{"subnet_id", "module.network.app_subnet_id"},
+				{"key_vault_id", "module.secrets.key_vault_id"},
+				{"secret_uris", "module.secrets.secret_uris"},
+			},
+			"postgres": {
+				{"resource_group_name", "azurerm_resource_group.this.name"},
+				{"delegated_subnet_id", "module.network.db_subnet_id"},
+				{"private_dns_zone_id", "module.network.postgres_dns_zone_id"},
+			},
+			"storage":  {{"resource_group_name", "azurerm_resource_group.this.name"}},
+			"secrets":  {{"resource_group_name", "azurerm_resource_group.this.name"}},
+			"registry": {{"resource_group_name", "azurerm_resource_group.this.name"}},
+		},
+		requires:      stdRequires,
+		providers:     azureProviders,
+		rootResources: azureResourceGroup,
+		outputs: []rootOutput{
+			{"service_fqdns", "runtime-serverless", "module.runtime_serverless.service_fqdns", "Container Apps ingress FQDNs (built-in HTTPS)"},
+			{"db_fqdn", "postgres", "module.postgres.fqdn", "PostgreSQL flexible server FQDN (credentials: operator-set secret)"},
+			{"storage_account", "storage", "module.storage.account_name", "Application object storage account"},
+			{"registry_url", "registry", "module.registry.login_server", "Container registry"},
+		},
+	},
+}
+
+var stdRequires = map[string]string{
+	"module.network.":            "network",
+	"module.dns_ingress.":        "dns-ingress",
+	"module.runtime_serverless.": "runtime-serverless",
+	"module.secrets.":            "secrets",
+	"module.postgres.":           "postgres",
+	"local.services":             "runtime-serverless",
+}
+
 // WriteSet renders the blueprint into files for ownership.Apply.
 func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 	if opts.CatalogSource == "" {
 		opts.CatalogSource = DefaultCatalogSource
 	}
-	if bp.Cloud != "aws" || bp.Runtime != "serverless-containers" {
-		return nil, fmt.Errorf("rendering for lane %s/%s is not implemented yet — M1 covers aws/serverless-containers first; the planner accepted your blueprint and no files were written", bp.Cloud, bp.Runtime)
+	laneKey := bp.Cloud + "/" + bp.Runtime
+	l, ok := lanes[laneKey]
+	if !ok {
+		supported := make([]string, 0, len(lanes))
+		for k := range lanes {
+			supported = append(supported, k)
+		}
+		sort.Strings(supported)
+		return nil, fmt.Errorf("rendering for lane %s is not implemented yet (supported: %s) — the planner accepted your blueprint and no files were written", laneKey, strings.Join(supported, ", "))
 	}
 
 	model, err := pipeline.Build(bp)
@@ -46,6 +179,7 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 	files := []ownership.File{
 		{Path: "docs/topology.md", Content: topologyDoc(bp), Owner: ownership.OwnerGenerated},
 		{Path: ".neckbeard/hooks/test.sh", Content: testHookStub(), Owner: ownership.OwnerUser, Mode: 0o755},
+		{Path: ".checkov.yaml", Content: checkovConfig(bp.Cloud), Owner: ownership.OwnerGenerated},
 	}
 	switch bp.VCS {
 	case "github":
@@ -63,10 +197,10 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 	for _, env := range bp.Environments {
 		dir := "infra/envs/" + env.Name
 		files = append(files,
-			ownership.File{Path: dir + "/backend.tf", Content: backendTF(), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/providers.tf", Content: providersTF(bp, env.Name), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/main.tf", Content: mainTF(bp, env, opts), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/outputs.tf", Content: outputsTF(env), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/backend.tf", Content: backendTF(bp.Cloud), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/providers.tf", Content: l.providers(bp, env), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/main.tf", Content: mainTF(bp, env, l, opts), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/outputs.tf", Content: outputsTF(env, l), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/custom.tf", Content: customTFStub(env.Name), Owner: ownership.OwnerUser},
 		)
 	}
@@ -75,25 +209,21 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 
 const generatedHeader = "# Generated by neckbeard — do not edit. Regeneration refuses modified files;\n# change neckbeard.yaml or app-profile.yaml and re-run plan + scaffold.\n# Additions belong in custom.tf (user-owned, never regenerated).\n\n"
 
-func backendTF() []byte {
-	return []byte(generatedHeader + `terraform {
-  # Partial backend configuration: bucket, key, region, and locking are supplied at
-  # init time from bootstrap outputs (M2/M3): tofu init -backend-config=…
+func backendTF(cloud string) []byte {
+	backend := map[string]string{"aws": "s3", "gcp": "gcs", "azure": "azurerm"}[cloud]
+	return fmt.Appendf(nil, generatedHeader+`terraform {
+  # Partial backend configuration: the concrete settings are supplied at init time
+  # from bootstrap outputs (M2/M3): tofu init -backend-config=…
   # V0 static validation initializes with -backend=false.
-  backend "s3" {}
+  backend %q {}
 }
-`)
+`, backend)
 }
 
-func providersTF(bp *blueprint.Blueprint, envName string) []byte {
+func awsProviders(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
 	var b strings.Builder
 	b.WriteString(generatedHeader)
-	b.WriteString("terraform {\n  required_version = \">= 1.8.0\"\n\n  required_providers {\n")
-	for _, p := range bp.Pins.Providers {
-		name := p.Name[strings.LastIndex(p.Name, "/")+1:]
-		fmt.Fprintf(&b, "    %s = {\n      source  = %q\n      version = %q\n    }\n", name, p.Name, p.Version)
-	}
-	b.WriteString("  }\n}\n\n")
+	b.WriteString(requiredProviders(bp))
 	fmt.Fprintf(&b, `provider "aws" {
   region = %q
 
@@ -105,13 +235,68 @@ func providersTF(bp *blueprint.Blueprint, envName string) []byte {
     }
   }
 }
-`, bp.Region, bp.App, envName)
+`, bp.Region, bp.App, env.Name)
 	return []byte(b.String())
 }
 
-// mainTF wires the env's modules together. The wiring knowledge is per-lane and
-// lives here, not in the agent: renderers are deterministic code (DESIGN §7).
-func mainTF(bp *blueprint.Blueprint, env blueprint.Environment, opts Options) []byte {
+func gcpProviders(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+	var b strings.Builder
+	b.WriteString(generatedHeader)
+	b.WriteString(requiredProviders(bp))
+	fmt.Fprintf(&b, `provider "google" {
+  project = %q
+  region  = %q
+
+  default_labels = {
+    neckbeard-app = %q
+    neckbeard-env = %q
+    managed-by    = "neckbeard"
+  }
+}
+`, env.Container, bp.Region, bp.App, env.Name)
+	return []byte(b.String())
+}
+
+func azureProviders(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+	var b strings.Builder
+	b.WriteString(generatedHeader)
+	b.WriteString(requiredProviders(bp))
+	fmt.Fprintf(&b, `provider "azurerm" {
+  features {}
+  subscription_id = %q
+}
+`, env.Container)
+	return []byte(b.String())
+}
+
+func requiredProviders(bp *blueprint.Blueprint) string {
+	var b strings.Builder
+	b.WriteString("terraform {\n  required_version = \">= 1.8.0\"\n\n  required_providers {\n")
+	for _, p := range bp.Pins.Providers {
+		name := p.Name[strings.LastIndex(p.Name, "/")+1:]
+		fmt.Fprintf(&b, "    %s = {\n      source  = %q\n      version = %q\n    }\n", name, p.Name, p.Version)
+	}
+	b.WriteString("  }\n}\n\n")
+	return b.String()
+}
+
+func azureResourceGroup(bp *blueprint.Blueprint, env blueprint.Environment) string {
+	return fmt.Sprintf(`resource "azurerm_resource_group" "this" {
+  name     = %q
+  location = %q
+
+  tags = {
+    neckbeard-app = %q
+    neckbeard-env = %q
+    managed-by    = "neckbeard"
+  }
+}
+
+`, fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name), bp.Region, bp.App, env.Name)
+}
+
+// mainTF wires the env's modules together per the lane tables.
+func mainTF(bp *blueprint.Blueprint, env blueprint.Environment, l lane, opts Options) []byte {
 	present := map[string]blueprint.ModuleUsage{}
 	for _, m := range env.Modules {
 		present[m.Name] = m
@@ -124,39 +309,11 @@ func mainTF(bp *blueprint.Blueprint, env blueprint.Environment, opts Options) []
 		b.WriteString(servicesLocal(bp.Services))
 		b.WriteString("\n")
 	}
-
-	// Emission order is readability (dependency-ish) order; determinism comes from
-	// it being fixed.
-	wiring := map[string][]kv{
-		"dns-ingress": {
-			{"vpc_id", "module.network.vpc_id"},
-			{"public_subnet_ids", "module.network.public_subnet_ids"},
-			{"http_services", `[for s in local.services : { name = s.name, port = s.port, health_path = s.health_path } if s.kind == "http"]`},
-		},
-		"runtime-serverless": {
-			{"services", "local.services"},
-			{"vpc_id", "module.network.vpc_id"},
-			{"private_subnet_ids", "module.network.private_subnet_ids"},
-			{"alb_security_group_id", "module.dns_ingress.alb_security_group_id"},
-			{"target_group_arns", "module.dns_ingress.target_group_arns"},
-			{"secret_arns", "module.secrets.secret_arns"},
-		},
-		"postgres": {
-			{"vpc_id", "module.network.vpc_id"},
-			{"private_subnet_ids", "module.network.private_subnet_ids"},
-			{"allowed_security_group_ids", "[module.runtime_serverless.service_security_group_id]"},
-		},
-	}
-	// Wiring lines that reference absent modules are dropped (e.g. secrets not needed).
-	requires := map[string]string{
-		"module.network.":            "network",
-		"module.dns_ingress.":        "dns-ingress",
-		"module.runtime_serverless.": "runtime-serverless",
-		"module.secrets.":            "secrets",
-		"local.services":             "runtime-serverless",
+	if l.rootResources != nil {
+		b.WriteString(l.rootResources(bp, env))
 	}
 
-	for _, name := range []string{"network", "dns-ingress", "runtime-serverless", "postgres", "storage", "secrets", "registry"} {
+	for _, name := range l.emitOrder {
 		mod, ok := present[name]
 		if !ok {
 			continue
@@ -165,9 +322,9 @@ func mainTF(bp *blueprint.Blueprint, env blueprint.Environment, opts Options) []
 		for _, in := range mod.Inputs {
 			lines = append(lines, kv{in.Key, hclValue(in.Value)})
 		}
-		for _, w := range wiring[name] {
+		for _, w := range l.wiring[name] {
 			missing := false
-			for prefix, dep := range requires {
+			for prefix, dep := range l.requires {
 				if strings.Contains(w.v, prefix) {
 					if _, have := present[dep]; !have {
 						missing = true
@@ -202,23 +359,14 @@ func servicesLocal(services []blueprint.Service) string {
 	return b.String()
 }
 
-func outputsTF(env blueprint.Environment) []byte {
+func outputsTF(env blueprint.Environment, l lane) []byte {
 	present := map[string]bool{}
 	for _, m := range env.Modules {
 		present[m.Name] = true
 	}
-	type out struct{ name, module, expr, desc string }
-	candidates := []out{
-		{"alb_dns_name", "dns-ingress", "module.dns_ingress.alb_dns_name", "Public entry point (HTTP, M1)"},
-		{"cluster_name", "runtime-serverless", "module.runtime_serverless.cluster_name", "ECS cluster running the services"},
-		{"db_endpoint", "postgres", "module.postgres.endpoint", "PostgreSQL endpoint (credentials: RDS-managed secret)"},
-		{"db_master_user_secret_arn", "postgres", "module.postgres.master_user_secret_arn", "RDS-managed master credentials secret"},
-		{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
-		{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
-	}
 	var b strings.Builder
 	b.WriteString(generatedHeader)
-	for _, c := range candidates {
+	for _, c := range l.outputs {
 		if present[c.module] {
 			fmt.Fprintf(&b, "output %q {\n  description = %q\n  value       = %s\n}\n\n", c.name, c.desc, c.expr)
 		}
@@ -232,8 +380,6 @@ func moduleSource(opts Options, bp *blueprint.Blueprint, mod blueprint.ModuleUsa
 	}
 	return path.Join(opts.CatalogSource, mod.Source)
 }
-
-type kv struct{ k, v string }
 
 // alignKV renders `key = value` lines padded the way tofu fmt aligns a block of
 // consecutive assignments, so rendered files are fmt-clean by construction.
@@ -286,6 +432,53 @@ func hclValue(v any) string {
 	}
 }
 
+// checkovConfig emits the policy-skip list. Every skip carries its reason: a skip
+// without a reason is a lie about the security posture (DESIGN §10). Findings not
+// listed here gate the pipeline.
+func checkovConfig(cloud string) []byte {
+	common := []kv{
+		{"CKV_TF_1", "module pinning is enforced by neckbeard itself: blueprints pin catalog versions and git sources pin ref=catalog-v<version> tags; commit-hash pinning is incompatible with the catalog versioning scheme"},
+		{"CKV_TF_2", "same as CKV_TF_1 — tags are pinned via the blueprint, and local paths are used in development"},
+	}
+	perCloud := map[string][]kv{
+		"aws": {
+			{"CKV_AWS_2", "M1 ingress is HTTP :80 by design; TLS + custom domains land with the environment manifest (M2) — documented in the topology doc"},
+			{"CKV_AWS_260", "same as CKV_AWS_2: the :80 listener is the documented M1 limitation"},
+			{"CKV_AWS_91", "ALB access logging (log bucket + lifecycle) is on the M2 roadmap"},
+			{"CKV_AWS_118", "RDS enhanced monitoring is on the roadmap; base CloudWatch metrics + postgres log exports are on"},
+			{"CKV_AWS_136", "customer-managed KMS keys are regulated-tier roadmap; AWS-managed encryption is enabled"},
+			{"CKV_AWS_149", "customer-managed KMS keys are regulated-tier roadmap; AWS-managed encryption is enabled"},
+			{"CKV_AWS_150", "LB deletion protection as a prd preset input is on the roadmap"},
+			{"CKV_AWS_157", "multi-AZ is a tier availability dimension, deliberately off at small tiers; presets enable it where the tier's availability objective requires"},
+			{"CKV_AWS_158", "customer-managed KMS keys are regulated-tier roadmap; AWS-managed encryption is enabled"},
+			{"CKV_AWS_161", "RDS IAM auth is on the roadmap; the master password is RDS-managed and never in state"},
+			{"CKV_AWS_293", "DB deletion protection is a per-env preset: prd enables it; dev/stg stay tear-down-able for the deploy→verify→teardown flow"},
+			{"CKV_AWS_338", "30-day log retention is a tier cost decision; the estimate names log ingestion/retention as a usage assumption"},
+			{"CKV_AWS_353", "performance insights is enabled from the 'small' class up; the smallest shared-core class does not support it"},
+			{"CKV_AWS_354", "customer-managed KMS keys are regulated-tier roadmap; performance insights uses AWS-managed encryption"},
+		},
+		"gcp": {
+			{"CKV_GCP_6", "TLS is enforced via ssl_mode = ENCRYPTED_ONLY; checkov still looks for the deprecated require_ssl field"},
+			{"CKV_GCP_26", "VPC flow logs are a log-cost decision; regulated-tier roadmap"},
+			{"CKV_GCP_79", "pinned to POSTGRES_17, the current major; checkov's latest-version list lags and pinning beats floating"},
+			{"CKV_GCP_84", "customer-managed encryption keys are regulated-tier roadmap; Google-managed encryption is on"},
+			{"CKV_GCP_108", "verbose postgres logging (hostnames) is a log-cost decision; core log flags are on; regulated-tier roadmap"},
+			{"CKV_GCP_109", "log_min_messages tuning is a log-cost decision; regulated-tier roadmap"},
+			{"CKV_GCP_110", "pgAudit is regulated-tier roadmap (audit-grade logging with its cost shown in the estimate)"},
+			{"CKV_GCP_111", "log_statement verbosity is a log-cost decision; regulated-tier roadmap"},
+		},
+		"azure": {},
+	}
+	var b strings.Builder
+	b.WriteString("# Generated by neckbeard — policy-skip list for checkov (V0 gate).\n")
+	b.WriteString("# Every skip states its reason; anything not listed here blocks the gate.\n")
+	b.WriteString("skip-check:\n")
+	for _, s := range append(common, perCloud[cloud]...) {
+		fmt.Fprintf(&b, "  # %s\n  - %s\n", s.v, s.k)
+	}
+	return []byte(b.String())
+}
+
 func testHookStub() []byte {
 	return []byte(`#!/usr/bin/env sh
 # .neckbeard/hooks/test.sh — user-owned test hook, run by the generated CI test job.
@@ -335,6 +528,9 @@ func topologyDoc(bp *blueprint.Blueprint) []byte {
 
 	for _, env := range bp.Environments {
 		w("## Environment: %s\n\n", env.Name)
+		if env.Container != "" {
+			w("Container: `%s`\n\n", env.Container)
+		}
 		w("| module | version | inputs |\n|---|---|---|\n")
 		for _, m := range env.Modules {
 			var parts []string
