@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -80,7 +81,9 @@ type app struct {
 
 func newApp(ctx context.Context) (*app, error) {
 	a := &app{env: envOr("APP_ENV", "dev"), next: 1}
-	dsn := os.Getenv("DATABASE_URL")
+	// TrimSpace: secret stores cannot represent empty values (Key Vault rejects
+	// them), so a blank-ish secret means "no database" — V2 finding, 2026-09-08.
+	dsn := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dsn == "" {
 		return a, nil
 	}

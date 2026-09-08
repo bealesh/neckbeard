@@ -139,3 +139,11 @@ resource "azurerm_role_assignment" "external_secrets_kv" {
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_user_assigned_identity.external_secrets.principal_id
 }
+
+# Kubelet pulls from ACR with AcrPull — the AKS analogue of the Container Apps
+# pull identity (V2 finding, 2026-09-08).
+resource "azurerm_role_assignment" "kubelet_acr_pull" {
+  scope                = var.registry_id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
+}

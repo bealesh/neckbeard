@@ -47,3 +47,8 @@ variable "key_vault_id" {
   type        = string
   default     = ""
 }
+
+variable "registry_id" {
+  description = "ACR resource id for the kubelet's AcrPull role (wired from the registry module)."
+  type        = string
+}

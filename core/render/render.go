@@ -181,6 +181,7 @@ var lanes = map[string]lane{
 				{"resource_group_name", "azurerm_resource_group.this.name"},
 				{"subnet_id", "module.network.aks_subnet_id"},
 				{"key_vault_id", "module.secrets.key_vault_id"},
+				{"registry_id", "module.registry.registry_id"},
 			},
 			"postgres": {
 				{"resource_group_name", "azurerm_resource_group.this.name"},
@@ -219,6 +220,8 @@ var lanes = map[string]lane{
 				{"subnet_id", "module.network.app_subnet_id"},
 				{"key_vault_id", "module.secrets.key_vault_id"},
 				{"secret_uris", "module.secrets.secret_uris"},
+				{"registry_server", "module.registry.login_server"},
+				{"registry_id", "module.registry.registry_id"},
 			},
 			"postgres": {
 				{"resource_group_name", "azurerm_resource_group.this.name"},
@@ -246,6 +249,7 @@ var stdRequires = map[string]string{
 	"module.dns_ingress.":        "dns-ingress",
 	"module.runtime_serverless.": "runtime-serverless",
 	"module.runtime_k8s.":        "runtime-k8s",
+	"module.registry.":           "registry",
 	"module.secrets.":            "secrets",
 	"module.postgres.":           "postgres",
 	"local.services":             "runtime-serverless",

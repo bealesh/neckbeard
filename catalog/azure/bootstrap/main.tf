@@ -91,6 +91,14 @@ resource "azurerm_role_assignment" "state_rw" {
   principal_id         = each.value.object_id
 }
 
+# The human running bootstrap also needs data-plane access to the state (Owner
+# grants management plane only): local plans and break-glass applies depend on it.
+resource "azurerm_role_assignment" "state_rw_deployer" {
+  scope                = azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
 # Contributor cannot grant RBAC, and the catalog's runtime modules create role
 # assignments (Key Vault Secrets User) — hence the RBAC Administrator pairing.
 # Least-privilege refinement is roadmap work the release harness will shape.

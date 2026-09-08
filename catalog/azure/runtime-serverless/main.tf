@@ -78,6 +78,23 @@ resource "azurerm_container_app_environment" "this" {
 # so the FIRST apply of an environment fails until operators have set the secret
 # values out-of-band (the runbook makes setting them a pre-apply step). Static
 # validation and planning are unaffected.
+
+# ACR pulls use a dedicated user-assigned identity with AcrPull, created before
+# any revision references a private image — a system identity cannot, because its
+# role assignment can only follow app creation while the first private-image
+# revision needs pull rights immediately (V2 finding, 2026-09-08).
+resource "azurerm_user_assigned_identity" "acr_pull" {
+  name                = "${var.name_prefix}-acr-pull"
+  location            = var.region
+  resource_group_name = var.resource_group_name
+}
+
+resource "azurerm_role_assignment" "acr_pull" {
+  scope                = var.registry_id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.acr_pull.principal_id
+}
+
 resource "azurerm_container_app" "this" {
   for_each                     = local.app_services
   name                         = local.app_name[each.key]
@@ -87,7 +104,13 @@ resource "azurerm_container_app" "this" {
   workload_profile_name        = "Consumption"
 
   identity {
-    type = "SystemAssigned"
+    type         = "SystemAssigned, UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.acr_pull.id]
+  }
+
+  registry {
+    server   = var.registry_server
+    identity = azurerm_user_assigned_identity.acr_pull.id
   }
 
   dynamic "secret" {
@@ -176,7 +199,13 @@ resource "azurerm_container_app_job" "cron" {
   }
 
   identity {
-    type = "SystemAssigned"
+    type         = "SystemAssigned, UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.acr_pull.id]
+  }
+
+  registry {
+    server   = var.registry_server
+    identity = azurerm_user_assigned_identity.acr_pull.id
   }
 
   dynamic "secret" {

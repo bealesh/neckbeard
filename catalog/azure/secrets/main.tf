@@ -40,3 +40,12 @@ resource "azurerm_key_vault" "this" {
   # private-endpoint-only vault would break secret resolution until a private
   # endpoint + zone land in the catalog. Honest gap, tracked for post-M1.
 }
+
+# The deploying operator seeds secret VALUES out-of-band (DESIGN §8) — which needs
+# a data-plane role: RBAC-mode vaults grant nothing implicitly, Owner included
+# (V2 finding, 2026-09-08). Org-managed operator groups replace this on Path F.
+resource "azurerm_role_assignment" "deployer_secrets_officer" {
+  scope                = azurerm_key_vault.this.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}

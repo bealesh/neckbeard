@@ -70,3 +70,13 @@ variable "secret_uris" {
   type        = map(string)
   default     = {}
 }
+
+variable "registry_server" {
+  description = "ACR login server the apps pull from (wired from the registry module)."
+  type        = string
+}
+
+variable "registry_id" {
+  description = "ACR resource id for the pull identity's AcrPull role (wired from the registry module)."
+  type        = string
+}
