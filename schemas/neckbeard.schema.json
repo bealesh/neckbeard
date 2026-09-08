@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "neckbeard.schema.json",
+  "title": "neckbeard.yaml — user-owned configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "app", "org", "cloud", "region", "vcs", "runtime", "tier", "entry_path"],
+  "properties": {
+    "version": { "const": 1 },
+    "app": { "$ref": "#/$defs/name" },
+    "org": { "$ref": "#/$defs/name" },
+    "cloud": { "enum": ["aws", "gcp", "azure"] },
+    "region": { "type": "string", "minLength": 1 },
+    "vcs": { "enum": ["github", "gitlab"] },
+    "runtime": { "enum": ["kubernetes", "serverless-containers"] },
+    "tier": { "enum": ["solo", "smallteam", "established", "regulated"] },
+    "entry_path": { "enum": ["adopt", "found"] },
+    "environments": {
+      "description": "Fixed at launch; present for forward compatibility.",
+      "type": "array",
+      "const": ["dev", "stg", "prd"]
+    },
+    "manifest_ref": {
+      "description": "Pinned reference to an environment manifest published by a platform repo (Path F consumers).",
+      "type": "string"
+    },
+    "finops": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": { "type": "string", "default": "USD" },
+        "monthly_budget_alert": { "type": "number", "exclusiveMinimum": 0 },
+        "usage": {
+          "description": "Explicit usage assumptions overriding tier defaults. A tier name is not a usage estimate; these numbers are.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requests_per_month": { "type": "number", "minimum": 0 },
+            "egress_gb": { "type": "number", "minimum": 0 },
+            "nat_processed_gb": { "type": "number", "minimum": 0 },
+            "cross_zone_gb": { "type": "number", "minimum": 0 },
+            "log_ingest_gb": { "type": "number", "minimum": 0 },
+            "backup_gb": { "type": "number", "minimum": 0 },
+            "storage_growth_gb_month": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "overrides": {
+      "description": "module -> input -> value. Only inputs allowlisted by the catalog may be overridden; all overrides are schema- and policy-checked.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": ["string", "number", "boolean"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,28}[a-z0-9]$",
+      "description": "lowercase alphanumeric + hyphen; used in {org}-{app}-{env}-{component} resource names"
+    }
+  }
+}

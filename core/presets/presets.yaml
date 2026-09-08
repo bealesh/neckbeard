@@ -1,0 +1,106 @@
+# Tier presets — presets over explicit dimensions (DESIGN §4.2). A tier name decides
+# nothing by itself; these are the numbers it expands to, every one overridable
+# within the catalog allowlist.
+version: 1
+tiers:
+  solo:
+    dimensions:
+      traffic_band: "<=5 rps sustained"
+      availability_objective: "single-zone; best effort"
+      rpo_hours: 24
+      rto_hours: 8
+      ops_capacity: "no on-call"
+    usage:
+      requests_per_month: 2000000
+      egress_gb: 20
+      nat_processed_gb: 10
+      cross_zone_gb: 0
+      log_ingest_gb: 5
+      backup_gb: 10
+      storage_growth_gb_month: 2
+    modules:
+      network: { nat_strategy: none, zones: 1 }
+      runtime-serverless: { min_instances: 0, max_instances: 3, cpu: "1", memory_gb: 0.5 }
+      runtime-k8s: { node_shape: small, min_nodes: 1, max_nodes: 2, spot: true }
+      postgres: { instance_class: smallest, multi_zone: false, read_replicas: 0, backup_retention_days: 7, pitr: false }
+      storage: { versioning: false }
+      dns-ingress: { waf_enabled: false }
+  smallteam:
+    dimensions:
+      traffic_band: "<=50 rps sustained"
+      availability_objective: "survive one zone failure"
+      rpo_hours: 4
+      rto_hours: 4
+      ops_capacity: "business-hours attention"
+    usage:
+      requests_per_month: 20000000
+      egress_gb: 150
+      nat_processed_gb: 80
+      cross_zone_gb: 40
+      log_ingest_gb: 30
+      backup_gb: 50
+      storage_growth_gb_month: 10
+    modules:
+      network: { nat_strategy: single, zones: 2 }
+      runtime-serverless: { min_instances: 1, max_instances: 10, cpu: "1", memory_gb: 1 }
+      runtime-k8s: { node_shape: small, min_nodes: 2, max_nodes: 4, spot: false }
+      postgres: { instance_class: small, multi_zone: true, read_replicas: 0, backup_retention_days: 14, pitr: true }
+      storage: { versioning: true }
+      dns-ingress: { waf_enabled: false }
+  established:
+    dimensions:
+      traffic_band: "<=500 rps sustained"
+      availability_objective: "survive one zone failure with headroom"
+      rpo_hours: 1
+      rto_hours: 1
+      ops_capacity: "on-call rotation"
+    usage:
+      requests_per_month: 200000000
+      egress_gb: 1000
+      nat_processed_gb: 500
+      cross_zone_gb: 300
+      log_ingest_gb: 200
+      backup_gb: 250
+      storage_growth_gb_month: 50
+    modules:
+      network: { nat_strategy: per-zone, zones: 3 }
+      runtime-serverless: { min_instances: 2, max_instances: 50, cpu: "2", memory_gb: 2 }
+      runtime-k8s: { node_shape: medium, min_nodes: 3, max_nodes: 10, spot: false }
+      postgres: { instance_class: medium, multi_zone: true, read_replicas: 1, backup_retention_days: 30, pitr: true }
+      storage: { versioning: true }
+      dns-ingress: { waf_enabled: true }
+  regulated:
+    dimensions:
+      traffic_band: "<=500 rps sustained"
+      availability_objective: "survive one zone failure; audited recovery"
+      rpo_hours: 0.25
+      rto_hours: 1
+      ops_capacity: "on-call rotation + compliance owner"
+    usage:
+      requests_per_month: 200000000
+      egress_gb: 1000
+      nat_processed_gb: 500
+      cross_zone_gb: 300
+      log_ingest_gb: 400
+      backup_gb: 500
+      storage_growth_gb_month: 50
+    modules:
+      network: { nat_strategy: per-zone, zones: 3 }
+      runtime-serverless: { min_instances: 2, max_instances: 50, cpu: "2", memory_gb: 2 }
+      runtime-k8s: { node_shape: medium, min_nodes: 3, max_nodes: 10, spot: false }
+      postgres: { instance_class: medium, multi_zone: true, read_replicas: 1, backup_retention_days: 35, pitr: true }
+      storage: { versioning: true }
+      dns-ingress: { waf_enabled: true }
+
+# Per-environment adjustments applied after the tier preset, before user overrides.
+# dev is deliberately cheaper; prd is deliberately safer.
+env_adjustments:
+  dev:
+    runtime-serverless: { min_instances: 0, max_instances: 2 }
+    runtime-k8s: { min_nodes: 1, max_nodes: 2, spot: true }
+    postgres: { instance_class: smallest, multi_zone: false, read_replicas: 0, backup_retention_days: 3, pitr: false }
+  stg:
+    runtime-serverless: { min_instances: 0 }
+    postgres: { read_replicas: 0 }
+  prd:
+    postgres: { deletion_protection: true }

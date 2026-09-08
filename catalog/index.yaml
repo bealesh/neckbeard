@@ -1,0 +1,131 @@
+# neckbeard module catalog index — the golden path, pinned.
+# Semver contract (DESIGN §6.3): within a major version, module input schemas and
+# resource addresses do not break; a major may move addresses and must ship a
+# migration path.
+version: "0.1.0"
+
+# Tool pins carried into every blueprint. PLACEHOLDER versions until M1 wires real
+# modules; bumped deliberately, never floated.
+opentofu: "1.10.3"
+
+# capability -> module names (cloud-agnostic). "runtime" resolves to
+# runtime-serverless or runtime-k8s from neckbeard.yaml.
+capabilities:
+  service-base: [network, registry, runtime]   # any service at all
+  http-ingress: [dns-ingress]                  # any http service
+  postgres: [postgres]
+  object-storage: [storage]
+  secrets: [secrets]
+
+clouds:
+  aws:
+    providers:
+      - name: hashicorp/aws
+        version: "6.14.0"   # placeholder pin
+    modules:
+      network:
+        version: "0.1.0"
+        source: catalog/aws/network
+        overridable: [nat_strategy, zones]
+      runtime-serverless:            # ECS on Fargate
+        version: "0.1.0"
+        source: catalog/aws/runtime-serverless
+        overridable: [min_instances, max_instances, cpu, memory_gb]
+      runtime-k8s:                   # EKS
+        version: "0.1.0"
+        source: catalog/aws/runtime-k8s
+        overridable: [node_shape, min_nodes, max_nodes, spot]
+      postgres:                      # RDS for PostgreSQL
+        version: "0.1.0"
+        source: catalog/aws/postgres
+        overridable: [instance_class, multi_zone, read_replicas, backup_retention_days, pitr]
+      storage:                       # S3
+        version: "0.1.0"
+        source: catalog/aws/storage
+        overridable: [versioning]
+      secrets:                       # Secrets Manager
+        version: "0.1.0"
+        source: catalog/aws/secrets
+        overridable: []
+      registry:                      # ECR
+        version: "0.1.0"
+        source: catalog/aws/registry
+        overridable: []
+      dns-ingress:                   # Route 53 + ALB + ACM
+        version: "0.1.0"
+        source: catalog/aws/dns-ingress
+        overridable: [waf_enabled]
+  gcp:
+    providers:
+      - name: hashicorp/google
+        version: "7.2.0"    # placeholder pin
+    modules:
+      network:
+        version: "0.1.0"
+        source: catalog/gcp/network
+        overridable: [nat_strategy, zones]
+      runtime-serverless:            # Cloud Run
+        version: "0.1.0"
+        source: catalog/gcp/runtime-serverless
+        overridable: [min_instances, max_instances, cpu, memory_gb]
+      runtime-k8s:                   # GKE
+        version: "0.1.0"
+        source: catalog/gcp/runtime-k8s
+        overridable: [node_shape, min_nodes, max_nodes, spot]
+      postgres:                      # Cloud SQL for PostgreSQL
+        version: "0.1.0"
+        source: catalog/gcp/postgres
+        overridable: [instance_class, multi_zone, read_replicas, backup_retention_days, pitr]
+      storage:                       # GCS
+        version: "0.1.0"
+        source: catalog/gcp/storage
+        overridable: [versioning]
+      secrets:                       # Secret Manager
+        version: "0.1.0"
+        source: catalog/gcp/secrets
+        overridable: []
+      registry:                      # Artifact Registry
+        version: "0.1.0"
+        source: catalog/gcp/registry
+        overridable: []
+      dns-ingress:                   # Cloud DNS + External ALB + managed certs
+        version: "0.1.0"
+        source: catalog/gcp/dns-ingress
+        overridable: [waf_enabled]
+  azure:
+    providers:
+      - name: hashicorp/azurerm
+        version: "4.30.0"   # placeholder pin
+    modules:
+      network:
+        version: "0.1.0"
+        source: catalog/azure/network
+        overridable: [nat_strategy, zones]
+      runtime-serverless:            # Container Apps
+        version: "0.1.0"
+        source: catalog/azure/runtime-serverless
+        overridable: [min_instances, max_instances, cpu, memory_gb]
+      runtime-k8s:                   # AKS
+        version: "0.1.0"
+        source: catalog/azure/runtime-k8s
+        overridable: [node_shape, min_nodes, max_nodes, spot]
+      postgres:                      # Azure Database for PostgreSQL – Flexible Server
+        version: "0.1.0"
+        source: catalog/azure/postgres
+        overridable: [instance_class, multi_zone, read_replicas, backup_retention_days, pitr]
+      storage:                       # Blob Storage
+        version: "0.1.0"
+        source: catalog/azure/storage
+        overridable: [versioning]
+      secrets:                       # Key Vault
+        version: "0.1.0"
+        source: catalog/azure/secrets
+        overridable: []
+      registry:                      # ACR
+        version: "0.1.0"
+        source: catalog/azure/registry
+        overridable: []
+      dns-ingress:                   # Azure DNS + Application Gateway
+        version: "0.1.0"
+        source: catalog/azure/dns-ingress
+        overridable: [waf_enabled]

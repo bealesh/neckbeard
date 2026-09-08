@@ -1,0 +1,356 @@
+version: 1
+blueprint_hash: sha256:2314ca3ffa7c877350c8a984f2795457d72903c32e9c5b0d9cfec527e8a8a6c8
+generated_from:
+    neckbeard_yaml: sha256:ae827b77d56b970e89e92c87e232600d79682b437445e0eb985632ef2d4a6d00
+    app_profile: sha256:fb76116a04786086ae499d604bb342a8682633df6267c5e16e959cb79c4c87b8
+pins:
+    catalog: 0.1.0
+    opentofu: 1.10.3
+    planner: test
+    providers:
+        - name: hashicorp/aws
+          version: 6.14.0
+app: bellwether
+org: acme
+cloud: aws
+region: us-east-1
+runtime: serverless-containers
+vcs: github
+tier: smallteam
+environments:
+    - name: dev
+      modules:
+        - name: dns-ingress
+          source: catalog/aws/dns-ingress
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: waf_enabled
+              value: false
+              provenance: preset
+        - name: network
+          source: catalog/aws/network
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: nat_strategy
+              value: single
+              provenance: preset
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: zones
+              value: 2
+              provenance: preset
+        - name: postgres
+          source: catalog/aws/postgres
+          version: 0.1.0
+          inputs:
+            - key: backup_retention_days
+              value: 3
+              provenance: preset
+            - key: instance_class
+              value: smallest
+              provenance: preset
+            - key: multi_zone
+              value: false
+              provenance: preset
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: pitr
+              value: false
+              provenance: preset
+            - key: read_replicas
+              value: 0
+              provenance: preset
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: registry
+          source: catalog/aws/registry
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: runtime-serverless
+          source: catalog/aws/runtime-serverless
+          version: 0.1.0
+          inputs:
+            - key: cpu
+              value: "1"
+              provenance: preset
+            - key: max_instances
+              value: 15
+              provenance: override-supported
+            - key: memory_gb
+              value: 1
+              provenance: preset
+            - key: min_instances
+              value: 0
+              provenance: preset
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: secrets
+          source: catalog/aws/secrets
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: storage
+          source: catalog/aws/storage
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: versioning
+              value: true
+              provenance: preset
+    - name: stg
+      modules:
+        - name: dns-ingress
+          source: catalog/aws/dns-ingress
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: waf_enabled
+              value: false
+              provenance: preset
+        - name: network
+          source: catalog/aws/network
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: nat_strategy
+              value: single
+              provenance: preset
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: zones
+              value: 2
+              provenance: preset
+        - name: postgres
+          source: catalog/aws/postgres
+          version: 0.1.0
+          inputs:
+            - key: backup_retention_days
+              value: 14
+              provenance: preset
+            - key: instance_class
+              value: small
+              provenance: preset
+            - key: multi_zone
+              value: true
+              provenance: preset
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: pitr
+              value: true
+              provenance: preset
+            - key: read_replicas
+              value: 0
+              provenance: preset
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: registry
+          source: catalog/aws/registry
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: runtime-serverless
+          source: catalog/aws/runtime-serverless
+          version: 0.1.0
+          inputs:
+            - key: cpu
+              value: "1"
+              provenance: preset
+            - key: max_instances
+              value: 15
+              provenance: override-supported
+            - key: memory_gb
+              value: 1
+              provenance: preset
+            - key: min_instances
+              value: 0
+              provenance: preset
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: secrets
+          source: catalog/aws/secrets
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: storage
+          source: catalog/aws/storage
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: versioning
+              value: true
+              provenance: preset
+    - name: prd
+      modules:
+        - name: dns-ingress
+          source: catalog/aws/dns-ingress
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: waf_enabled
+              value: false
+              provenance: preset
+        - name: network
+          source: catalog/aws/network
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: nat_strategy
+              value: single
+              provenance: preset
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: zones
+              value: 2
+              provenance: preset
+        - name: postgres
+          source: catalog/aws/postgres
+          version: 0.1.0
+          inputs:
+            - key: backup_retention_days
+              value: 14
+              provenance: preset
+            - key: deletion_protection
+              value: true
+              provenance: preset
+            - key: instance_class
+              value: small
+              provenance: preset
+            - key: multi_zone
+              value: true
+              provenance: preset
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: pitr
+              value: true
+              provenance: preset
+            - key: read_replicas
+              value: 0
+              provenance: preset
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: registry
+          source: catalog/aws/registry
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: runtime-serverless
+          source: catalog/aws/runtime-serverless
+          version: 0.1.0
+          inputs:
+            - key: cpu
+              value: "1"
+              provenance: preset
+            - key: max_instances
+              value: 15
+              provenance: override-supported
+            - key: memory_gb
+              value: 1
+              provenance: preset
+            - key: min_instances
+              value: 1
+              provenance: preset
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: secrets
+          source: catalog/aws/secrets
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+        - name: storage
+          source: catalog/aws/storage
+          version: 0.1.0
+          inputs:
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
+            - key: versioning
+              value: true
+              provenance: preset

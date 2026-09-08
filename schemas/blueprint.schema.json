@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "blueprint.schema.json",
+  "title": "blueprint.yaml — generated lockfile; pure function of profile + config + manifest + catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "blueprint_hash", "generated_from", "pins", "app", "org", "cloud", "region", "runtime", "vcs", "tier", "environments"],
+  "properties": {
+    "version": { "const": 1 },
+    "blueprint_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "sha256 of the canonical blueprint with this field empty"
+    },
+    "generated_from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["neckbeard_yaml", "app_profile"],
+      "properties": {
+        "neckbeard_yaml": { "$ref": "#/$defs/digest" },
+        "app_profile": { "$ref": "#/$defs/digest" },
+        "environment_manifest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "pins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog", "opentofu", "planner"],
+      "properties": {
+        "catalog": { "type": "string" },
+        "opentofu": { "type": "string" },
+        "planner": { "type": "string" },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version"],
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "app": { "type": "string" },
+    "org": { "type": "string" },
+    "cloud": { "enum": ["aws", "gcp", "azure"] },
+    "region": { "type": "string" },
+    "runtime": { "enum": ["kubernetes", "serverless-containers"] },
+    "vcs": { "enum": ["github", "gitlab"] },
+    "tier": { "type": "string" },
+    "environments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "modules"],
+        "properties": {
+          "name": { "enum": ["dev", "stg", "prd"] },
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "source", "version", "inputs"],
+              "properties": {
+                "name": { "type": "string" },
+                "source": { "type": "string" },
+                "version": { "type": "string" },
+                "inputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["key", "value", "provenance"],
+                    "properties": {
+                      "key": { "type": "string" },
+                      "value": { "type": ["string", "number", "boolean"] },
+                      "provenance": {
+                        "enum": ["preset", "derived", "override-supported", "override-warned"],
+                        "description": "override-warned = outside the tested envelope; golden-path promise scoped to preset/supported"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "references": {
+      "description": "Needs satisfied by existing external services via connection secrets; nothing provisioned.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capability", "secret_name"],
+        "properties": {
+          "capability": { "type": "string" },
+          "secret_name": { "type": "string" }
+        }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}

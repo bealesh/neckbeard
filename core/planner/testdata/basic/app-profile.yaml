@@ -1,0 +1,46 @@
+version: 1
+services:
+  - name: web
+    kind: http
+    port: 4000
+    health_path: /healthz
+    dockerfile: Dockerfile
+  - name: worker
+    kind: worker
+    dockerfile: Dockerfile
+  - name: nightly-report
+    kind: cron
+    schedule: "0 3 * * *"
+    dockerfile: Dockerfile
+needs:
+  - capability: postgres
+    mode: provision
+    evidence:
+      - file: config/runtime.exs
+        line: 8
+  - capability: object-storage
+    mode: provision
+    evidence:
+      - file: lib/bellwether/uploads.ex
+        line: 12
+  - capability: secrets
+    mode: provision
+secrets:
+  - name: SECRET_KEY_BASE
+  - name: SMTP_PASSWORD
+facts:
+  - id: fact-postgres-client
+    statement: "App reads DATABASE_URL at runtime"
+    evidence:
+      - file: config/runtime.exs
+        line: 8
+inferences:
+  - id: inf-worker-inprocess
+    statement: "Background jobs run in-process against Postgres; no separate queue needed"
+    confidence: high
+    reasoning: "Oban configured against the primary repo"
+    derived_from: [fact-postgres-client]
+confirmed:
+  - id: conf-traffic
+    question: "Expected sustained traffic?"
+    answer: "under 50 rps"

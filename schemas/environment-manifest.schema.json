@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "environment-manifest.schema.json",
+  "title": "environment manifest — versioned interface a platform repo publishes per environment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "environment", "cloud", "container"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "environment": { "enum": ["dev", "stg", "prd"] },
+    "cloud": { "enum": ["aws", "gcp", "azure"] },
+    "container": {
+      "description": "The environment's isolation container: AWS account, GCP project, or Azure subscription.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "display_name": { "type": "string" }
+      }
+    },
+    "allowed_regions": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "private_subnet_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "dns_zone": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "registry": { "type": "string" },
+    "cluster": {
+      "description": "Present only when the platform provides a shared cluster (post-launch feature).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "oidc_issuer": { "type": "string" }
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string" },
+        "audience": { "type": "string" }
+      }
+    },
+    "state_backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["s3", "gcs", "azurerm"] },
+        "location": { "type": "string" }
+      }
+    }
+  }
+}
