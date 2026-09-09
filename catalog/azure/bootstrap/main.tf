@@ -23,12 +23,15 @@ locals {
 }
 
 resource "azurerm_storage_account" "tfstate" {
-  name                            = local.state_account
-  location                        = var.region
-  resource_group_name             = azurerm_resource_group.bootstrap.name
-  account_tier                    = "Standard"
-  account_replication_type        = "LRS"
-  min_tls_version                 = "TLS1_2"
+  name                     = local.state_account
+  location                 = var.region
+  resource_group_name      = azurerm_resource_group.bootstrap.name
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  min_tls_version          = "TLS1_2"
+  # Entra-only data plane: no shared keys, hence no account SAS either — the
+  # backend/apps authenticate with Azure AD (no-static-keys, §10.1).
+  shared_access_key_enabled       = false
   allow_nested_items_to_be_public = false
 
   blob_properties {

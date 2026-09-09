@@ -551,6 +551,10 @@ func checkovConfig(cloud string) []byte {
 			{"CKV2_AWS_62", "S3 event notifications have no consumer in this architecture; enabling them would be decoration"},
 			{"CKV_AWS_144", "cross-region replication is a multi-region control; multi-region is explicitly unsupported at launch (§3.2)"},
 			{"CKV2_AWS_76", "the log4j managed rule ships in the WAF (KnownBadInputs) wherever waf_enabled is true; WAF itself is a tier preset, deliberately off at small tiers"},
+			{"CKV2_AWS_11", "VPC flow logs are a log-cost decision; regulated-tier roadmap (same family as the GCP flow-log skips)"},
+			{"CKV2_AWS_57", "secret VALUES are operator-managed out-of-band by design (§8); rotation automation needs a consumer-aware rotator — roadmap"},
+			{"CKV_AWS_18", "S3 access logging is a log-cost decision (an access-log bucket for the log bucket); o11y roadmap"},
+			{"CKV_AWS_103", "the M1 listener is HTTP :80 by design (same decision as CKV_AWS_2/260); TLS lands with the environment manifest"},
 		},
 		"gcp": {
 			{"CKV2_GCP_13", "log_duration logs every statement's timing — a log-cost decision; the core postgres log flags are on (same family as CKV_GCP_108-111)"},
@@ -561,6 +565,8 @@ func checkovConfig(cloud string) []byte {
 			{"CKV2_AZURE_21", "blob read-logging is a log-cost decision; storage analytics ships with the o11y roadmap"},
 			{"CKV2_AZURE_1", "customer-managed keys are regulated-tier roadmap; platform-managed encryption is on"},
 			{"CKV2_AZURE_33", "storage private endpoints are post-M1, same family as the Key Vault endpoint decision"},
+			{"CKV2_AZURE_41", "SAS cannot exist here: shared_access_key_enabled is false (Entra-only data plane), so an expiration policy has nothing to govern"},
+			{"CKV2_AZURE_57", "the flexible server uses VNet-injected private access (delegated subnet + private DNS, no public endpoint); checkov's check only recognizes the private-endpoint flavor of private"},
 		},
 	}
 	common = append(common, commonCloud[cloud]...)
