@@ -36,6 +36,9 @@ resource "azurerm_storage_account" "tfstate" {
 
   blob_properties {
     versioning_enabled = true
+    delete_retention_policy {
+      days = 7
+    }
   }
 }
 

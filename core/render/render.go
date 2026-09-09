@@ -555,6 +555,10 @@ func checkovConfig(cloud string) []byte {
 			{"CKV2_AWS_57", "secret VALUES are operator-managed out-of-band by design (§8); rotation automation needs a consumer-aware rotator — roadmap"},
 			{"CKV_AWS_18", "S3 access logging is a log-cost decision (an access-log bucket for the log bucket); o11y roadmap"},
 			{"CKV_AWS_103", "the M1 listener is HTTP :80 by design (same decision as CKV_AWS_2/260); TLS lands with the environment manifest"},
+			{"CKV_AWS_378", "same M1 HTTP decision as CKV_AWS_2/260/103"},
+			{"CKV2_AWS_20", "same M1 HTTP decision: the HTTPS redirect arrives with TLS itself (environment manifest)"},
+			{"CKV2_AWS_30", "postgres statement/query logging is a log-cost decision, deliberately consistent with the GCP flags family (CKV2_GCP_13, CKV_GCP_111)"},
+			{"CKV2_AWS_5", "false positive: the endpoints security group IS attached — via aws_vpc_endpoint.security_group_ids, which checkov's attachment graph does not model"},
 		},
 		"gcp": {
 			{"CKV2_GCP_13", "log_duration logs every statement's timing — a log-cost decision; the core postgres log flags are on (same family as CKV_GCP_108-111)"},
@@ -567,6 +571,7 @@ func checkovConfig(cloud string) []byte {
 			{"CKV2_AZURE_33", "storage private endpoints are post-M1, same family as the Key Vault endpoint decision"},
 			{"CKV2_AZURE_41", "SAS cannot exist here: shared_access_key_enabled is false (Entra-only data plane), so an expiration policy has nothing to govern"},
 			{"CKV2_AZURE_57", "the flexible server uses VNet-injected private access (delegated subnet + private DNS, no public endpoint); checkov's check only recognizes the private-endpoint flavor of private"},
+			{"CKV2_AZURE_32", "Key Vault private endpoints are post-M1, same decision as CKV_AZURE_109/189 (the vault's public endpoint stays RBAC-gated until then)"},
 		},
 	}
 	common = append(common, commonCloud[cloud]...)

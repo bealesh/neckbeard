@@ -30,6 +30,9 @@ resource "azurerm_storage_account" "data" {
 
   blob_properties {
     versioning_enabled = var.versioning
+    delete_retention_policy {
+      days = 7
+    }
   }
 }
 
