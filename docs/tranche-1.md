@@ -41,6 +41,12 @@ with the new binary, add explicit commands if an app relied on the old
 connections, set `secret_name` explicitly instead of relying on a generated name.
 Commit the bundled catalog alongside generated infrastructure.
 
+Review follow-up: scaffolding currently includes all three clouds' modules under
+one catalog digest. Per-cloud bundles could reduce repository and policy-review
+noise; introduce them with corresponding digest and upgrade tests when reducing
+the generated footprint becomes a priority. The full bundle remains intentional
+for tranche 1.
+
 The AWS account was not used and no cloud resources were created. Tranche 2 can
 now tackle real bootstrap, image publication/deployment, application and database
 verification, update, and teardown. Serverless release automation, promotion and

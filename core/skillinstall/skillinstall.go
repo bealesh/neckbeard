@@ -5,16 +5,16 @@ package skillinstall
 
 import (
 	"fmt"
-	catalogassets "github.com/bealesh/neckbeard/catalog"
-	"github.com/bealesh/neckbeard/core/presets"
-	"github.com/bealesh/neckbeard/schemas"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	catalogassets "github.com/bealesh/neckbeard/catalog"
+	"github.com/bealesh/neckbeard/core/presets"
 	pluginassets "github.com/bealesh/neckbeard/plugin"
+	"github.com/bealesh/neckbeard/schemas"
 )
 
 // Target is a tool's skill-discovery convention.

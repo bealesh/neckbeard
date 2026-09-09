@@ -2,6 +2,8 @@
 # Semver contract (DESIGN §6.3): within a major version, module input schemas and
 # resource addresses do not break; a major may move addresses and must ship a
 # migration path.
+# Pre-1.0: minor releases may change planner defaults with explicit migration
+# notes (0.2.0: image CMD inheritance); schema/address guarantees above still apply.
 version: "0.2.0"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.

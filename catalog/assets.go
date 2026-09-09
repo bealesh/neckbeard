@@ -17,7 +17,7 @@ var Files embed.FS
 // Digest pins the actual module bytes, not just a mutable version label.
 func Digest() string {
 	h := sha256.New()
-	_ = fs.WalkDir(Files, ".", func(path string, entry fs.DirEntry, err error) error {
+	err := fs.WalkDir(Files, ".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -31,5 +31,8 @@ func Digest() string {
 		}
 		return nil
 	})
+	if err != nil {
+		panic(fmt.Errorf("hashing embedded catalog: %w", err))
+	}
 	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }
