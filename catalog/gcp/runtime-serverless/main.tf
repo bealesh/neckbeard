@@ -57,7 +57,7 @@ resource "google_cloud_run_v2_service" "http" {
 
     containers {
       image = var.image
-      args  = ["serve"]
+      args  = each.value.args
 
       ports {
         container_port = each.value.port
@@ -117,7 +117,7 @@ resource "google_cloud_run_v2_worker_pool" "worker" {
 
     containers {
       image = var.image
-      args  = ["work"]
+      args  = each.value.args
 
       resources {
         limits = {
@@ -170,7 +170,7 @@ resource "google_cloud_run_v2_job" "cron" {
 
       containers {
         image = var.image
-        args  = ["report"]
+        args  = each.value.args
 
         resources {
           limits = {

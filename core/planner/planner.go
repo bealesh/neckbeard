@@ -62,9 +62,15 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 
 	services := make([]blueprint.Service, 0, len(prof.Services))
 	for _, s := range prof.Services {
+		args := s.Command
+		if len(args) == 0 {
+			// The default arg contract (documented in the workload contract): apps
+			// without an explicit command must accept these; bellwether models it.
+			args = []string{map[string]string{"http": "serve", "worker": "work", "cron": "report"}[s.Kind]}
+		}
 		services = append(services, blueprint.Service{
 			Name: s.Name, Kind: s.Kind, Port: s.Port, HealthPath: s.HealthPath, Schedule: s.Schedule,
-			Dockerfile: s.Dockerfile,
+			Dockerfile: s.Dockerfile, Args: args,
 		})
 	}
 	slices.SortFunc(services, func(a, b blueprint.Service) int { return strings.Compare(a.Name, b.Name) })

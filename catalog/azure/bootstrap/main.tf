@@ -47,10 +47,12 @@ resource "azurerm_storage_container" "tfstate" {
 locals {
   github = var.vcs == "github"
   issuer = local.github ? "https://token.actions.githubusercontent.com" : "https://gitlab.com"
-  # GitHub jobs bind an environment; GitLab subjects carry the project path with
-  # branch scoping enforced by the protected-branch gate (§11.3). Note: GitLab
-  # subjects here pin the default branch — MR plans on Azure use the same subject
-  # via the ref_type wildcard.
+  # GitHub jobs bind an environment; GitLab subjects pin the default branch.
+  # Entra federated credentials are EXACT-match (no wildcards), so GitLab
+  # merge-request pipelines cannot federate at all: MR runs are validate-only on
+  # Azure, stated in the generated pipeline (review finding, 2026-09-08).
+  # Roadmap: Entra flexible federated identity credentials (claims matching)
+  # once the azuread provider exposes them.
   subject  = local.github ? "repo:${var.repo}:environment:${var.environment}" : "project_path:${var.repo}:ref_type:branch:ref:main"
   audience = local.github ? "api://AzureADTokenExchange" : "https://gitlab.com"
 }

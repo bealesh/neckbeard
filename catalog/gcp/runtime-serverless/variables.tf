@@ -40,6 +40,7 @@ variable "services" {
     port        = number
     health_path = string
     schedule    = string
+    args        = list(string)
   }))
 }
 

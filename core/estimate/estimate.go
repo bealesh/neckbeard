@@ -119,7 +119,7 @@ func Run(opts Options) (*Result, error) {
 	mapped := map[string]bool{}
 	for _, env := range opts.Blueprint.Environments {
 		envDir := filepath.Join(scratch, "infra", "envs", env.Name)
-		ee, types, err := estimateEnv(binPath, scratch, envDir, env.Name, usage)
+		ee, types, err := estimateEnv(binPath, scratch, envDir, env.Name, res.Currency, usage)
 		if err != nil {
 			return nil, fmt.Errorf("estimating %s: %w", env.Name, err)
 		}
@@ -137,7 +137,7 @@ func Run(opts Options) (*Result, error) {
 	return res, nil
 }
 
-func estimateEnv(bin, scratch, envDir, envName string, usage map[string]float64) (*EnvEstimate, map[string]bool, error) {
+func estimateEnv(bin, scratch, envDir, envName, currency string, usage map[string]float64) (*EnvEstimate, map[string]bool, error) {
 	usageFile := filepath.Join(scratch, "usage-"+envName+".yml")
 	ee := &EnvEstimate{Env: envName, Costs: map[string]float64{}}
 	types := map[string]bool{}
@@ -149,7 +149,7 @@ func estimateEnv(bin, scratch, envDir, envName string, usage map[string]float64)
 		if err := os.WriteFile(usageFile, uf, 0o644); err != nil {
 			return nil, nil, err
 		}
-		out, err := runInfracost(bin, "breakdown", "--path", envDir, "--format", "json", "--usage-file", usageFile)
+		out, err := runInfracost(bin, currency, "breakdown", "--path", envDir, "--format", "json", "--usage-file", usageFile)
 		if err != nil {
 			return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
 		}
@@ -167,9 +167,11 @@ func estimateEnv(bin, scratch, envDir, envName string, usage map[string]float64)
 	return ee, types, nil
 }
 
-func runInfracost(bin string, args ...string) ([]byte, error) {
+func runInfracost(bin, currency string, args ...string) ([]byte, error) {
 	cmd := exec.Command(bin, args...)
-	cmd.Env = append(os.Environ(), "INFRACOST_SKIP_UPDATE_CHECK=true", "INFRACOST_NO_COLOR=true")
+	// The requested currency is passed to the pricing API — never applied as a
+	// label to USD numbers (review finding, 2026-09-08).
+	cmd.Env = append(os.Environ(), "INFRACOST_SKIP_UPDATE_CHECK=true", "INFRACOST_NO_COLOR=true", "INFRACOST_CURRENCY="+currency)
 	out, err := cmd.Output()
 	if err != nil {
 		detail := ""

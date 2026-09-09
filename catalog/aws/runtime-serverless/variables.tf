@@ -40,6 +40,7 @@ variable "services" {
     port        = number
     health_path = string
     schedule    = string
+    args        = list(string)
   }))
 }
 
@@ -62,13 +63,11 @@ variable "private_subnet_ids" {
 variable "alb_security_group_id" {
   description = "Ingress ALB security group allowed to reach http services (wired from dns-ingress)."
   type        = string
-  default     = ""
 }
 
 variable "target_group_arns" {
   description = "Map of http service name to ALB target group ARN (wired from dns-ingress)."
   type        = map(string)
-  default     = {}
 }
 
 variable "secret_arns" {

@@ -36,6 +36,25 @@ func RenderGitLab(m Model) []byte {
 	w("  script:")
 	w("    - ./.neckbeard/hooks/test.sh")
 	w("")
+	w("policy:")
+	w("  # The policy gate (DESIGN §10.1): checkov over every env root, honoring the")
+	w("  # generated .checkov.yaml. TODO(catalog): pin the image once the release")
+	w("  # harness exercises upgrades.")
+	w("  stage: test")
+	w("  image:")
+	w("    name: bridgecrew/checkov:latest")
+	w("    entrypoint: [\"\"]")
+	w("  rules:")
+	w("    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"")
+	w("      changes: [\"infra/**/*\"]")
+	w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
+	w("      changes: [\"infra/**/*\"]")
+	w("  script:")
+	for _, env := range m.Envs {
+		w("    - checkov -d infra/envs/%s --quiet --compact --framework terraform --config-file .checkov.yaml", env)
+		w("    - checkov -d infra/bootstrap/%s --quiet --compact --framework terraform --config-file .checkov.yaml", env)
+	}
+	w("")
 	w("build:")
 	w("  # Build once on the default branch; every environment runs this image by digest.")
 	w("  stage: build")
@@ -92,6 +111,12 @@ func RenderGitLab(m Model) []byte {
 		w("        echo \"bootstrap pending for %s (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED\"", env)
 		w("        exit 0")
 		w("      fi")
+		if m.Cloud == "azure" {
+			w("      if [ \"$CI_PIPELINE_SOURCE\" = \"merge_request_event\" ]; then")
+			w("        echo \"azure + gitlab: Entra federated credentials are exact-match (no wildcard subjects), so merge-request pipelines cannot federate — validate-only run; plan NOT EXERCISED (docs/bootstrap.md)\"")
+			w("        exit 0")
+			w("      fi")
+		}
 		for _, line := range gitlabInfraAuth(m, env) {
 			w("      %s", line)
 		}

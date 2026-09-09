@@ -53,12 +53,13 @@ type Provider struct {
 // lockfile so renderers can wire runtimes and ingress. Image digests are NOT here:
 // they are deploy-time values owned by the release flow (DESIGN §11.2).
 type Service struct {
-	Name       string `yaml:"name"`
-	Kind       string `yaml:"kind"`
-	Port       int    `yaml:"port,omitempty"`
-	HealthPath string `yaml:"health_path,omitempty"`
-	Schedule   string `yaml:"schedule,omitempty"`
-	Dockerfile string `yaml:"dockerfile,omitempty"`
+	Name       string   `yaml:"name"`
+	Kind       string   `yaml:"kind"`
+	Port       int      `yaml:"port,omitempty"`
+	HealthPath string   `yaml:"health_path,omitempty"`
+	Schedule   string   `yaml:"schedule,omitempty"`
+	Dockerfile string   `yaml:"dockerfile,omitempty"`
+	Args       []string `yaml:"args"`
 }
 
 type Environment struct {

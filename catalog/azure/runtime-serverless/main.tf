@@ -151,7 +151,7 @@ resource "azurerm_container_app" "this" {
       image  = var.image
       cpu    = local.cpu_cores
       memory = local.memory
-      args   = [each.value.kind == "http" ? "serve" : "work"]
+      args   = each.value.args
 
       dynamic "env" {
         for_each = var.secret_uris
@@ -223,7 +223,7 @@ resource "azurerm_container_app_job" "cron" {
       image  = var.image
       cpu    = local.cpu_cores
       memory = local.memory
-      args   = ["report"]
+      args   = each.value.args
 
       dynamic "env" {
         for_each = var.secret_uris

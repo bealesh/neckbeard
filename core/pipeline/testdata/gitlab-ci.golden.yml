@@ -24,6 +24,27 @@ test:
   script:
     - ./.neckbeard/hooks/test.sh
 
+policy:
+  # The policy gate (DESIGN §10.1): checkov over every env root, honoring the
+  # generated .checkov.yaml. TODO(catalog): pin the image once the release
+  # harness exercises upgrades.
+  stage: test
+  image:
+    name: bridgecrew/checkov:latest
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: ["infra/**/*"]
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: ["infra/**/*"]
+  script:
+    - checkov -d infra/envs/dev --quiet --compact --framework terraform --config-file .checkov.yaml
+    - checkov -d infra/bootstrap/dev --quiet --compact --framework terraform --config-file .checkov.yaml
+    - checkov -d infra/envs/stg --quiet --compact --framework terraform --config-file .checkov.yaml
+    - checkov -d infra/bootstrap/stg --quiet --compact --framework terraform --config-file .checkov.yaml
+    - checkov -d infra/envs/prd --quiet --compact --framework terraform --config-file .checkov.yaml
+    - checkov -d infra/bootstrap/prd --quiet --compact --framework terraform --config-file .checkov.yaml
+
 build:
   # Build once on the default branch; every environment runs this image by digest.
   stage: build

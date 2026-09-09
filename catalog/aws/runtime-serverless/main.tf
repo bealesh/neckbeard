@@ -96,7 +96,9 @@ resource "aws_security_group" "service" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "from_alb" {
-  for_each                     = var.alb_security_group_id == "" ? {} : local.http_services
+  # Unconditional: a for_each/count on an apply-time module output cannot plan on
+  # a fresh environment (same class as the Azure ACR finding, review 2026-09-08).
+  for_each                     = local.http_services
   security_group_id            = aws_security_group.service.id
   description                  = "service port from the ingress ALB"
   referenced_security_group_id = var.alb_security_group_id
@@ -126,7 +128,7 @@ resource "aws_ecs_task_definition" "service" {
     name      = each.key
     image     = var.image
     essential = true
-    command   = each.value.kind == "cron" ? ["report"] : [each.value.kind == "http" ? "serve" : "work"]
+    command   = each.value.args
     portMappings = each.value.kind == "http" ? [{
       containerPort = each.value.port
       protocol      = "tcp"

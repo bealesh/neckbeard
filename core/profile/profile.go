@@ -27,12 +27,13 @@ type AppProfile struct {
 }
 
 type Service struct {
-	Name       string `yaml:"name"`
-	Kind       string `yaml:"kind"` // http | worker | cron
-	Port       int    `yaml:"port,omitempty"`
-	HealthPath string `yaml:"health_path,omitempty"`
-	Schedule   string `yaml:"schedule,omitempty"`
-	Dockerfile string `yaml:"dockerfile,omitempty"`
+	Name       string   `yaml:"name"`
+	Kind       string   `yaml:"kind"` // http | worker | cron
+	Port       int      `yaml:"port,omitempty"`
+	HealthPath string   `yaml:"health_path,omitempty"`
+	Schedule   string   `yaml:"schedule,omitempty"`
+	Dockerfile string   `yaml:"dockerfile,omitempty"`
+	Command    []string `yaml:"command,omitempty"`
 }
 
 type Need struct {

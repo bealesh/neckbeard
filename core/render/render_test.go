@@ -197,14 +197,26 @@ func TestK8sLaneRendersDeliveryLayer(t *testing.T) {
 			t.Errorf("%s must not have image automation", env)
 		}
 	}
-	if !strings.Contains(byPath["clusters/base/apps/deployment-web.yaml"], `$imagepolicy`) {
-		t.Error("deployments need the image-policy marker for Flux automation")
+	// Setter markers live in the DEV overlay (the automation's update path), not
+	// the base manifests (review finding 2026-09-08).
+	if strings.Contains(byPath["clusters/base/apps/deployment-web.yaml"], `$imagepolicy`) {
+		t.Error("base manifests must not carry image-policy markers (invisible to the automation's path)")
+	}
+	if !strings.Contains(byPath["clusters/dev/apps/kustomization.yaml"], `$imagepolicy`) {
+		t.Error("the dev overlay images pin needs the setter markers")
+	}
+	if strings.Contains(byPath["clusters/stg/apps/kustomization.yaml"], `$imagepolicy`) {
+		t.Error("stg/prd move by promotion PR — no automation markers")
 	}
 	if !strings.Contains(byPath["clusters/dev/apps/kustomization.yaml"], "newTag: bootstrap-pending") {
 		t.Error("env overlays must pin the placeholder tag for the release flow to own")
 	}
-	if strings.Contains(byPath["clusters/dev/apps/kustomization.yaml"], placeholderImage) {
-		t.Error("images transformer must match the tag-less repo name (kustomize double-tag bug)")
+	// The ExternalSecret lives in the apps layer (namespace cycle finding).
+	if _, ok := byPath["clusters/dev/apps/external-secret.yaml"]; !ok {
+		t.Error("apps layer must carry the ExternalSecret")
+	}
+	if strings.Contains(byPath["clusters/dev/controllers/app-secrets.yaml"], "kind: ExternalSecret") {
+		t.Error("controllers layer must hold only the ClusterSecretStore")
 	}
 }
 

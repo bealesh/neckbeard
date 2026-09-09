@@ -21,7 +21,12 @@
           "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
           "health_path": { "type": "string" },
           "schedule": { "type": "string", "description": "cron expression; kind=cron only" },
-          "dockerfile": { "type": "string" }
+          "dockerfile": { "type": "string" },
+          "command": {
+            "description": "Container args. Default contract when omitted: serve (http), work (worker), report (cron).",
+            "type": "array",
+            "items": { "type": "string" }
+          }
         }
       }
     },

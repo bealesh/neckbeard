@@ -41,6 +41,9 @@ resource "google_iam_workload_identity_pool_provider" "ci" {
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = local.repo_attr
+    # repo::environment — impersonation binds to BOTH, so a random branch job
+    # without the environment claim can never mint prd (or any env) credentials.
+    "attribute.scope" = "${local.repo_attr} + \"::\" + (has(assertion.environment) ? assertion.environment : \"none\")"
   }
 
   # Only this repository's workflows may federate — the trust boundary in one line.
@@ -48,6 +51,9 @@ resource "google_iam_workload_identity_pool_provider" "ci" {
 
   oidc {
     issuer_uri = local.issuer_uri
+    # GitLab tokens carry aud https://gitlab.com; GitHub's auth action uses the
+    # provider resource name (the default when unset).
+    allowed_audiences = local.github ? [] : ["https://gitlab.com"]
   }
 }
 
@@ -95,9 +101,10 @@ resource "google_storage_bucket_iam_member" "state_rw" {
   member = "serviceAccount:${each.value}"
 }
 
-# The federated repository may impersonate both service accounts; which one a job
-# uses is workflow logic, gated for prd by environment protection / the protected
-# branch (§11.3).
+# Impersonation requires the repo AND the environment claim: only jobs bound to
+# this environment can use these identities. As on AWS, plan-vs-apply selection
+# within the environment is workflow logic, and prd rides its environment gate /
+# protected branch (§11.3).
 resource "google_service_account_iam_member" "wif" {
   for_each = {
     plan  = google_service_account.plan.name
@@ -105,5 +112,5 @@ resource "google_service_account_iam_member" "wif" {
   }
   service_account_id = each.value
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.ci.name}/attribute.repository/${var.repo}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.ci.name}/attribute.scope/${var.repo}::${var.environment}"
 }

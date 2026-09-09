@@ -65,7 +65,8 @@
           "port": { "type": "integer" },
           "health_path": { "type": "string" },
           "schedule": { "type": "string" },
-          "dockerfile": { "type": "string" }
+          "dockerfile": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } }
         }
       }
     },

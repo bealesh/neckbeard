@@ -456,6 +456,7 @@ func servicesLocal(services []blueprint.Service) string {
 			{"port", strconv.Itoa(s.Port)},
 			{"health_path", strconv.Quote(s.HealthPath)},
 			{"schedule", strconv.Quote(s.Schedule)},
+			{"args", hclValue(s.Args)},
 		}
 		b.WriteString("    {\n" + alignKV(lines, 6) + "    },\n")
 	}

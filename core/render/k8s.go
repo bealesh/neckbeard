@@ -25,8 +25,12 @@ type k8sLaneConfig struct {
 	ingressAnnotations func(s blueprint.Service) []string
 	// controllers-layer resource files beyond app-secrets (helm repos + releases)
 	controllerFiles func(bp *blueprint.Blueprint, env blueprint.Environment) map[string][]byte
-	// ClusterSecretStore + ExternalSecret for the cloud's secret manager
-	appSecrets func(bp *blueprint.Blueprint, env blueprint.Environment) []byte
+	// ClusterSecretStore for the cloud's secret manager (cluster-scoped, lives in
+	// the controllers layer)
+	secretStore func(bp *blueprint.Blueprint, env blueprint.Environment) []byte
+	// remoteRef key for a logical secret name (aws: prefix/NAME, gcp: prefix-NAME,
+	// azure: sanitized NAME)
+	secretKey func(prefix, name string) string
 	// extra spec appended to the controllers Flux Kustomization (e.g. Azure's
 	// postBuild substitution for apply-time values like the workload-identity
 	// client id, published by bootstrap into neckbeard-cluster-vars)
@@ -43,7 +47,8 @@ var awsK8s = k8sLaneConfig{
 		}
 	},
 	controllerFiles: awsControllerFiles,
-	appSecrets:      awsAppSecretsYAML,
+	secretStore:     awsSecretStoreYAML,
+	secretKey:       func(prefix, name string) string { return prefix + "/" + name },
 }
 
 var gcpK8s = k8sLaneConfig{
@@ -52,7 +57,8 @@ var gcpK8s = k8sLaneConfig{
 	ingressClass:       "gce",
 	ingressAnnotations: func(blueprint.Service) []string { return nil },
 	controllerFiles:    gcpControllerFiles,
-	appSecrets:         gcpAppSecretsYAML,
+	secretStore:        gcpSecretStoreYAML,
+	secretKey:          func(prefix, name string) string { return prefix + "-" + name },
 }
 
 var azureK8s = k8sLaneConfig{
@@ -60,7 +66,8 @@ var azureK8s = k8sLaneConfig{
 	ingressClass:       "webapprouting.kubernetes.azure.com",
 	ingressAnnotations: func(blueprint.Service) []string { return nil },
 	controllerFiles:    azureControllerFiles,
-	appSecrets:         azureAppSecretsYAML,
+	secretStore:        azureSecretStoreYAML,
+	secretKey:          func(prefix, name string) string { return strings.ReplaceAll(name, "_", "-") },
 	controllersPostBuild: `  postBuild:
     substituteFrom:
       # Bootstrap publishes apply-time values (external-secrets client id) here.
@@ -101,8 +108,13 @@ func k8sDelivery(bp *blueprint.Blueprint, cfg k8sLaneConfig) []ownership.File {
 		files = append(files,
 			ownership.File{Path: dir + "/apps.yaml", Content: fluxKustomizationYAML(bp, env.Name), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/apps/kustomization.yaml", Content: envKustomization(bp, env.Name), Owner: ownership.OwnerGenerated},
+			// The ExternalSecret lives in the APPS layer: it targets the app
+			// namespace, which the controllers layer must not depend on (namespace
+			// dependency cycle, review finding 2026-09-08). Flux's dependsOn still
+			// guarantees the ESO CRD exists first.
+			ownership.File{Path: dir + "/apps/external-secret.yaml", Content: externalSecretYAML(bp, env, cfg), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/controllers.yaml", Content: fluxControllersYAML(bp, env.Name, cfg), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/controllers/app-secrets.yaml", Content: cfg.appSecrets(bp, env), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/controllers/app-secrets.yaml", Content: cfg.secretStore(bp, env), Owner: ownership.OwnerGenerated},
 		)
 		ctrl := cfg.controllerFiles(bp, env)
 		names := []string{"app-secrets.yaml"}
@@ -168,9 +180,14 @@ func containerYAML(bp *blueprint.Blueprint, s blueprint.Service, indent string) 
 	var b strings.Builder
 	w := func(f string, a ...any) { fmt.Fprintf(&b, indent+f+"\n", a...) }
 	w("- name: %s", s.Name)
-	w("  image: %s # {\"$imagepolicy\": \"flux-system:%s\"}", placeholderImage, bp.App)
-	arg := map[string]string{"http": "serve", "worker": "work", "cron": "report"}[s.Kind]
-	w("  args: [%q]", arg)
+	// No image-automation marker here: the env overlay's images transformer owns
+	// the pin, so the setter markers live there (review finding 2026-09-08).
+	w("  image: %s", placeholderImage)
+	quoted := make([]string, len(s.Args))
+	for i, a := range s.Args {
+		quoted[i] = fmt.Sprintf("%q", a)
+	}
+	w("  args: [%s]", strings.Join(quoted, ", "))
 	w("  securityContext:")
 	w("    allowPrivilegeEscalation: false")
 	w("    readOnlyRootFilesystem: true")
@@ -285,16 +302,26 @@ spec:
 }
 
 func envKustomization(bp *blueprint.Blueprint, env string) []byte {
+	// Image-automation setter markers live on THESE lines (dev only): the
+	// ImageUpdateAutomation walks ./clusters/dev, so markers anywhere else are
+	// invisible to it. stg/prd move only via promotion PRs (DESIGN §11.2).
+	tagLine := "    newTag: bootstrap-pending"
+	nameLine := "  - name: " + placeholderRepo
+	if env == "dev" {
+		nameLine += "\n    newName: " + placeholderRepo + " # {\"$imagepolicy\": \"flux-system:" + bp.App + ":name\"}"
+		tagLine += " # {\"$imagepolicy\": \"flux-system:" + bp.App + ":tag\"}"
+	}
 	return fmt.Appendf(nil, `%sapiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base/apps
+  - external-secret.yaml
 images:
   # The release flow owns this pin: Flux image automation rewrites it on dev;
   # stg/prd move only via promotion PRs bumping the digest (DESIGN §11.2).
-  - name: %s
-    newTag: bootstrap-pending
-`, generatedYAMLManifestHeader, placeholderRepo)
+%s
+%s
+`, generatedYAMLManifestHeader, nameLine, tagLine)
 }
 
 func fluxKustomizationYAML(bp *blueprint.Blueprint, env string) []byte {
@@ -468,12 +495,9 @@ spec:
 `)
 }
 
-// gcpAppSecretsYAML: Secret Manager provider; secret ids use the gcp secrets
-// module's "<prefix>-<NAME>" naming (dash, not slash).
-func gcpAppSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
-	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
-	var b strings.Builder
-	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1
+// gcpSecretStoreYAML: Secret Manager provider (Workload Identity auth).
+func gcpSecretStoreYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+	return fmt.Appendf(nil, `%sapiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: %s
@@ -481,25 +505,7 @@ spec:
   provider:
     gcpsm:
       projectID: %s
----
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: %s-secrets
-  namespace: %s
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    kind: ClusterSecretStore
-    name: %s
-  target:
-    name: %s-secrets
-  data:
-`, generatedYAMLManifestHeader, bp.App, env.Container, bp.App, appNS(bp), bp.App, bp.App)
-	for _, name := range secretNames(env) {
-		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s-%s\n", name, prefix, name)
-	}
-	return []byte(b.String())
+`, generatedYAMLManifestHeader, bp.App, env.Container)
 }
 
 func azureControllerFiles(bp *blueprint.Blueprint, env blueprint.Environment) map[string][]byte {
@@ -518,13 +524,12 @@ func azureVaultName(prefix string) string {
 	return strings.TrimSuffix(prefix, "-")
 }
 
-// azureAppSecretsYAML: Key Vault provider over workload identity. Vault secret
-// names forbid underscores, so remoteRef keys are sanitized (DATABASE_URL lives
-// as DATABASE-URL) while env var names keep the original spelling.
-func azureAppSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+// azureSecretStoreYAML: Key Vault provider over workload identity. Vault secret
+// names forbid underscores; the lane's secretKey sanitizes (DATABASE_URL lives as
+// DATABASE-URL) while env var names keep the original spelling.
+func azureSecretStoreYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
 	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
-	var b strings.Builder
-	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1
+	return fmt.Appendf(nil, `%sapiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: %s
@@ -536,8 +541,16 @@ spec:
       serviceAccountRef:
         name: external-secrets
         namespace: external-secrets
----
-apiVersion: external-secrets.io/v1
+`, generatedYAMLManifestHeader, bp.App, azureVaultName(prefix))
+}
+
+// externalSecretYAML materializes <app>-secrets in the app namespace from the
+// cloud store. Lives in the APPS layer (the namespace exists there); the ESO CRD
+// ordering comes from the apps→controllers dependsOn.
+func externalSecretYAML(bp *blueprint.Blueprint, env blueprint.Environment, cfg k8sLaneConfig) []byte {
+	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
+	var b strings.Builder
+	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: %s-secrets
@@ -550,21 +563,18 @@ spec:
   target:
     name: %s-secrets
   data:
-`, generatedYAMLManifestHeader, bp.App, azureVaultName(prefix), bp.App, appNS(bp), bp.App, bp.App)
+`, generatedYAMLManifestHeader, bp.App, appNS(bp), bp.App, bp.App)
 	for _, name := range secretNames(env) {
-		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s\n", name, strings.ReplaceAll(name, "_", "-"))
+		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s\n", name, cfg.secretKey(prefix, name))
 	}
 	return []byte(b.String())
 }
 
-// awsAppSecretsYAML wires cloud secrets into the <app>-secrets k8s Secret the
-// deployments reference. Values stay in the cloud secret store; only names are
-// rendered (DESIGN §8, §10.1). Until operators set values, pods stay Pending —
-// fail-closed by design.
-func awsAppSecretsYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
-	prefix := fmt.Sprintf("%s-%s-%s", bp.Org, bp.App, env.Name)
-	var b strings.Builder
-	fmt.Fprintf(&b, `%sapiVersion: external-secrets.io/v1
+// awsSecretStoreYAML: the cluster-scoped Secrets Manager store. Values stay in
+// the cloud store; only names are referenced (DESIGN §8, §10.1). Until operators
+// set values, pods stay Pending — fail-closed by design.
+func awsSecretStoreYAML(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
+	return fmt.Appendf(nil, `%sapiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: %s
@@ -573,25 +583,7 @@ spec:
     aws:
       service: SecretsManager
       region: %s
----
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: %s-secrets
-  namespace: %s
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    kind: ClusterSecretStore
-    name: %s
-  target:
-    name: %s-secrets
-  data:
-`, generatedYAMLManifestHeader, bp.App, bp.Region, bp.App, appNS(bp), bp.App, bp.App)
-	for _, name := range secretNames(env) {
-		fmt.Fprintf(&b, "    - secretKey: %s\n      remoteRef:\n        key: %s/%s\n", name, prefix, name)
-	}
-	return []byte(b.String())
+`, generatedYAMLManifestHeader, bp.App, bp.Region)
 }
 
 // secretNames pulls the derived secret_names input off the env's secrets module.

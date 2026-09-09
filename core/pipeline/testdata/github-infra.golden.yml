@@ -15,7 +15,25 @@ permissions:
   contents: read
 
 jobs:
+  policy:
+    # The policy gate (DESIGN §10.1): checkov over every env root, honoring
+    # the generated .checkov.yaml (every skip carries a written reason).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install checkov
+        run: pipx install checkov
+      - name: Policy gate
+        run: |
+          checkov -d infra/envs/dev --quiet --compact --framework terraform --config-file .checkov.yaml
+          checkov -d infra/bootstrap/dev --quiet --compact --framework terraform --config-file .checkov.yaml
+          checkov -d infra/envs/stg --quiet --compact --framework terraform --config-file .checkov.yaml
+          checkov -d infra/bootstrap/stg --quiet --compact --framework terraform --config-file .checkov.yaml
+          checkov -d infra/envs/prd --quiet --compact --framework terraform --config-file .checkov.yaml
+          checkov -d infra/bootstrap/prd --quiet --compact --framework terraform --config-file .checkov.yaml
+
   infra-dev:
+    needs: [policy]
     runs-on: ubuntu-latest
     environment: dev
     permissions:
@@ -49,6 +67,7 @@ jobs:
           fi
 
   infra-stg:
+    needs: [policy]
     runs-on: ubuntu-latest
     environment: stg
     permissions:
@@ -82,6 +101,7 @@ jobs:
           fi
 
   infra-prd:
+    needs: [policy]
     runs-on: ubuntu-latest
     environment: prd
     permissions:
