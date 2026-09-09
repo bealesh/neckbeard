@@ -1,4 +1,7 @@
 # neckbeard
+<p align="center">
+  <img src="docs/assets/neckbeard.png" alt="neckbeard" width="320">
+</p>
 
 **A plugin for your coding agent that turns "deploy my app" into tested,
 cost-honest cloud infrastructure.** Three environments, CI/CD with OIDC-only
