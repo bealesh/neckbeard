@@ -21,7 +21,20 @@ infrastructure.
 - `core/` — deterministic planner, presets, blueprint (Go)
 - `cmd/neckbeard` — the CLI the agent plugin shells out to
 
-## Try it
+## Use it as a Claude Code plugin
+
+```
+/plugin marketplace add bealesh/neckbeard
+/plugin install neckbeard@neckbeard
+```
+
+Then in any app repo: `/neckbeard:analyze` — the agent analyzes the repo into an
+evidence-backed profile, asks the questions inspection can't settle, and drives
+the plan → estimate → scaffold → validate loop. The agent never invents
+infrastructure; everything it scaffolds comes from the catalog via the
+deterministic CLI (`go install github.com/bealesh/neckbeard/cmd/neckbeard@latest`).
+
+## Try it (CLI directly)
 
 ```sh
 make build test

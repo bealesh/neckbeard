@@ -102,7 +102,7 @@ func RenderGitHubInfra(m Model) []byte {
 	w("    steps:")
 	w("      - uses: actions/checkout@v4")
 	w("      - name: Install checkov")
-	w("        run: pipx install checkov")
+	w("        run: pipx install checkov==3.3.10 # pinned: the .checkov.yaml skips are curated against this version")
 	w("      - name: Policy gate")
 	w("        run: |")
 	for _, env := range m.Envs {

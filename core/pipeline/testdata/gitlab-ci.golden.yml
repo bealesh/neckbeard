@@ -26,11 +26,10 @@ test:
 
 policy:
   # The policy gate (DESIGN §10.1): checkov over every env root, honoring the
-  # generated .checkov.yaml. TODO(catalog): pin the image once the release
-  # harness exercises upgrades.
+  # generated .checkov.yaml (skips are curated against this pinned version).
   stage: test
   image:
-    name: bridgecrew/checkov:latest
+    name: bridgecrew/checkov:3.3.10
     entrypoint: [""]
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

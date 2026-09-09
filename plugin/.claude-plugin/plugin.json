@@ -1,0 +1,8 @@
+{
+  "name": "neckbeard",
+  "version": "0.1.0",
+  "description": "Analyze your app and scaffold tested, cost-honest cloud infrastructure from a versioned module catalog. The agent analyzes and explains; planning, rendering, and validation are deterministic — the agent never invents infrastructure.",
+  "author": {
+    "name": "bealesh"
+  }
+}

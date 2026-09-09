@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install checkov
-        run: pipx install checkov
+        run: pipx install checkov==3.3.10 # pinned: the .checkov.yaml skips are curated against this version
       - name: Policy gate
         run: |
           checkov -d infra/envs/dev --quiet --compact --framework terraform --config-file .checkov.yaml
