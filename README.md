@@ -39,3 +39,7 @@ nonzero until resolved. `custom.tf` extension points are created once and never
 touched again. `blueprint.yaml` is hash-verified: edit `neckbeard.yaml`, not the
 lockfile.
 
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE). Contributions land via pull request; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
