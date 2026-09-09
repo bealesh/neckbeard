@@ -545,6 +545,25 @@ func checkovConfig(cloud string) []byte {
 		{"CKV_TF_1", "module pinning is enforced by neckbeard itself: blueprints pin catalog versions and git sources pin ref=catalog-v<version> tags; commit-hash pinning is incompatible with the catalog versioning scheme"},
 		{"CKV_TF_2", "same as CKV_TF_1 — tags are pinned via the blueprint, and local paths are used in development"},
 	}
+	commonCloud := map[string][]kv{
+		"aws": {
+			{"CKV2_AWS_31", "WAF logging (firehose + logging configuration) is a log-cost decision; ships with the o11y roadmap"},
+			{"CKV2_AWS_62", "S3 event notifications have no consumer in this architecture; enabling them would be decoration"},
+			{"CKV_AWS_144", "cross-region replication is a multi-region control; multi-region is explicitly unsupported at launch (§3.2)"},
+			{"CKV2_AWS_76", "the log4j managed rule ships in the WAF (KnownBadInputs) wherever waf_enabled is true; WAF itself is a tier preset, deliberately off at small tiers"},
+		},
+		"gcp": {
+			{"CKV2_GCP_13", "log_duration logs every statement's timing — a log-cost decision; the core postgres log flags are on (same family as CKV_GCP_108-111)"},
+			{"CKV2_GCP_18", "an explicit deny-all-ingress rule is codified in the network module; checkov's graph check still wants allow-rule pairs the architecture doesn't need"},
+		},
+		"azure": {
+			{"CKV2_AZURE_31", "subnets are private and workloads carry platform-level controls (CA env / AKS network policy); per-subnet NSGs are hardening roadmap"},
+			{"CKV2_AZURE_21", "blob read-logging is a log-cost decision; storage analytics ships with the o11y roadmap"},
+			{"CKV2_AZURE_1", "customer-managed keys are regulated-tier roadmap; platform-managed encryption is on"},
+			{"CKV2_AZURE_33", "storage private endpoints are post-M1, same family as the Key Vault endpoint decision"},
+		},
+	}
+	common = append(common, commonCloud[cloud]...)
 	perCloud := map[string][]kv{
 		"aws": {
 			{"CKV_AWS_2", "M1 ingress is HTTP :80 by design; TLS + custom domains land with the environment manifest (M2) — documented in the topology doc"},

@@ -54,6 +54,7 @@ resource "aws_db_instance" "this" {
   db_subnet_group_name        = aws_db_subnet_group.this.name
   vpc_security_group_ids      = [aws_security_group.db.id]
   publicly_accessible         = false
+  copy_tags_to_snapshot       = true
   # Postgres logs to CloudWatch; performance insights where the instance class
   # supports it (not on the smallest shared-core class).
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
@@ -80,5 +81,6 @@ resource "aws_db_instance" "replica" {
   storage_encrypted          = true
   vpc_security_group_ids     = [aws_security_group.db.id]
   publicly_accessible        = false
+  copy_tags_to_snapshot      = true
   skip_final_snapshot        = true
 }

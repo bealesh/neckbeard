@@ -48,3 +48,19 @@ resource "google_compute_router_nat" "this" {
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
+
+# Custom VPCs already imply deny-all-ingress; this codifies it as an explicit,
+# auditable rule (lowest priority, so GKE's own higher-priority allows are
+# unaffected). No behavioral change — policy checks want it stated, and so do we.
+resource "google_compute_firewall" "deny_all_ingress" {
+  name      = "${var.name_prefix}-deny-ingress"
+  network   = google_compute_network.this.id
+  direction = "INGRESS"
+  priority  = 65534
+
+  deny {
+    protocol = "all"
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+}
