@@ -5,7 +5,7 @@ cost-honest cloud infrastructure.** Three environments, CI/CD with OIDC-only
 cloud auth, GitOps delivery, policy gates, and a real cost estimate — on AWS,
 GCP, or Azure, from a catalog of maintained OpenTofu modules.
 
-Sibling of ponytail. The neckbeard handles your infra so you don't have to.
+Inspired by [ponytail](https://github.com/dietrichgebert/ponytail). The neckbeard handles your infra so you don't have to.
 
 ```
 you:    /neckbeard:analyze
