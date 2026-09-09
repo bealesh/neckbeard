@@ -114,6 +114,19 @@ As a Claude Code plugin:
 
 then, in your app's repo: `/neckbeard:analyze`.
 
+**Codex CLI, Cursor, or any [SKILL.md](https://developers.openai.com/codex/skills)-speaking agent:**
+
+```sh
+go install github.com/bealesh/neckbeard/cmd/neckbeard@latest
+neckbeard skill install                  # .agents/skills/ — the open standard
+neckbeard skill install -target cursor   # + repo slash commands for Cursor
+neckbeard skill install -scope user      # once, for every repo on this machine
+```
+
+The skill is the same operating manual everywhere; only the discovery path
+differs. Codex invokes it via `/skills` or `$neckbeard`; Cursor loads it on
+demand and gets `/neckbeard-analyze` and `/neckbeard-sync` as commands.
+
 Or drive the CLI directly:
 
 ```sh

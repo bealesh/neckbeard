@@ -20,6 +20,7 @@ import (
 	"github.com/bealesh/neckbeard/core/presets"
 	"github.com/bealesh/neckbeard/core/profile"
 	"github.com/bealesh/neckbeard/core/render"
+	"github.com/bealesh/neckbeard/core/skillinstall"
 	"github.com/bealesh/neckbeard/core/validate"
 	"github.com/bealesh/neckbeard/core/version"
 	"github.com/bealesh/neckbeard/schemas"
@@ -45,6 +46,8 @@ func main() {
 		err = runValidate(os.Args[2:])
 	case "estimate":
 		err = runEstimate(os.Args[2:])
+	case "skill":
+		err = runSkill(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -64,6 +67,7 @@ commands:
   estimate  cost report from the blueprint (rendered to scratch; no cloud creds)
   scaffold  render the blueprint into the repo under the ownership contract
   validate  V0 static checks over the rendered env roots (fmt, init, validate)
+  skill     install the neckbeard agent skill (Codex CLI, Cursor, any SKILL.md tool)
   version   print version`)
 }
 
@@ -247,6 +251,39 @@ func runEstimate(args []string) error {
 	}
 	fmt.Printf("\nexpected total: %.2f %s/mo (%.2f/yr) — full report: %s\n", total, res.Currency, total*12, *outPath)
 	fmt.Println("estimates ride on section 2's usage assumptions; budget alerts notify, they don't cap")
+	return nil
+}
+
+func runSkill(args []string) error {
+	if len(args) < 1 || args[0] != "install" {
+		return fmt.Errorf("usage: neckbeard skill install [-target agents|codex|cursor] [-scope project|user]")
+	}
+	fs := flag.NewFlagSet("skill install", flag.ExitOnError)
+	target := fs.String("target", "agents", "agents (open standard: Codex, Cursor, and others read it) | codex | cursor")
+	scope := fs.String("scope", "project", "project (this repo) | user (your home directory)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	root := "."
+	if *scope == "user" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		root = home
+	} else if *scope != "project" {
+		return fmt.Errorf("scope must be project or user")
+	}
+
+	written, err := skillinstall.Install(root, skillinstall.Target(*target))
+	if err != nil {
+		return err
+	}
+	for _, p := range written {
+		fmt.Printf("installed  %s\n", filepath.Join(root, p))
+	}
+	fmt.Println("\nInvoke it from your agent (Codex: /skills or $neckbeard; Cursor: the skill loads on demand, /neckbeard-analyze for the command).")
+	fmt.Println("Claude Code users: /plugin marketplace add bealesh/neckbeard && /plugin install neckbeard@neckbeard")
 	return nil
 }
 
