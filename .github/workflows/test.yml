@@ -53,7 +53,7 @@ jobs:
           tofu_version: 1.12.6
           tofu_wrapper: false
       - name: Install checkov
-        run: pipx install checkov
+        run: pipx install checkov==3.3.10 # pinned: skip lists are curated against this version; bumps are deliberate
       - name: Build neckbeard
         run: go build -o bin/neckbeard ./cmd/neckbeard
       - name: Install kubeconform

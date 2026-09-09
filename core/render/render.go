@@ -545,6 +545,36 @@ func checkovConfig(cloud string) []byte {
 		{"CKV_TF_1", "module pinning is enforced by neckbeard itself: blueprints pin catalog versions and git sources pin ref=catalog-v<version> tags; commit-hash pinning is incompatible with the catalog versioning scheme"},
 		{"CKV_TF_2", "same as CKV_TF_1 — tags are pinned via the blueprint, and local paths are used in development"},
 	}
+	commonCloud := map[string][]kv{
+		"aws": {
+			{"CKV2_AWS_31", "WAF logging (firehose + logging configuration) is a log-cost decision; ships with the o11y roadmap"},
+			{"CKV2_AWS_62", "S3 event notifications have no consumer in this architecture; enabling them would be decoration"},
+			{"CKV_AWS_144", "cross-region replication is a multi-region control; multi-region is explicitly unsupported at launch (§3.2)"},
+			{"CKV2_AWS_76", "the log4j managed rule ships in the WAF (KnownBadInputs) wherever waf_enabled is true; WAF itself is a tier preset, deliberately off at small tiers"},
+			{"CKV2_AWS_11", "VPC flow logs are a log-cost decision; regulated-tier roadmap (same family as the GCP flow-log skips)"},
+			{"CKV2_AWS_57", "secret VALUES are operator-managed out-of-band by design (§8); rotation automation needs a consumer-aware rotator — roadmap"},
+			{"CKV_AWS_18", "S3 access logging is a log-cost decision (an access-log bucket for the log bucket); o11y roadmap"},
+			{"CKV_AWS_103", "the M1 listener is HTTP :80 by design (same decision as CKV_AWS_2/260); TLS lands with the environment manifest"},
+			{"CKV_AWS_378", "same M1 HTTP decision as CKV_AWS_2/260/103"},
+			{"CKV2_AWS_20", "same M1 HTTP decision: the HTTPS redirect arrives with TLS itself (environment manifest)"},
+			{"CKV2_AWS_30", "postgres statement/query logging is a log-cost decision, deliberately consistent with the GCP flags family (CKV2_GCP_13, CKV_GCP_111)"},
+			{"CKV2_AWS_5", "false positive: the endpoints security group IS attached — via aws_vpc_endpoint.security_group_ids, which checkov's attachment graph does not model"},
+		},
+		"gcp": {
+			{"CKV2_GCP_13", "log_duration logs every statement's timing — a log-cost decision; the core postgres log flags are on (same family as CKV_GCP_108-111)"},
+			{"CKV2_GCP_18", "an explicit deny-all-ingress rule is codified in the network module; checkov's graph check still wants allow-rule pairs the architecture doesn't need"},
+		},
+		"azure": {
+			{"CKV2_AZURE_31", "subnets are private and workloads carry platform-level controls (CA env / AKS network policy); per-subnet NSGs are hardening roadmap"},
+			{"CKV2_AZURE_21", "blob read-logging is a log-cost decision; storage analytics ships with the o11y roadmap"},
+			{"CKV2_AZURE_1", "customer-managed keys are regulated-tier roadmap; platform-managed encryption is on"},
+			{"CKV2_AZURE_33", "storage private endpoints are post-M1, same family as the Key Vault endpoint decision"},
+			{"CKV2_AZURE_41", "SAS cannot exist here: shared_access_key_enabled is false (Entra-only data plane), so an expiration policy has nothing to govern"},
+			{"CKV2_AZURE_57", "the flexible server uses VNet-injected private access (delegated subnet + private DNS, no public endpoint); checkov's check only recognizes the private-endpoint flavor of private"},
+			{"CKV2_AZURE_32", "Key Vault private endpoints are post-M1, same decision as CKV_AZURE_109/189 (the vault's public endpoint stays RBAC-gated until then)"},
+		},
+	}
+	common = append(common, commonCloud[cloud]...)
 	perCloud := map[string][]kv{
 		"aws": {
 			{"CKV_AWS_2", "M1 ingress is HTTP :80 by design; TLS + custom domains land with the environment manifest (M2) — documented in the topology doc"},

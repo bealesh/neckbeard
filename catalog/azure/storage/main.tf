@@ -21,12 +21,18 @@ resource "azurerm_storage_account" "data" {
   account_tier             = "Standard"
   account_replication_type = "LRS"
   min_tls_version          = "TLS1_2"
+  # Entra-only data plane: no shared keys, hence no account SAS either — the
+  # backend/apps authenticate with Azure AD (no-static-keys, §10.1).
+  shared_access_key_enabled = false
 
   # Private by default: no anonymous blob access anywhere in this account.
   allow_nested_items_to_be_public = false
 
   blob_properties {
     versioning_enabled = var.versioning
+    delete_retention_policy {
+      days = 7
+    }
   }
 }
 

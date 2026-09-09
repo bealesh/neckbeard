@@ -17,6 +17,12 @@ resource "aws_vpc" "this" {
   tags                 = { Name = "${var.name_prefix}-vpc" }
 }
 
+# Lock the VPC's default security group: no rules, nothing may use it (workloads
+# get purpose-built groups).
+resource "aws_default_security_group" "lockdown" {
+  vpc_id = aws_vpc.this.id
+}
+
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
   tags   = { Name = "${var.name_prefix}-igw" }
