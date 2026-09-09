@@ -2,7 +2,7 @@
 # Semver contract (DESIGN §6.3): within a major version, module input schemas and
 # resource addresses do not break; a major may move addresses and must ship a
 # migration path.
-version: "0.1.0"
+version: "0.2.0"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.
 opentofu: "1.12.6"
@@ -31,7 +31,7 @@ clouds:
         source: catalog/aws/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # ECS on Fargate
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/aws/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # EKS
@@ -71,7 +71,7 @@ clouds:
         source: catalog/gcp/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # Cloud Run
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/gcp/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # GKE
@@ -114,7 +114,7 @@ clouds:
         source: catalog/azure/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # Container Apps
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/azure/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # AKS

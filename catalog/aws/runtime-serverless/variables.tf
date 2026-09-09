@@ -61,13 +61,15 @@ variable "private_subnet_ids" {
 }
 
 variable "alb_security_group_id" {
-  description = "Ingress ALB security group allowed to reach http services (wired from dns-ingress)."
+  description = "Ingress ALB security group for HTTP services; unused for worker/cron-only applications."
   type        = string
+  default     = ""
 }
 
 variable "target_group_arns" {
-  description = "Map of http service name to ALB target group ARN (wired from dns-ingress)."
+  description = "Map of HTTP service name to ALB target group ARN; empty for worker/cron-only applications."
   type        = map(string)
+  default     = {}
 }
 
 variable "secret_arns" {

@@ -38,10 +38,11 @@ type GeneratedFrom struct {
 }
 
 type Pins struct {
-	Catalog   string     `yaml:"catalog"`
-	OpenTofu  string     `yaml:"opentofu"`
-	Planner   string     `yaml:"planner"`
-	Providers []Provider `yaml:"providers,omitempty"`
+	CatalogDigest string     `yaml:"catalog_digest,omitempty"`
+	Catalog       string     `yaml:"catalog"`
+	OpenTofu      string     `yaml:"opentofu"`
+	Planner       string     `yaml:"planner"`
+	Providers     []Provider `yaml:"providers,omitempty"`
 }
 
 type Provider struct {

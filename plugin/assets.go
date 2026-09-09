@@ -5,7 +5,7 @@
 // content through the plugin marketplace instead.
 package pluginassets
 
-import _ "embed"
+import "embed"
 
 //go:embed skills/neckbeard/SKILL.md
 var SkillMD []byte
@@ -15,3 +15,6 @@ var AnalyzeCommand []byte
 
 //go:embed commands/sync.md
 var SyncCommand []byte
+
+//go:embed skills/neckbeard/references
+var References embed.FS

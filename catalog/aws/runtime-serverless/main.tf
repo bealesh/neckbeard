@@ -124,11 +124,10 @@ resource "aws_ecs_task_definition" "service" {
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
 
-  container_definitions = jsonencode([{
+  container_definitions = jsonencode([merge({
     name      = each.key
     image     = var.image
     essential = true
-    command   = each.value.args
     portMappings = each.value.kind == "http" ? [{
       containerPort = each.value.port
       protocol      = "tcp"
@@ -142,7 +141,7 @@ resource "aws_ecs_task_definition" "service" {
         awslogs-stream-prefix = each.key
       }
     }
-  }])
+  }, length(each.value.args) > 0 ? { command = each.value.args } : {})])
 
   lifecycle {
     precondition {

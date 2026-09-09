@@ -36,6 +36,20 @@ func main() {
 	switch os.Args[1] {
 	case "version":
 		fmt.Println("neckbeard " + version.Version)
+	case "doctor":
+		err = runDoctor(os.Args[2:])
+	case "schema":
+		if len(os.Args) != 3 {
+			err = fmt.Errorf("usage: neckbeard schema <neckbeard|app-profile|blueprint|environment-manifest>")
+		} else {
+			var data []byte
+			data, err = schemas.Read(os.Args[2])
+			if err == nil {
+				fmt.Print(string(data))
+			}
+		}
+	case "presets":
+		fmt.Print(string(presets.YAML()))
 	case "analyze":
 		err = runAnalyze(os.Args[2:])
 	case "plan":
@@ -62,6 +76,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: neckbeard <command>
 
 commands:
+  doctor    check local prerequisites (-for plan|estimate|validate|all); no cloud access
+  schema    print an embedded JSON schema
+  presets   print supported tiers, sizing, and usage assumptions
   analyze   deterministic repo detection → draft app-profile.yaml + open questions
   plan      resolve app profile + config against the catalog into blueprint.yaml
   estimate  cost report from the blueprint (rendered to scratch; no cloud creds)
@@ -98,7 +115,10 @@ func runAnalyze(args []string) error {
 
 	fmt.Printf("draft written: %s (%d services, %d needs, %d secrets, %d facts, %d assumptions, %d unsupported)\n\n",
 		*out, len(res.Profile.Services), len(res.Profile.Needs), len(res.Profile.Secrets), len(res.Profile.Facts), len(res.Profile.Assumptions), len(res.Profile.Unsupported))
-	fmt.Println("OPEN QUESTIONS — inspection cannot settle these; record answers under confirmed:")
+	if err := profile.WorkloadError(&res.Profile); err != nil {
+		return fmt.Errorf("draft saved, but workload needs attention before cloud configuration: %w", err)
+	}
+	fmt.Println("OPEN QUESTIONS — record answers under confirmed using the matching assumption id, and correct the profile fields:")
 	for i, q := range res.Questions {
 		fmt.Printf("  %d. %s\n", i+1, q)
 	}
@@ -109,7 +129,7 @@ func runPlan(args []string) error {
 	fs := flag.NewFlagSet("plan", flag.ExitOnError)
 	configPath := fs.String("config", "neckbeard.yaml", "path to neckbeard.yaml")
 	profilePath := fs.String("profile", "app-profile.yaml", "path to app-profile.yaml")
-	catalogPath := fs.String("catalog", "catalog/index.yaml", "path to catalog index")
+	catalogPath := fs.String("catalog", "", "external catalog index (default: bundled with this binary)")
 	outPath := fs.String("out", "blueprint.yaml", "output blueprint path")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -122,6 +142,9 @@ func runPlan(args []string) error {
 	prof, profDigest, err := profile.Load(*profilePath)
 	if err != nil {
 		return fmt.Errorf("loading %s: %w", *profilePath, err)
+	}
+	if err := profile.Ready(prof); err != nil {
+		return err
 	}
 	cat, err := catalog.Load(*catalogPath)
 	if err != nil {
@@ -164,7 +187,7 @@ func runScaffold(args []string) error {
 	fs := flag.NewFlagSet("scaffold", flag.ExitOnError)
 	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
 	root := fs.String("root", ".", "repository root to scaffold into")
-	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "module source base: a git go-getter base or a local path (dev)")
+	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "bundled (default), or an explicit git/local catalog source")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -210,7 +233,7 @@ func runEstimate(args []string) error {
 	fs := flag.NewFlagSet("estimate", flag.ExitOnError)
 	configPath := fs.String("config", "neckbeard.yaml", "path to neckbeard.yaml")
 	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
-	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "module source base (local path speeds estimation up)")
+	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "bundled (default), or an explicit git/local catalog source")
 	infracostBin := fs.String("infracost-bin", "", "infracost 0.10.x binary (default: infracost-0.10, then infracost, from PATH)")
 	outPath := fs.String("out", "costs/estimate.md", "report output path")
 	if err := fs.Parse(args); err != nil {

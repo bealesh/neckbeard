@@ -34,6 +34,12 @@ type Inputs struct {
 
 func Plan(in Inputs) (*blueprint.Blueprint, error) {
 	cfg, prof := in.Config, in.Profile
+	if err := profile.Ready(prof); err != nil {
+		return nil, err
+	}
+	if cfg.EntryPath != "adopt" || cfg.ManifestRef != "" {
+		return nil, fmt.Errorf("only entry_path: adopt without manifest_ref is implemented; use existing accounts/projects/subscriptions (landing zones and manifest consumption are not available yet)")
+	}
 
 	cloud, ok := in.Catalog.Clouds[cfg.Cloud]
 	if !ok {
@@ -62,12 +68,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 
 	services := make([]blueprint.Service, 0, len(prof.Services))
 	for _, s := range prof.Services {
-		args := s.Command
-		if len(args) == 0 {
-			// The default arg contract (documented in the workload contract): apps
-			// without an explicit command must accept these; bellwether models it.
-			args = []string{map[string]string{"http": "serve", "worker": "work", "cron": "report"}[s.Kind]}
-		}
+		args := slices.Clone(s.Command)
 		services = append(services, blueprint.Service{
 			Name: s.Name, Kind: s.Kind, Port: s.Port, HealthPath: s.HealthPath, Schedule: s.Schedule,
 			Dockerfile: s.Dockerfile, Args: args,
@@ -122,10 +123,11 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 			AppProfile:    in.ProfileDigest,
 		},
 		Pins: blueprint.Pins{
-			Catalog:   in.Catalog.Version,
-			OpenTofu:  in.Catalog.OpenTofu,
-			Planner:   in.PlannerVersion,
-			Providers: providerPins(cloud),
+			CatalogDigest: in.Catalog.Digest,
+			Catalog:       in.Catalog.Version,
+			OpenTofu:      in.Catalog.OpenTofu,
+			Planner:       in.PlannerVersion,
+			Providers:     providerPins(cloud),
 		},
 		App:          cfg.App,
 		Org:          cfg.Org,
@@ -172,8 +174,30 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 		}
 	}
 
+	if len(prof.Secrets) > 0 {
+		if err := addCap("secrets"); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	var refs []blueprint.Reference
 	var warnings []string
+	for _, a := range prof.Assumptions {
+		for _, c := range prof.Confirmed {
+			if c.ID == a.ID {
+				warnings = append(warnings, fmt.Sprintf("resolved assumption %s: %s", a.ID, c.Answer))
+			}
+		}
+	}
+	for _, u := range prof.Unsupported {
+		warnings = append(warnings, fmt.Sprintf("%s disposition: %s — %s", u.Capability, u.Disposition, u.Resolution))
+		if u.Disposition == "external" {
+			refs = append(refs, blueprint.Reference{Capability: u.Capability, SecretName: u.SecretName})
+			if err := addCap("secrets"); err != nil {
+				return nil, nil, nil, err
+			}
+		}
+	}
 	for _, need := range prof.Needs {
 		switch need.Mode {
 		case "provision":
@@ -181,7 +205,7 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 				return nil, nil, nil, err
 			}
 		case "reference":
-			secretName := need.Capability + "-connection"
+			secretName := need.SecretName
 			refs = append(refs, blueprint.Reference{Capability: need.Capability, SecretName: secretName})
 			warnings = append(warnings, fmt.Sprintf("%s is referenced, not provisioned: the app expects an existing service reachable via secret %q; neckbeard will not manage its lifecycle", need.Capability, secretName))
 			// A referenced service still needs somewhere to hold its connection secret.

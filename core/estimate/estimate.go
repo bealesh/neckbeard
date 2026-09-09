@@ -18,6 +18,7 @@ import (
 
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/config"
+	"github.com/bealesh/neckbeard/core/doctor"
 	"github.com/bealesh/neckbeard/core/ownership"
 	"github.com/bealesh/neckbeard/core/presets"
 	"github.com/bealesh/neckbeard/core/render"
@@ -27,7 +28,7 @@ type Options struct {
 	Config        *config.Config
 	ConfigDigest  string
 	Blueprint     *blueprint.Blueprint
-	CatalogSource string // local path preferred: estimation renders to scratch
+	CatalogSource string // defaults to bundled modules, copied into scratch
 	InfracostBin  string
 }
 
@@ -67,13 +68,7 @@ type Result struct {
 func Run(opts Options) (*Result, error) {
 	// Discovery order: explicit flag, then the classic CLI installed as
 	// infracost-0.10 (the v2 SaaS CLI often shadows `infracost`), then PATH.
-	var binPath string
-	var err error
-	if opts.InfracostBin != "" {
-		binPath, err = exec.LookPath(opts.InfracostBin)
-	} else if binPath, err = exec.LookPath("infracost-0.10"); err != nil {
-		binPath, err = exec.LookPath("infracost")
-	}
+	binPath, err := doctor.Infracost(opts.InfracostBin)
 	if err != nil {
 		return nil, fmt.Errorf("infracost not found: install the 0.10.x CLI (as `infracost-0.10` or `infracost`) and run its `auth login`, or pass -infracost-bin")
 	}
@@ -81,8 +76,8 @@ func Run(opts Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if strings.HasPrefix(version, "v2.") || strings.HasPrefix(version, "2.") {
-		return nil, fmt.Errorf("infracost %s is the v2 SaaS CLI (requires a dashboard organization and replaces breakdown with scan); neckbeard estimates with the 0.10.x CLI — point -infracost-bin at it", version)
+	if !strings.HasPrefix(strings.TrimPrefix(version, "v"), "0.10.") {
+		return nil, fmt.Errorf("infracost %s is not the supported classic CLI; neckbeard estimates with the 0.10.x CLI — point -infracost-bin at it", version)
 	}
 
 	// Staleness gate: the blueprint must have been planned from this exact config.
@@ -186,14 +181,7 @@ func runInfracost(bin, currency string, args ...string) ([]byte, error) {
 	return out, nil
 }
 
-func infracostVersion(bin string) (string, error) {
-	out, err := exec.Command(bin, "--version").Output()
-	if err != nil {
-		return "", fmt.Errorf("infracost --version: %w", err)
-	}
-	fields := strings.Fields(string(out))
-	return fields[len(fields)-1], nil
-}
+func infracostVersion(bin string) (string, error) { return doctor.Version(bin) }
 
 // parseBreakdown extracts the totals from infracost's JSON output.
 func parseBreakdown(out []byte) (total float64, resources []ResourceCost, resourceTypes map[string]bool, unpriced []string, err error) {
@@ -255,7 +243,7 @@ func resolveUsage(tier presets.Tier, cfg *config.Config) (map[string]float64, ma
 
 func writeScratch(root string, files []ownership.File) error {
 	for _, f := range files {
-		if !strings.HasPrefix(f.Path, "infra/envs/") {
+		if !strings.HasPrefix(f.Path, "infra/envs/") && !strings.HasPrefix(f.Path, ".neckbeard/catalog/") {
 			continue
 		}
 		full := filepath.Join(root, filepath.FromSlash(f.Path))

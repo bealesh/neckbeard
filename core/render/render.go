@@ -9,26 +9,27 @@ package render
 
 import (
 	"fmt"
+	"io/fs"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
 
+	catalogassets "github.com/bealesh/neckbeard/catalog"
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/ownership"
 	"github.com/bealesh/neckbeard/core/pipeline"
 )
 
 type Options struct {
-	// CatalogSource is the base for module sources: a go-getter git base
+	// CatalogSource defaults to the bundled catalog. Overrides accept a git base
 	// ("git::https://…/neckbeard.git", pinned to ref=catalog-v<version>) or a local
 	// path for development and tests.
 	CatalogSource string
 }
 
-// DefaultCatalogSource pins module sources to the catalog repo at the blueprint's
-// catalog version.
-const DefaultCatalogSource = "git::https://github.com/bealesh/neckbeard.git"
+// DefaultCatalogSource renders the exact catalog bundled with this binary.
+const DefaultCatalogSource = "bundled"
 
 type kv struct{ k, v string }
 
@@ -260,6 +261,9 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 	if opts.CatalogSource == "" {
 		opts.CatalogSource = DefaultCatalogSource
 	}
+	if opts.CatalogSource == DefaultCatalogSource && bp.Pins.CatalogDigest != catalogassets.Digest() {
+		return nil, fmt.Errorf("blueprint catalog bytes do not match this CLI's bundled catalog; re-run plan with this CLI, or supply -catalog-source for an explicit external catalog")
+	}
 	laneKey := bp.Cloud + "/" + bp.Runtime
 	l, ok := lanes[laneKey]
 	if !ok {
@@ -280,6 +284,25 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 		{Path: "docs/topology.md", Content: topologyDoc(bp), Owner: ownership.OwnerGenerated},
 		{Path: ".neckbeard/hooks/test.sh", Content: testHookStub(), Owner: ownership.OwnerUser, Mode: 0o755},
 		{Path: ".checkov.yaml", Content: checkovConfig(bp.Cloud), Owner: ownership.OwnerGenerated},
+	}
+	if opts.CatalogSource == DefaultCatalogSource {
+		err := fs.WalkDir(catalogassets.Files, ".", func(p string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			data, err := catalogassets.Files.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			files = append(files, ownership.File{Path: bundleDir(bp) + "/catalog/" + p, Content: data, Owner: ownership.OwnerGenerated})
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	switch bp.VCS {
 	case "github":
@@ -480,10 +503,18 @@ func outputsTF(env blueprint.Environment, l lane) []byte {
 }
 
 func moduleSource(opts Options, bp *blueprint.Blueprint, mod blueprint.ModuleUsage) string {
+	if opts.CatalogSource == DefaultCatalogSource {
+		// Both env and bootstrap roots are three directories below the repo root.
+		return "../../../" + bundleDir(bp) + "/" + mod.Source
+	}
 	if strings.HasPrefix(opts.CatalogSource, "git::") {
 		return fmt.Sprintf("%s//%s?ref=catalog-v%s", opts.CatalogSource, mod.Source, bp.Pins.Catalog)
 	}
 	return path.Join(opts.CatalogSource, mod.Source)
+}
+
+func bundleDir(bp *blueprint.Blueprint) string {
+	return ".neckbeard/catalog/" + strings.TrimPrefix(bp.Pins.CatalogDigest, "sha256:")
 }
 
 // alignKV renders `key = value` lines padded the way tofu fmt aligns a block of
@@ -506,10 +537,15 @@ func hclLabel(moduleName string) string {
 	return strings.ReplaceAll(moduleName, "-", "_")
 }
 
+// HCL strings are templates; preserve literal shell expressions in command args.
+func hclString(s string) string {
+	return strconv.Quote(strings.NewReplacer("${", "$${", "%{", "%%{").Replace(s))
+}
+
 func hclValue(v any) string {
 	switch t := v.(type) {
 	case string:
-		return strconv.Quote(t)
+		return hclString(t)
 	case bool:
 		return strconv.FormatBool(t)
 	case int:
@@ -521,7 +557,7 @@ func hclValue(v any) string {
 	case []string:
 		quoted := make([]string, len(t))
 		for i, s := range t {
-			quoted[i] = strconv.Quote(s)
+			quoted[i] = hclString(s)
 		}
 		return "[" + strings.Join(quoted, ", ") + "]"
 	case []any:

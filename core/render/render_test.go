@@ -242,9 +242,44 @@ func TestGitCatalogSourcePinsRef(t *testing.T) {
 	}
 	for _, f := range ws {
 		if f.Path == "infra/envs/dev/main.tf" {
-			if !strings.Contains(string(f.Content), `git::https://github.com/bealesh/neckbeard.git//catalog/aws/network?ref=catalog-v0.1.0`) {
+			if !strings.Contains(string(f.Content), `git::https://github.com/bealesh/neckbeard.git//catalog/aws/network?ref=catalog-v0.2.0`) {
 				t.Error("git module sources must pin ref=catalog-v<version>")
 			}
 		}
+	}
+}
+
+func TestBundledCatalogMustMatchBlueprint(t *testing.T) {
+	bp := testBlueprint(t)
+	if _, err := WriteSet(bp, Options{}); err == nil {
+		t.Fatal("accepted unpinned bundled catalog")
+	}
+	cat, err := catalog.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bp.Pins.CatalogDigest = cat.Digest
+	ws, err := WriteSet(bp, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, f := range ws {
+		if f.Path == bundleDir(bp)+"/catalog/aws/runtime-serverless/main.tf" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("scaffold did not include its runtime module")
+	}
+	bp.Pins.CatalogDigest = "sha256:" + strings.Repeat("0", 64)
+	if _, err := WriteSet(bp, Options{}); err == nil {
+		t.Fatal("silently used a different bundled catalog")
+	}
+}
+
+func TestExplicitCommandStaysLiteral(t *testing.T) {
+	if got := hclValue([]string{"sh", "-c", `echo "${PORT}"; echo '%{literal}'`}); got != `["sh", "-c", "echo \"$${PORT}\"; echo '%%{literal}'"]` {
+		t.Fatalf("command became an HCL expression: %s", got)
 	}
 }

@@ -27,6 +27,7 @@ type Result struct {
 }
 
 var skipDirs = map[string]bool{
+	".neckbeard": true, ".agents": true, ".codex": true, ".cursor": true, ".claude": true,
 	".git": true, "node_modules": true, "vendor": true, ".terraform": true,
 	"dist": true, "build": true, "_build": true, "deps": true, ".next": true,
 	"target": true, ".venv": true, "__pycache__": true,
@@ -123,6 +124,13 @@ type envHit struct {
 
 // Dir analyzes a repository directory into a draft profile + open questions.
 func Dir(root string) (*Result, error) {
+	info, err := os.Stat(root)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("%s is not a repository directory", root)
+	}
 	var (
 		dockerfiles []string           // rel paths
 		exposePorts = map[string]int{} // dockerfile rel path → first EXPOSE
@@ -132,7 +140,7 @@ func Dir(root string) (*Result, error) {
 		fileCount   int
 	)
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // unreadable entries are skipped, not fatal
 		}
@@ -218,9 +226,10 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 		questions = append(questions, "No Dockerfile found: the workload contract covers containerized services only — is there a container build, or does one need to be added?")
 	}
 	healthPath := ""
-	for hp := range healthPaths {
-		if healthPath == "" || hp == "/healthz" {
+	for _, hp := range []string{"/healthz", "/health", "/readyz", "/livez"} {
+		if _, found := healthPaths[hp]; found {
 			healthPath = hp
+			break
 		}
 	}
 	for i, df := range dockerfiles {
@@ -269,6 +278,10 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 		"Expected sustained traffic, availability objective, and RPO/RTO? These pick the tier.",
 		"For each detected datastore: provision new, or reference an existing managed service?",
 	)
+	p.Assumptions = append(p.Assumptions,
+		profile.Assumption{ID: "workload-roles", Statement: "Confirm HTTP services, workers, and scheduled jobs; one Dockerfile does not establish process roles"},
+		profile.Assumption{ID: "capacity", Statement: "Confirm expected traffic, availability and recovery needs, and select the tier in neckbeard.yaml"},
+	)
 
 	names := make([]string, 0, len(envHits))
 	for n := range envHits {
@@ -282,17 +295,18 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 		switch class {
 		case classPostgres:
 			if !seenNeed["postgres"] {
-				p.Needs = append(p.Needs, profile.Need{Capability: "postgres", Mode: "provision", Evidence: ev})
+				p.Needs = append(p.Needs, profile.Need{Capability: "postgres", Mode: "undecided", Evidence: ev})
 				p.Assumptions = append(p.Assumptions, profile.Assumption{
 					ID:        "postgres-mode",
-					Statement: "postgres assumed provision (a client was detected); confirm existing-vs-new — finding a client never auto-provisions",
+					Statement: "Database environment variable detected: verify the engine and choose provision or reference; a client does not establish a need for a new database",
 				})
 				seenNeed["postgres"] = true
 			}
 			p.Secrets = append(p.Secrets, profile.SecretRef{Name: name})
 		case classObjectStorage:
 			if !seenNeed["object-storage"] {
-				p.Needs = append(p.Needs, profile.Need{Capability: "object-storage", Mode: "provision", Evidence: ev})
+				p.Needs = append(p.Needs, profile.Need{Capability: "object-storage", Mode: "undecided", Evidence: ev})
+				p.Assumptions = append(p.Assumptions, profile.Assumption{ID: "object-storage-mode", Statement: "Choose provision or reference for the detected object storage"})
 				seenNeed["object-storage"] = true
 			}
 		case classSecret:

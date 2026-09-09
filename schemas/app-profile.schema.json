@@ -23,7 +23,7 @@
           "schedule": { "type": "string", "description": "cron expression; kind=cron only" },
           "dockerfile": { "type": "string" },
           "command": {
-            "description": "Container args. Default contract when omitted: serve (http), work (worker), report (cron).",
+            "description": "Omitted or empty preserves image defaults. A nonempty command replaces CMD arguments, not ENTRYPOINT.",
             "type": "array",
             "items": { "type": "string" }
           }
@@ -37,13 +37,21 @@
         "additionalProperties": false,
         "required": ["capability", "mode"],
         "properties": {
-          "capability": { "enum": ["postgres", "object-storage", "secrets"] },
+          "capability": { "type": "string", "minLength": 1 },
           "mode": {
-            "enum": ["provision", "reference"],
-            "description": "reference = an existing external service consumed via connection secret; never provisioned"
+            "enum": ["provision", "reference", "undecided"],
+            "description": "undecided is draft-only; reference consumes an existing service through secret_name"
           },
+          "secret_name": { "type": "string", "minLength": 1 },
           "evidence": { "$ref": "#/$defs/evidenceList" }
-        }
+        },
+        "allOf": [{
+          "if": { "properties": { "mode": { "const": "provision" } } },
+          "then": { "properties": {
+            "capability": { "enum": ["postgres", "object-storage", "secrets"] },
+            "secret_name": false
+          } }
+        }]
       }
     },
     "secrets": {
@@ -125,6 +133,9 @@
           "detected": { "type": "string" },
           "explanation": { "type": "string" },
           "nearest_supported": { "type": "string" },
+          "disposition": { "enum": ["external", "not-required"] },
+          "resolution": { "type": "string", "minLength": 1 },
+          "secret_name": { "type": "string", "minLength": 1 },
           "evidence": { "$ref": "#/$defs/evidenceList" }
         }
       }

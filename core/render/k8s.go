@@ -187,7 +187,9 @@ func containerYAML(bp *blueprint.Blueprint, s blueprint.Service, indent string) 
 	for i, a := range s.Args {
 		quoted[i] = fmt.Sprintf("%q", a)
 	}
-	w("  args: [%s]", strings.Join(quoted, ", "))
+	if len(quoted) > 0 {
+		w("  args: [%s]", strings.Join(quoted, ", "))
+	}
 	w("  securityContext:")
 	w("    allowPrivilegeEscalation: false")
 	w("    readOnlyRootFilesystem: true")

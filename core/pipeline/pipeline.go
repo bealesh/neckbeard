@@ -7,6 +7,7 @@ package pipeline
 
 import (
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/bealesh/neckbeard/core/blueprint"
@@ -60,7 +61,7 @@ func Build(bp *blueprint.Blueprint) (Model, error) {
 	dockerfiles := map[string]bool{}
 	for _, s := range bp.Services {
 		if s.Dockerfile != "" {
-			dockerfiles[s.Dockerfile] = true
+			dockerfiles[path.Clean(s.Dockerfile)] = true
 		}
 	}
 	if len(dockerfiles) == 0 {
@@ -88,3 +89,5 @@ func Build(bp *blueprint.Blueprint) (Model, error) {
 		Envs:          envs,
 	}, nil
 }
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

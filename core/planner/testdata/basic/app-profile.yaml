@@ -2,14 +2,17 @@ version: 1
 services:
   - name: web
     kind: http
+    command: [serve]
     port: 4000
     health_path: /healthz
     dockerfile: Dockerfile
   - name: worker
     kind: worker
+    command: [work]
     dockerfile: Dockerfile
   - name: nightly-report
     kind: cron
+    command: [report]
     schedule: "0 3 * * *"
     dockerfile: Dockerfile
 needs:
