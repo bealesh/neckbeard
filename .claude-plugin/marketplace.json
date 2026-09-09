@@ -1,0 +1,13 @@
+{
+  "name": "neckbeard",
+  "owner": {
+    "name": "bealesh"
+  },
+  "plugins": [
+    {
+      "name": "neckbeard",
+      "source": "./plugin",
+      "description": "Analyze your app and scaffold tested, cost-honest cloud infrastructure: environments, CI/CD, GitOps, observability — on AWS, GCP, or Azure."
+    }
+  ]
+}

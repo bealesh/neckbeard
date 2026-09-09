@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bealesh/neckbeard/core/analyze"
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/catalog"
 	"github.com/bealesh/neckbeard/core/config"
@@ -22,6 +23,7 @@ import (
 	"github.com/bealesh/neckbeard/core/validate"
 	"github.com/bealesh/neckbeard/core/version"
 	"github.com/bealesh/neckbeard/schemas"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -33,6 +35,8 @@ func main() {
 	switch os.Args[1] {
 	case "version":
 		fmt.Println("neckbeard " + version.Version)
+	case "analyze":
+		err = runAnalyze(os.Args[2:])
 	case "plan":
 		err = runPlan(os.Args[2:])
 	case "scaffold":
@@ -55,11 +59,46 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: neckbeard <command>
 
 commands:
+  analyze   deterministic repo detection → draft app-profile.yaml + open questions
   plan      resolve app profile + config against the catalog into blueprint.yaml
   estimate  cost report from the blueprint (rendered to scratch; no cloud creds)
   scaffold  render the blueprint into the repo under the ownership contract
   validate  V0 static checks over the rendered env roots (fmt, init, validate)
   version   print version`)
+}
+
+func runAnalyze(args []string) error {
+	fs := flag.NewFlagSet("analyze", flag.ExitOnError)
+	dir := fs.String("dir", ".", "repository directory to analyze")
+	out := fs.String("out", "app-profile.yaml", "draft profile output path")
+	force := fs.Bool("force", false, "overwrite an existing profile (it is a reviewed input — prefer refining it)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if _, err := os.Stat(*out); err == nil && !*force {
+		return fmt.Errorf("%s already exists — it is a reviewed input (agent-written, user-corrected); refine it in place or pass -force to start over", *out)
+	}
+
+	res, err := analyze.Dir(*dir)
+	if err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(res.Profile)
+	if err != nil {
+		return err
+	}
+	header := "# DRAFT app profile — deterministic detection only (facts carry evidence;\n# assumptions are loud). Refine with judgment, answer the open questions into\n# `confirmed:`, then run `neckbeard plan`.\n"
+	if err := os.WriteFile(*out, append([]byte(header), data...), 0o644); err != nil {
+		return err
+	}
+
+	fmt.Printf("draft written: %s (%d services, %d needs, %d secrets, %d facts, %d assumptions, %d unsupported)\n\n",
+		*out, len(res.Profile.Services), len(res.Profile.Needs), len(res.Profile.Secrets), len(res.Profile.Facts), len(res.Profile.Assumptions), len(res.Profile.Unsupported))
+	fmt.Println("OPEN QUESTIONS — inspection cannot settle these; record answers under confirmed:")
+	for i, q := range res.Questions {
+		fmt.Printf("  %d. %s\n", i+1, q)
+	}
+	return nil
 }
 
 func runPlan(args []string) error {
