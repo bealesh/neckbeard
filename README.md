@@ -3,20 +3,20 @@
   <img src="docs/assets/neckbeard.png" alt="neckbeard" width="320">
 </p>
 
-**A plugin for your coding agent that turns "deploy my app" into tested,
-cost-honest cloud infrastructure.** Three environments, CI/CD with OIDC-only
-cloud auth, GitOps delivery, policy gates, and a real cost estimate — on AWS,
-GCP, or Azure, from a catalog of maintained OpenTofu modules.
+**A plugin for your coding agent that turns an app into reviewable cloud
+infrastructure and a cost estimate.** Plans and scaffolds for AWS, GCP, or Azure,
+with GitHub Actions or GitLab CI, from a bundled catalog of maintained OpenTofu
+modules. Pre-alpha: deployment coverage and delivery automation are incomplete.
 
 Inspired by [ponytail](https://github.com/dietrichgebert/ponytail). The neckbeard handles your infra so you don't have to.
 
 ```
 you:    /neckbeard:analyze
 agent:  reads your repo → evidence-backed profile → asks what code can't tell it
-you:    answer five questions, pick a cloud and a tier
+you:    resolve the draft's questions, pick a cloud and a tier
 agent:  plan → estimate ($83/mo, here's the table) → scaffold → validate
-you:    run docs/bootstrap.md once per environment (10 minutes, elevated creds)
-CI:     plans on PRs, applies on main, deploys by digest — no cloud keys anywhere
+you:    review the files and follow docs/bootstrap.md per environment
+next:   configure cloud access and verify deployment (coverage varies by lane)
 ```
 
 ## Why this exists
@@ -51,9 +51,8 @@ tier, all three environments, live prices via Infracost:
 low number lie, the report **names every unpriced resource**. That's the house
 style: `neckbeard estimate` gives you baseline-while-idle costs, explicit usage
 assumptions (a tier name is not a usage estimate — the numbers are, and you can
-edit them), low/expected/high scenario ranges, and a provenance footer. Budget
-alerts are configured too, with the disclaimer they deserve: alerts notify,
-they don't cap.
+edit them), low/expected/high scenario ranges, and a provenance footer. Cloud budget alerts are planned; the current CLI does
+not configure them. When implemented, alerts will notify, not cap spending.
 
 It also prices your *decisions*: the table above is why neckbeard tells solo
 developers "you don't need Kubernetes yet" — with receipts.
@@ -89,9 +88,9 @@ V2   NOT EXERCISED  deployment verification     release-harness only for now
   operating capacity. Every preset value is visible and overridable within the
   catalog's tested envelope — and values outside it are *marked*, not blessed.
 - **Two runtimes per cloud**: serverless containers (Cloud Run / ECS Fargate /
-  Container Apps) or Kubernetes (EKS / GKE / AKS) with Flux GitOps — image
-  automation into dev, promotion to stg/prd by pull request, digests only,
-  never rebuilds.
+  Container Apps) or Kubernetes (EKS / GKE / AKS) with Flux manifests for dev
+  image automation. Complete promotion, rollback, and serverless release
+  automation remain subsequent work; initial image references are placeholders.
 - **CI/CD for GitHub Actions or GitLab CI** from one internal model: test →
   build → scan (trivy blocks HIGH/CRITICAL) → push; infra plans on PRs with a
   read-only role, applies on main with a write role, prd gated by environment
@@ -103,7 +102,7 @@ V2   NOT EXERCISED  deployment verification     release-harness only for now
   neckbeard, its state, or your git history), scoped CI identities, managed
   WAF rules where the tier enables them.
 - **A bootstrap runbook** (`docs/bootstrap.md`) that takes a human with
-  elevated credentials from zero to federated CI in minutes per environment —
+  elevated credentials through federated CI setup per environment —
   state backend first, then OIDC trust, then CI roles.
 
 ## Quick start
@@ -135,18 +134,40 @@ Or drive the CLI directly:
 ```sh
 go install github.com/bealesh/neckbeard/cmd/neckbeard@latest
 
+neckbeard doctor -for plan # checks the bundled catalog; no cloud access
 neckbeard analyze          # draft profile + the questions code can't answer
-$EDITOR app-profile.yaml   # refine; record answers under confirmed:
+$EDITOR app-profile.yaml   # resolve each assumption with a same-id confirmed answer
 $EDITOR neckbeard.yaml     # cloud, region, tier, runtime, repo
 neckbeard plan             # deterministic blueprint + topology summary
+neckbeard doctor -for estimate
 neckbeard estimate         # the money table, before anything exists
 neckbeard scaffold         # infra/, pipelines, clusters/ — yours to review
 neckbeard validate         # V0: fmt, validate, checkov, kubeconform
 ```
 
-Requires `tofu`; `infracost` (0.10.x) for estimates; `checkov`/`kubeconform`
-for those gates — anything missing is reported NOT EXERCISED, never skipped
-silently.
+The binary bundles the catalog, schemas, presets, and installed skill references:
+**no neckbeard source checkout is needed**. Use `neckbeard schema neckbeard`,
+`neckbeard schema app-profile`, and `neckbeard presets` for exact inputs. See the
+[onboarding guide](plugin/skills/neckbeard/references/onboarding.md) for a complete
+config and examples for existing databases and unsupported dependencies.
+
+The supported workload is **one image, up to 10 HTTP/worker/cron processes**, with
+repository-root build context. Omitted or empty `command` preserves image defaults.
+`plan` refuses unresolved assumptions, undecided datastore provisioning, and
+unsupported findings without an explicit disposition. Existing services use
+`mode: reference` and a connection `secret_name`; their lifecycle remains external.
+
+Scaffold includes pinned module contents under `.neckbeard/catalog/`. Commit that
+directory with the generated infrastructure and ownership manifest. Upgrading to
+a different bundled catalog requires a new plan and review of the diff. Explicit
+`-catalog` and `-catalog-source` remain available for catalog development.
+
+Planning and scaffolding need no external tools or cloud credentials. Estimates
+need Infracost **0.10.x** and its pricing login. Validation needs the pinned
+OpenTofu version, with Checkov, kubeconform (Kubernetes), and actionlint (GitHub)
+for their respective gates. `neckbeard doctor -for estimate|validate|all` reports
+missing or incompatible tools; `validate` reports unavailable checks as
+NOT EXERCISED. Doctor checks tool availability, not cloud permissions or quotas.
 
 ## Status: pre-alpha, and precise about it
 
@@ -156,7 +177,10 @@ silently.
 | GCP serverless / GKE | ✅ / ✅ | not yet / not yet |
 | Azure serverless / AKS | ✅ / ✅ | **✅ (manually)** / not yet |
 
-The six-lane matrix runs on every PR. Exactly one lane has survived a real
+The six-lane static matrix runs on every PR using the bundled catalog. Tests also
+run a built binary from three unrelated fixture apps across all 12 cloud/VCS/runtime
+combinations, including an existing database and external Redis. These tests cover
+onboarding and rendering; pricing is stubbed in the automated fixture test. Exactly one lane has survived a real
 cloud so far — deployed, health-checked over its public FQDN, updated, torn
 down ([the findings](docs/findings/2026-09-08-azure-v2.md) are a good read on
 what static validation can't see). The automated release harness that runs all

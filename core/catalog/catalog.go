@@ -4,6 +4,7 @@ package catalog
 import (
 	"bytes"
 	"fmt"
+	catalogassets "github.com/bealesh/neckbeard/catalog"
 	"os"
 	"slices"
 
@@ -11,6 +12,7 @@ import (
 )
 
 type Index struct {
+	Digest       string              `yaml:"-"`
 	Version      string              `yaml:"version"`
 	OpenTofu     string              `yaml:"opentofu"`
 	Capabilities map[string][]string `yaml:"capabilities"`
@@ -62,7 +64,13 @@ func (m Module) AllowsOverride(key string) bool {
 }
 
 func Load(path string) (*Index, error) {
-	data, err := os.ReadFile(path)
+	var data []byte
+	var err error
+	if path == "" {
+		data, err = catalogassets.Files.ReadFile("index.yaml")
+	} else {
+		data, err = os.ReadFile(path)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +82,9 @@ func Load(path string) (*Index, error) {
 	}
 	if idx.Version == "" || idx.OpenTofu == "" {
 		return nil, fmt.Errorf("catalog index missing version or opentofu pin")
+	}
+	if path == "" {
+		idx.Digest = catalogassets.Digest()
 	}
 	return &idx, nil
 }

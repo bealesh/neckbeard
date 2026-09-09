@@ -5,12 +5,16 @@ package skillinstall
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	catalogassets "github.com/bealesh/neckbeard/catalog"
+	"github.com/bealesh/neckbeard/core/presets"
 	pluginassets "github.com/bealesh/neckbeard/plugin"
+	"github.com/bealesh/neckbeard/schemas"
 )
 
 // Target is a tool's skill-discovery convention.
@@ -61,6 +65,41 @@ func Install(root string, t Target) ([]string, error) {
 	}
 
 	if err := write(filepath.Join(dir, "SKILL.md"), pluginassets.SkillMD); err != nil {
+		return nil, err
+	}
+
+	if err := fs.WalkDir(pluginassets.References, "skills/neckbeard/references", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := pluginassets.References.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return write(filepath.Join(dir, "references", filepath.Base(p)), data)
+	}); err != nil {
+		return nil, err
+	}
+	for _, name := range []string{"neckbeard", "app-profile", "blueprint", "environment-manifest"} {
+		data, err := schemas.Read(name)
+		if err != nil {
+			return nil, err
+		}
+		if err := write(filepath.Join(dir, "references", name+".schema.json"), data); err != nil {
+			return nil, err
+		}
+	}
+	if err := write(filepath.Join(dir, "references", "presets.yaml"), presets.YAML()); err != nil {
+		return nil, err
+	}
+	index, err := catalogassets.Files.ReadFile("index.yaml")
+	if err != nil {
+		return nil, err
+	}
+	if err := write(filepath.Join(dir, "references", "catalog.yaml"), index); err != nil {
 		return nil, err
 	}
 

@@ -253,6 +253,10 @@ contract**: within a major version, module input schemas and resource addresses 
 break; a major version may move addresses and must ship `moved` blocks and/or a written
 state-migration procedure.
 
+Before 1.0, minor releases may change planner defaults with explicit migration
+notes and re-planning (for example, 0.2.0 preserves image CMD defaults). This
+pre-stability allowance does not relax the schema or resource-address contract.
+
 Honesty about wrapping: putting community modules (terraform-aws-modules et al.) behind
 our input schema stabilizes the *interface*, *not* the internals — swapping a wrapped
 module's implementation changes resource addresses and is a **major** catalog version

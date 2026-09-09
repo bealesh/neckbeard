@@ -156,6 +156,7 @@ func TestReferenceModeProvisionsNothing(t *testing.T) {
 	for i := range in.Profile.Needs {
 		if in.Profile.Needs[i].Capability == "postgres" {
 			in.Profile.Needs[i].Mode = "reference"
+			in.Profile.Needs[i].SecretName = "DATABASE_URL"
 		}
 	}
 	bp, err := Plan(in)
@@ -171,12 +172,12 @@ func TestReferenceModeProvisionsNothing(t *testing.T) {
 	}
 	found := false
 	for _, r := range bp.References {
-		if r.Capability == "postgres" && r.SecretName == "postgres-connection" {
+		if r.Capability == "postgres" && r.SecretName == "DATABASE_URL" {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("expected a postgres reference with secret postgres-connection")
+		t.Error("expected a postgres reference with secret DATABASE_URL")
 	}
 	warned := false
 	for _, w := range bp.Warnings {

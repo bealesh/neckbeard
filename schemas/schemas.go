@@ -32,6 +32,15 @@ var raw = map[string][]byte{
 	"environment-manifest": environmentManifestSchema,
 }
 
+// Read exposes the exact schema used by this binary to agents and installers.
+func Read(name string) ([]byte, error) {
+	data, ok := raw[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown schema %q (neckbeard, app-profile, blueprint, environment-manifest)", name)
+	}
+	return bytes.Clone(data), nil
+}
+
 func compile(name string) (*jsonschema.Schema, error) {
 	data, ok := raw[name]
 	if !ok {

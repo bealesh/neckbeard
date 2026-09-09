@@ -28,6 +28,7 @@
       "required": ["catalog", "opentofu", "planner"],
       "properties": {
         "catalog": { "type": "string" },
+        "catalog_digest": { "$ref": "#/$defs/digest" },
         "opentofu": { "type": "string" },
         "planner": { "type": "string" },
         "providers": {

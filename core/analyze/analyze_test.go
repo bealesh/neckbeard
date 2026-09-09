@@ -70,7 +70,7 @@ func TestAnalyzeBellwether(t *testing.T) {
 	}
 }
 
-// The draft must be a valid app-profile so `neckbeard plan` runs immediately.
+// Drafts are schema-valid but planning still requires resolving their assumptions.
 func TestDraftValidatesAgainstSchema(t *testing.T) {
 	res, err := Dir("../../bellwether")
 	if err != nil {

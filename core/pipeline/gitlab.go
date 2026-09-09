@@ -45,9 +45,9 @@ func RenderGitLab(m Model) []byte {
 	w("    entrypoint: [\"\"]")
 	w("  rules:")
 	w("    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"")
-	w("      changes: [\"infra/**/*\"]")
+	w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
 	w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
-	w("      changes: [\"infra/**/*\"]")
+	w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
 	w("  script:")
 	for _, env := range m.Envs {
 		w("    - checkov -d infra/envs/%s --quiet --compact --framework terraform --config-file .checkov.yaml", env)
@@ -66,7 +66,7 @@ func RenderGitLab(m Model) []byte {
 	w("  variables:")
 	w("    REGISTRY: $%s_DEV", VarRegistry)
 	w("  script:")
-	w("    - docker build -f %s -t \"neckbeard-build:$CI_COMMIT_SHA\" .", m.Dockerfile)
+	w("    - docker build -f %s -t \"neckbeard-build:$CI_COMMIT_SHA\" .", shellQuote(m.Dockerfile))
 	w("    # Scan gate: HIGH/CRITICAL block (DESIGN §10.1)")
 	w("    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity HIGH,CRITICAL --exit-code 1 \"neckbeard-build:$CI_COMMIT_SHA\"")
 	w("    - |")
@@ -93,14 +93,14 @@ func RenderGitLab(m Model) []byte {
 		w("  environment: %s", env)
 		w("  rules:")
 		w("    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"")
-		w("      changes: [\"infra/**/*\"]")
+		w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
 		if env == "prd" {
 			w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
-			w("      changes: [\"infra/**/*\"]")
+			w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
 			w("      when: manual # prd gate: deployment approvals on Premium/Ultimate; protected branch otherwise (§11.3)")
 		} else {
 			w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
-			w("      changes: [\"infra/**/*\"]")
+			w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
 		}
 		w("  script:")
 		w("    - tofu -chdir=infra/envs/%s init -backend=false -input=false", env)

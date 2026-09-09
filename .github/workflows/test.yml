@@ -84,7 +84,7 @@ jobs:
             sed -i 's/^runtime: serverless-containers/runtime: kubernetes/' "$LANE/neckbeard.yaml"
           fi
           bin/neckbeard plan -config "$LANE/neckbeard.yaml" -profile "$LANE/app-profile.yaml" \
-            -catalog catalog/index.yaml -out "$LANE/blueprint.yaml"
+            -out "$LANE/blueprint.yaml"
           cd "$LANE"
-          "$GITHUB_WORKSPACE/bin/neckbeard" scaffold -catalog-source "$GITHUB_WORKSPACE"
+          "$GITHUB_WORKSPACE/bin/neckbeard" scaffold
           "$GITHUB_WORKSPACE/bin/neckbeard" validate

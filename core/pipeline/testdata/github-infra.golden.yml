@@ -6,10 +6,10 @@ name: neckbeard-infra
 
 on:
   pull_request:
-    paths: ["infra/**"]
+    paths: ["infra/**", ".neckbeard/catalog/**", ".checkov.yaml"]
   push:
     branches: [main]
-    paths: ["infra/**"]
+    paths: ["infra/**", ".neckbeard/catalog/**", ".checkov.yaml"]
 
 permissions:
   contents: read

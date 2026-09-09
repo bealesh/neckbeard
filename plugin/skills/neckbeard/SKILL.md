@@ -16,6 +16,8 @@ The division of labor is absolute:
   reports. If the catalog can't express something, you say so via the profile's
   `unsupported` section; you do not improvise HCL, manifests, or pipelines.
 
+Read [the onboarding contract](references/onboarding.md) first. It contains the supported workload shape, confirmation/disposition examples, configuration, and current limitations.
+
 ## Prerequisites
 
 The `neckbeard` binary must be on PATH (`go install github.com/bealesh/neckbeard/cmd/neckbeard@latest`
@@ -36,15 +38,14 @@ docs/bootstrap.md  →  the human applies bootstrap per environment (elevated cr
 
 ## 1. Analyze — facts, inferences, assumptions, confirmed
 
-Run `neckbeard analyze` first. It writes a DRAFT `app-profile.yaml` from
+Run `neckbeard doctor -for plan`, then `neckbeard analyze`. It writes a DRAFT `app-profile.yaml` from
 mechanical detection (Dockerfiles, EXPOSE ports, env-var reads, language
 markers) and prints OPEN QUESTIONS. Then apply judgment:
 
 - **Read the code the draft cites** and correct it: service kinds (the draft
   assumes `http` — workers and cron jobs are yours to identify from process
   managers, Procfiles, job frameworks like Oban/Sidekiq/Celery, entrypoint
-  args), ports, health paths, schedules, per-service `command:` if the app
-  doesn't follow the default serve/work/report contract.
+  args), ports, health paths, schedules, per-service `command:` only if explicit arguments are needed. Omitted or empty commands preserve the image defaults.
 - **Epistemic discipline** (non-negotiable): `facts` carry file:line evidence;
   `inferences` carry confidence and reasoning; `assumptions` are loud defaults
   you haven't confirmed; `confirmed` holds the user's answers. Never promote an
@@ -61,10 +62,12 @@ markers) and prints OPEN QUESTIONS. Then apply judgment:
   named entries in `unsupported` with evidence and an honest explanation. Do
   not map them onto the nearest catalog module.
 
-Then write `neckbeard.yaml`: app/org names (lowercase, short — they become
+Resolve every assumption with a `confirmed` entry using the same id and a nonempty answer. Correct the actual fields. Resolve unsupported findings with an explicit disposition and explanation as described in the onboarding contract. Planning blocks unresolved inputs.
+
+Read `neckbeard schema neckbeard`, `neckbeard schema app-profile`, and `neckbeard presets` (all bundled). Then write `neckbeard.yaml`: app/org names (lowercase, short — they become
 resource-name prefixes with per-cloud length limits), `cloud`, `region`
 (verify the region actually offers Postgres flexible-server capability on
-Azure credit subscriptions — see docs/findings/), `vcs`, `repo` (owner/name —
+Azure credit subscriptions — see the onboarding contract), `vcs`, `repo` (owner/name —
 OIDC trust binds to it), `runtime` (recommend serverless-containers below
 ~established scale; say why), `tier` (present the tier table: each is a preset
 over traffic/availability/RPO-RTO/ops-capacity), `entry_path: adopt`, and for
@@ -110,7 +113,7 @@ reason to edit generated HCL.
 
 ## When things fail against a real cloud
 
-Consult `docs/findings/` first — known failure classes (Azure async RG deletes
+Consult the live findings URL in the onboarding contract first — known failure classes (Azure async RG deletes
 eating same-named recreations, orphaned resources needing import-or-fail
 reconciliation, regional capability holes) live there with recoveries. New
 failures deserve the same treatment: capture what happened and why before

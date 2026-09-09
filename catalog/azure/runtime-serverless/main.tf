@@ -151,7 +151,7 @@ resource "azurerm_container_app" "this" {
       image  = var.image
       cpu    = local.cpu_cores
       memory = local.memory
-      args   = each.value.args
+      args   = length(each.value.args) > 0 ? each.value.args : null
 
       dynamic "env" {
         for_each = var.secret_uris
@@ -223,7 +223,7 @@ resource "azurerm_container_app_job" "cron" {
       image  = var.image
       cpu    = local.cpu_cores
       memory = local.memory
-      args   = each.value.args
+      args   = length(each.value.args) > 0 ? each.value.args : null
 
       dynamic "env" {
         for_each = var.secret_uris

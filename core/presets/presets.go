@@ -13,6 +13,8 @@ import (
 //go:embed presets.yaml
 var presetsYAML []byte
 
+func YAML() []byte { return bytes.Clone(presetsYAML) }
+
 type Set struct {
 	Version        int                                  `yaml:"version"`
 	Tiers          map[string]Tier                      `yaml:"tiers"`

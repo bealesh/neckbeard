@@ -1,10 +1,10 @@
 version: 1
-blueprint_hash: sha256:98671b470407bf679f1daa059fc4dd6c39df0e8c618369165236b4d635cfd198
+blueprint_hash: sha256:3dc2bfe1ac20d90c238e4713cfc70802a47173a272ce335f3bf84e5c17567bc2
 generated_from:
     neckbeard_yaml: sha256:afd4959a9151ab1a71af789f9804029159bfe8a9873e86ccad193f65a079f4da
-    app_profile: sha256:fb76116a04786086ae499d604bb342a8682633df6267c5e16e959cb79c4c87b8
+    app_profile: sha256:9bd3442bf7779ffcb2b2ebd2b542e1438d8ef7418d70868e6643416a521cce8a
 pins:
-    catalog: 0.1.0
+    catalog: 0.2.0
     opentofu: 1.12.6
     planner: test
     providers:
@@ -106,7 +106,7 @@ environments:
               provenance: derived
         - name: runtime-serverless
           source: catalog/aws/runtime-serverless
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: cpu
               value: "1"
@@ -222,7 +222,7 @@ environments:
               provenance: derived
         - name: runtime-serverless
           source: catalog/aws/runtime-serverless
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: cpu
               value: "1"
@@ -341,7 +341,7 @@ environments:
               provenance: derived
         - name: runtime-serverless
           source: catalog/aws/runtime-serverless
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: cpu
               value: "1"
