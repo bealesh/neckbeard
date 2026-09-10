@@ -43,7 +43,8 @@ resource "google_iam_workload_identity_pool_provider" "ci" {
     "attribute.repository" = local.repo_attr
     # repo::environment — impersonation binds to BOTH, so a random branch job
     # without the environment claim can never mint prd (or any env) credentials.
-    "attribute.scope" = "${local.repo_attr} + \"::\" + (has(assertion.environment) ? assertion.environment : \"none\")"
+    "attribute.scope"       = "${local.repo_attr} + \"::\" + (has(assertion.environment) ? assertion.environment : \"none\")"
+    "attribute.apply_scope" = "${local.repo_attr} + \"::\" + (has(assertion.environment) ? assertion.environment : \"none\") + \"::\" + (${local.github ? "assertion.ref == 'refs/heads/main'" : "assertion.ref == 'main' && assertion.ref_protected == 'true' && (assertion.environment != 'prd' || assertion.environment_protected == 'true')"} ? \"main\" : \"denied\")"
   }
 
   # Only this repository's workflows may federate — the trust boundary in one line.
@@ -85,6 +86,9 @@ resource "google_project_iam_member" "apply" {
     "roles/resourcemanager.projectIamAdmin",
     "roles/iam.serviceAccountAdmin",
     "roles/container.admin",
+    # Editor and project IAM admin do not allow service/job-level IAM updates.
+    # The runtime installs public ingress and scheduler-invoker bindings.
+    "roles/run.admin",
   ])
   project = data.google_project.this.project_id
   role    = each.value
@@ -97,14 +101,13 @@ resource "google_storage_bucket_iam_member" "state_rw" {
     apply = google_service_account.apply.email
   }
   bucket = google_storage_bucket.tfstate.name
-  role   = "roles/storage.objectAdmin"
+  role   = each.key == "plan" ? "roles/storage.objectViewer" : "roles/storage.objectAdmin"
   member = "serviceAccount:${each.value}"
 }
 
 # Impersonation requires the repo AND the environment claim: only jobs bound to
 # this environment can use these identities. As on AWS, plan-vs-apply selection
-# within the environment is workflow logic, and prd rides its environment gate /
-# protected branch (§11.3).
+# is also enforced in the cloud by apply_scope, which requires main.
 resource "google_service_account_iam_member" "wif" {
   for_each = {
     plan  = google_service_account.plan.name
@@ -112,5 +115,5 @@ resource "google_service_account_iam_member" "wif" {
   }
   service_account_id = each.value
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.ci.name}/attribute.scope/${var.repo}::${var.environment}"
+  member             = each.key == "plan" ? "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.ci.name}/attribute.scope/${var.repo}::${var.environment}${local.github ? "-plan" : ""}" : "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.ci.name}/attribute.apply_scope/${var.repo}::${var.environment}::main"
 }

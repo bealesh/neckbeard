@@ -2,6 +2,11 @@ output "state_account" {
   value = azurerm_storage_account.tfstate.name
 }
 
+output "release_store" {
+  description = "Versioned storage for verified deployment and rollback receipts."
+  value       = "${azurerm_storage_account.tfstate.primary_blob_endpoint}${azurerm_storage_container.tfstate.name}"
+}
+
 output "backend_hcl" {
   description = "Contents for infra/envs/<env>/backend.hcl (the pipelines init with it)."
   value       = <<-EOT
@@ -21,4 +26,8 @@ output "ci_variables" {
     "NECKBEARD_AZURE_PLAN_CLIENT_${upper(var.environment)}"  = azuread_application.ci["plan"].client_id
     "NECKBEARD_AZURE_APPLY_CLIENT_${upper(var.environment)}" = azuread_application.ci["apply"].client_id
   }
+}
+
+output "github_subject_prefix" {
+  value = local.github ? local.github_subject_prefix : null
 }

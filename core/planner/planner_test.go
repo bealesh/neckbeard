@@ -3,6 +3,7 @@ package planner
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,51 @@ import (
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")
+
+func TestManagedDatabaseConnectionIsPlanned(t *testing.T) {
+	for _, cloud := range []string{"aws", "gcp", "azure"} {
+		for _, binding := range []string{"", "APP_DATABASE_URL"} {
+			in := loadInputs(t, filepath.Join("testdata", "basic"))
+			in.Config.Cloud, in.Config.Overrides = cloud, nil
+			in.Config.Containers = map[string]string{"dev": "test-dev", "stg": "test-stg", "prd": "test-prd"}
+			in.Profile.Secrets = nil
+			in.Profile.Needs = []profile.Need{{Capability: "postgres", Mode: "provision", SecretName: binding}}
+			bp, err := Plan(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := binding
+			if want == "" {
+				want = "DATABASE_URL"
+			}
+			if bp.DatabaseSecret != want {
+				t.Fatalf("database binding=%s, want %s", bp.DatabaseSecret, want)
+			}
+			for _, env := range bp.Environments {
+				found := false
+				for _, mod := range env.Modules {
+					if mod.Name == "secrets" {
+						for _, input := range mod.Inputs {
+							if input.Key == "secret_names" && fmt.Sprint(input.Value) == "["+want+"]" {
+								found = true
+							}
+						}
+					}
+				}
+				if !found {
+					t.Fatalf("%s/%s missing planned connection secret", cloud, env.Name)
+				}
+			}
+			data, err := bp.Finalize()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := schemas.ValidateYAML("blueprint", data); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
 
 // plannerVersion is pinned in tests so golden files don't churn with releases.
 const plannerVersion = "test"
@@ -253,5 +299,28 @@ func TestKubernetesRuntimeSwapsModuleAndWarns(t *testing.T) {
 	}
 	if !warned {
 		t.Error("expected dev-cluster cost warning for kubernetes runtime")
+	}
+}
+
+func TestAWSZoneMinimumIsPlanned(t *testing.T) {
+	in := loadInputs(t, filepath.Join("testdata", "basic"))
+	bp, err := Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, env := range bp.Environments {
+		for _, module := range env.Modules {
+			if module.Name == "network" {
+				for _, input := range module.Inputs {
+					if input.Key == "zones" && fmt.Sprint(input.Value) == "1" {
+						t.Fatal("planned an undeployable single-zone AWS network")
+					}
+				}
+			}
+		}
+	}
+	in.Config.Overrides = map[string]map[string]any{"network": {"zones": 1}}
+	if _, err := Plan(in); err == nil {
+		t.Fatal("accepted incompatible explicit zone override")
 	}
 }

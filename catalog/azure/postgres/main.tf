@@ -1,9 +1,8 @@
 # Managed PostgreSQL (Azure Database for PostgreSQL – Flexible Server), private
 # access only: VNet-injected into the delegated subnet, FQDN resolvable only via
-# the private DNS zone (DESIGN §10.1). Authentication is Entra-only with password
-# auth DISABLED, so no database password ever exists in OpenTofu state or version
-# control — the app's DATABASE_URL connection secret is operator-provided
-# out-of-band, like every secret value (§3.1).
+# the private DNS zone (DESIGN §10.1). Direct module consumers default to Entra
+# authentication. Generated roots opt into password authentication through an
+# ephemeral, write-only input; passwords never enter plans, state or Git.
 
 locals {
   # Honest per-cloud difference (§3.3): zone-redundant HA requires a
@@ -27,9 +26,12 @@ resource "azurerm_postgresql_flexible_server" "this" {
   location            = var.region
   resource_group_name = var.resource_group_name
 
-  version    = "16"
-  sku_name   = local.sku_name
-  storage_mb = 32768
+  administrator_login               = var.manage_app_credentials ? "neckbeard" : null
+  administrator_password_wo         = var.manage_app_credentials ? var.application_password : null
+  administrator_password_wo_version = var.manage_app_credentials ? 1 : null
+  version                           = "16"
+  sku_name                          = local.sku_name
+  storage_mb                        = 32768
 
   delegated_subnet_id           = var.delegated_subnet_id
   private_dns_zone_id           = var.private_dns_zone_id
@@ -37,14 +39,12 @@ resource "azurerm_postgresql_flexible_server" "this" {
 
   backup_retention_days = local.retention_days
 
-  # Entra (AAD) authentication only: password auth is off, so the provider stores
-  # no administrator password and none reaches state. Operators grant the app's
-  # managed identity (or a bootstrap principal) access post-provision and set
-  # DATABASE_URL as an out-of-band secret value.
+  # Existing direct consumers keep Entra authentication. The managed connection
+  # path uses a cloud-stored password supplied only at deployment time.
   authentication {
-    active_directory_auth_enabled = true
-    password_auth_enabled         = false
-    tenant_id                     = data.azurerm_client_config.current.tenant_id
+    active_directory_auth_enabled = !var.manage_app_credentials
+    password_auth_enabled         = var.manage_app_credentials
+    tenant_id                     = var.manage_app_credentials ? null : data.azurerm_client_config.current.tenant_id
   }
 
   dynamic "high_availability" {
@@ -97,4 +97,11 @@ resource "azurerm_management_lock" "this" {
   scope      = azurerm_postgresql_flexible_server.this.id
   lock_level = "CanNotDelete"
   notes      = "prd preset: protect the database from deletion (neckbeard)"
+}
+
+resource "azurerm_postgresql_flexible_server_database" "app" {
+  name      = "app"
+  server_id = azurerm_postgresql_flexible_server.this.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
 }

@@ -71,6 +71,13 @@ resource "google_cloud_run_v2_service" "http" {
       }
 
       dynamic "env" {
+        for_each = contains(keys(var.secret_ids), "APP_ENV") ? [] : [1]
+        content {
+          name  = "APP_ENV"
+          value = var.environment
+        }
+      }
+      dynamic "env" {
         for_each = var.secret_ids
         content {
           name = env.key
@@ -127,6 +134,13 @@ resource "google_cloud_run_v2_worker_pool" "worker" {
       }
 
       dynamic "env" {
+        for_each = contains(keys(var.secret_ids), "APP_ENV") ? [] : [1]
+        content {
+          name  = "APP_ENV"
+          value = var.environment
+        }
+      }
+      dynamic "env" {
         for_each = var.secret_ids
         content {
           name = env.key
@@ -180,6 +194,13 @@ resource "google_cloud_run_v2_job" "cron" {
         }
 
         dynamic "env" {
+          for_each = contains(keys(var.secret_ids), "APP_ENV") ? [] : [1]
+          content {
+            name  = "APP_ENV"
+            value = var.environment
+          }
+        }
+        dynamic "env" {
           for_each = var.secret_ids
           content {
             name = env.key
@@ -227,4 +248,14 @@ resource "google_cloud_scheduler_job" "cron" {
       service_account_email = google_service_account.run.email
     }
   }
+}
+
+# The load balancer does not supply a Cloud Run identity token. IAM permits
+# invocation while ingress remains restricted to internal/load-balancer traffic.
+resource "google_cloud_run_v2_service_iam_member" "ingress" {
+  for_each = local.http_services
+  name     = google_cloud_run_v2_service.http[each.key].name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }

@@ -60,8 +60,16 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.service[var.http_services[0].name].arn
+    type             = var.certificate_arn == null ? "forward" : "redirect"
+    target_group_arn = var.certificate_arn == null ? aws_lb_target_group.service[var.http_services[0].name].arn : null
+    dynamic "redirect" {
+      for_each = var.certificate_arn == null ? [] : [1]
+      content {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
   }
 }
 
@@ -134,7 +142,7 @@ resource "aws_wafv2_web_acl_association" "this" {
 # Additional HTTP services route by path prefix /<service-name>/*.
 resource "aws_lb_listener_rule" "by_path" {
   for_each     = { for i, s in var.http_services : s.name => s if i > 0 }
-  listener_arn = aws_lb_listener.http.arn
+  listener_arn = var.certificate_arn == null ? aws_lb_listener.http.arn : aws_lb_listener.https[0].arn
 
   action {
     type             = "forward"
@@ -145,5 +153,28 @@ resource "aws_lb_listener_rule" "by_path" {
     path_pattern {
       values = ["/${each.key}/*"]
     }
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "https" {
+  count             = var.certificate_arn == null ? 0 : 1
+  security_group_id = aws_security_group.alb.id
+  description       = "public HTTPS"
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
+resource "aws_lb_listener" "https" {
+  count             = var.certificate_arn == null ? 0 : 1
+  load_balancer_arn = aws_lb.this.arn
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = var.certificate_arn
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.service[var.http_services[0].name].arn
   }
 }

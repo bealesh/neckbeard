@@ -43,6 +43,7 @@ func TestGoldenRenderings(t *testing.T) {
 	}{
 		{"github-ci.golden.yml", RenderGitHubCI(m)},
 		{"github-infra.golden.yml", RenderGitHubInfra(m)},
+		{"github-release.golden.yml", RenderGitHubRelease(m)},
 		{"gitlab-ci.golden.yml", RenderGitLab(m)},
 	}
 	for _, c := range cases {
@@ -68,9 +69,10 @@ func TestGoldenRenderings(t *testing.T) {
 func TestRenderingsAreValidYAML(t *testing.T) {
 	m := testModel(t)
 	for name, content := range map[string][]byte{
-		"github-ci":    RenderGitHubCI(m),
-		"github-infra": RenderGitHubInfra(m),
-		"gitlab-ci":    RenderGitLab(m),
+		"github-ci":      RenderGitHubCI(m),
+		"github-infra":   RenderGitHubInfra(m),
+		"github-release": RenderGitHubRelease(m),
+		"gitlab-ci":      RenderGitLab(m),
 	} {
 		var v any
 		if err := yaml.Unmarshal(content, &v); err != nil {
@@ -82,9 +84,10 @@ func TestRenderingsAreValidYAML(t *testing.T) {
 func TestNoStaticCloudKeys(t *testing.T) {
 	m := testModel(t)
 	for name, content := range map[string][]byte{
-		"github-ci":    RenderGitHubCI(m),
-		"github-infra": RenderGitHubInfra(m),
-		"gitlab-ci":    RenderGitLab(m),
+		"github-ci":      RenderGitHubCI(m),
+		"github-infra":   RenderGitHubInfra(m),
+		"github-release": RenderGitHubRelease(m),
+		"gitlab-ci":      RenderGitLab(m),
 	} {
 		s := string(content)
 		for _, banned := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {

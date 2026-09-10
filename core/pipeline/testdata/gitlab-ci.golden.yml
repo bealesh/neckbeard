@@ -2,7 +2,7 @@
 # change neckbeard.yaml or app-profile.yaml and re-run plan + scaffold.
 # The test hook (.neckbeard/hooks/test.sh) is yours and never regenerated.
 
-stages: [test, build, infra]
+stages: [test, build, infra, release]
 
 variables:
   AWS_REGION: us-east-1
@@ -32,10 +32,12 @@ policy:
     name: bridgecrew/checkov:3.3.10
     entrypoint: [""]
   rules:
+    - if: $NECKBEARD_RELEASE_ENV
+      when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
   script:
     - checkov -d infra/envs/dev --quiet --compact --framework terraform --config-file .checkov.yaml
     - checkov -d infra/bootstrap/dev --quiet --compact --framework terraform --config-file .checkov.yaml
@@ -50,13 +52,17 @@ build:
   image: docker:27
   services: ["docker:27-dind"]
   <<: *oidc
-  environment: dev
+  environment:
+    name: dev
+    deployment_tier: development
   rules:
+    - if: $NECKBEARD_RELEASE_ENV
+      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   variables:
     REGISTRY: $NECKBEARD_REGISTRY_DEV
   script:
-    - docker build -f 'bellwether/Dockerfile' -t "neckbeard-build:$CI_COMMIT_SHA" .
+    - docker build --platform linux/amd64 --provenance=false -f 'bellwether/Dockerfile' -t "neckbeard-build:$CI_COMMIT_SHA" .
     # Scan gate: HIGH/CRITICAL block (DESIGN §10.1)
     - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity HIGH,CRITICAL --exit-code 1 "neckbeard-build:$CI_COMMIT_SHA"
     - |
@@ -65,28 +71,36 @@ build:
         exit 0
       fi
       apk add --no-cache curl jq >/dev/null
+      umask 077
       apk add --no-cache aws-cli >/dev/null
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
       export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$NECKBEARD_AWS_APPLY_ROLE_DEV"
       aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${REGISTRY%%/*}"
       docker tag "neckbeard-build:$CI_COMMIT_SHA" "$REGISTRY:$CI_COMMIT_SHA"
       docker push "$REGISTRY:$CI_COMMIT_SHA"
-      echo "Pushed digest:"
-      docker inspect --format='{{index .RepoDigests 0}}' "$REGISTRY:$CI_COMMIT_SHA"
+      docker inspect --format='{{index .RepoDigests 0}}' "$REGISTRY:$CI_COMMIT_SHA" > built-image.txt
+  artifacts:
+    name: built-image-$CI_COMMIT_SHA
+    paths: [built-image.txt]
+    expire_in: 90 days
 
 infra-dev:
   stage: infra
-  image:
-    name: ghcr.io/opentofu/opentofu:1.12.6 # pinned by the blueprint
-    entrypoint: [""]
+  image: golang:1.27.1-bookworm
   <<: *oidc
-  environment: dev
+  resource_group: neckbeard-dev
+  environment:
+    name: dev
+    deployment_tier: development
   rules:
+    - if: $NECKBEARD_RELEASE_ENV
+      when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
   script:
+    - bash .neckbeard/install-release-tools.sh
     - tofu -chdir=infra/envs/dev init -backend=false -input=false
     - tofu -chdir=infra/envs/dev validate
     - |
@@ -94,28 +108,35 @@ infra-dev:
         echo "bootstrap pending for dev (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED"
         exit 0
       fi
+      umask 077
       ROLE="$NECKBEARD_AWS_PLAN_ROLE_DEV"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_DEV"; fi
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
       export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
       tofu -chdir=infra/envs/dev init -reconfigure -input=false -backend-config=backend.hcl
-      tofu -chdir=infra/envs/dev plan -input=false -out=tfplan
+      plan_flags=(); if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then plan_flags=(-read-only); fi
+      cd .neckbeard/release
+      GOWORK=off go run . infra-plan -root ../.. -env dev "${plan_flags[@]}"
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        tofu -chdir=infra/envs/dev apply -input=false tfplan
+        GOWORK=off go run . infra-apply -root ../.. -env dev
       fi
 
 infra-stg:
   stage: infra
-  image:
-    name: ghcr.io/opentofu/opentofu:1.12.6 # pinned by the blueprint
-    entrypoint: [""]
+  image: golang:1.27.1-bookworm
   <<: *oidc
-  environment: stg
+  resource_group: neckbeard-stg
+  environment:
+    name: stg
+    deployment_tier: staging
   rules:
+    - if: $NECKBEARD_RELEASE_ENV
+      when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
   script:
+    - bash .neckbeard/install-release-tools.sh
     - tofu -chdir=infra/envs/stg init -backend=false -input=false
     - tofu -chdir=infra/envs/stg validate
     - |
@@ -123,29 +144,36 @@ infra-stg:
         echo "bootstrap pending for stg (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED"
         exit 0
       fi
+      umask 077
       ROLE="$NECKBEARD_AWS_PLAN_ROLE_STG"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_STG"; fi
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
       export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
       tofu -chdir=infra/envs/stg init -reconfigure -input=false -backend-config=backend.hcl
-      tofu -chdir=infra/envs/stg plan -input=false -out=tfplan
+      plan_flags=(); if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then plan_flags=(-read-only); fi
+      cd .neckbeard/release
+      GOWORK=off go run . infra-plan -root ../.. -env stg "${plan_flags[@]}"
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        tofu -chdir=infra/envs/stg apply -input=false tfplan
+        GOWORK=off go run . infra-apply -root ../.. -env stg
       fi
 
 infra-prd:
   stage: infra
-  image:
-    name: ghcr.io/opentofu/opentofu:1.12.6 # pinned by the blueprint
-    entrypoint: [""]
+  image: golang:1.27.1-bookworm
   <<: *oidc
-  environment: prd
+  resource_group: neckbeard-prd
+  environment:
+    name: prd
+    deployment_tier: production
   rules:
+    - if: $NECKBEARD_RELEASE_ENV
+      when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml"]
+      changes: ["infra/**/*", ".neckbeard/catalog/**/*", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
       when: manual # prd gate: deployment approvals on Premium/Ultimate; protected branch otherwise (§11.3)
   script:
+    - bash .neckbeard/install-release-tools.sh
     - tofu -chdir=infra/envs/prd init -backend=false -input=false
     - tofu -chdir=infra/envs/prd validate
     - |
@@ -153,11 +181,113 @@ infra-prd:
         echo "bootstrap pending for prd (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED"
         exit 0
       fi
+      umask 077
       ROLE="$NECKBEARD_AWS_PLAN_ROLE_PRD"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_PRD"; fi
       echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
       export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
       tofu -chdir=infra/envs/prd init -reconfigure -input=false -backend-config=backend.hcl
-      tofu -chdir=infra/envs/prd plan -input=false -out=tfplan
+      plan_flags=(); if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then plan_flags=(-read-only); fi
+      cd .neckbeard/release
+      GOWORK=off go run . infra-plan -root ../.. -env prd "${plan_flags[@]}"
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        tofu -chdir=infra/envs/prd apply -input=false tfplan
+        GOWORK=off go run . infra-apply -root ../.. -env prd
       fi
+
+release-dev:
+  stage: release
+  image: golang:1.27.1-bookworm
+  needs: [test]
+  <<: *oidc
+  resource_group: neckbeard-dev
+  environment:
+    name: dev
+    deployment_tier: development
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $NECKBEARD_RELEASE_ENV == "dev"
+      when: manual
+  allow_failure: false
+  script:
+    - bash .neckbeard/install-release-tools.sh
+    - |
+      umask 077
+      ROLE="$NECKBEARD_AWS_PLAN_ROLE_DEV"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_DEV"; fi
+      echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
+      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
+      tofu -chdir=infra/envs/dev init -input=false -backend-config=backend.hcl
+      cd .neckbeard/release
+      GOWORK=off go run . restore-receipts -root ../.. -env dev
+      GOWORK=off go run . stage -root ../.. -env dev
+      GOWORK=off go run . deploy -root ../.. -env dev
+      GOWORK=off go run . save-receipts -root ../.. -env dev
+  artifacts:
+    name: deployment-dev
+    expire_in: 90 days
+    paths:
+      - .neckbeard/deploy/dev.receipt.json
+      - .neckbeard/deploy/dev.previous.json
+
+release-stg:
+  stage: release
+  image: golang:1.27.1-bookworm
+  needs: [test]
+  <<: *oidc
+  resource_group: neckbeard-stg
+  environment:
+    name: stg
+    deployment_tier: staging
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $NECKBEARD_RELEASE_ENV == "stg"
+      when: manual
+  allow_failure: false
+  script:
+    - bash .neckbeard/install-release-tools.sh
+    - |
+      umask 077
+      ROLE="$NECKBEARD_AWS_PLAN_ROLE_STG"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_STG"; fi
+      echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
+      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
+      tofu -chdir=infra/envs/stg init -input=false -backend-config=backend.hcl
+      cd .neckbeard/release
+      GOWORK=off go run . restore-receipts -root ../.. -env stg
+      GOWORK=off go run . stage -root ../.. -env stg
+      GOWORK=off go run . deploy -root ../.. -env stg
+      GOWORK=off go run . save-receipts -root ../.. -env stg
+  artifacts:
+    name: deployment-stg
+    expire_in: 90 days
+    paths:
+      - .neckbeard/deploy/stg.receipt.json
+      - .neckbeard/deploy/stg.previous.json
+
+release-prd:
+  stage: release
+  image: golang:1.27.1-bookworm
+  needs: [test]
+  <<: *oidc
+  resource_group: neckbeard-prd
+  environment:
+    name: prd
+    deployment_tier: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $NECKBEARD_RELEASE_ENV == "prd"
+      when: manual
+  allow_failure: false
+  script:
+    - bash .neckbeard/install-release-tools.sh
+    - |
+      umask 077
+      ROLE="$NECKBEARD_AWS_PLAN_ROLE_PRD"; if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then ROLE="$NECKBEARD_AWS_APPLY_ROLE_PRD"; fi
+      echo "$NECKBEARD_OIDC_TOKEN" > /tmp/oidc-token
+      export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/oidc-token AWS_ROLE_ARN="$ROLE"
+      tofu -chdir=infra/envs/prd init -input=false -backend-config=backend.hcl
+      cd .neckbeard/release
+      GOWORK=off go run . restore-receipts -root ../.. -env prd
+      GOWORK=off go run . stage -root ../.. -env prd
+      GOWORK=off go run . deploy -root ../.. -env prd
+      GOWORK=off go run . save-receipts -root ../.. -env prd
+  artifacts:
+    name: deployment-prd
+    expire_in: 90 days
+    paths:
+      - .neckbeard/deploy/prd.receipt.json
+      - .neckbeard/deploy/prd.previous.json

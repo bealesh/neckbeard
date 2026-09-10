@@ -1,10 +1,10 @@
 version: 1
-blueprint_hash: sha256:3dc2bfe1ac20d90c238e4713cfc70802a47173a272ce335f3bf84e5c17567bc2
+blueprint_hash: sha256:7c9833fccae24e1ecdcfa6d7c4acf949a3ee38f0800d25171a510d91ec982b1f
 generated_from:
     neckbeard_yaml: sha256:afd4959a9151ab1a71af789f9804029159bfe8a9873e86ccad193f65a079f4da
     app_profile: sha256:9bd3442bf7779ffcb2b2ebd2b542e1438d8ef7418d70868e6643416a521cce8a
 pins:
-    catalog: 0.2.0
+    catalog: 0.3.0
     opentofu: 1.12.6
     planner: test
     providers:
@@ -42,7 +42,7 @@ environments:
       modules:
         - name: dns-ingress
           source: catalog/aws/dns-ingress
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: name_prefix
               value: acme-bellwether-dev
@@ -71,7 +71,7 @@ environments:
               provenance: preset
         - name: postgres
           source: catalog/aws/postgres
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: backup_retention_days
               value: 3
@@ -106,7 +106,7 @@ environments:
               provenance: derived
         - name: runtime-serverless
           source: catalog/aws/runtime-serverless
-          version: 0.2.0
+          version: 0.3.0
           inputs:
             - key: cpu
               value: "1"
@@ -138,6 +138,7 @@ environments:
               provenance: derived
             - key: secret_names
               value:
+                - DATABASE_URL
                 - SECRET_KEY_BASE
                 - SMTP_PASSWORD
               provenance: derived
@@ -158,7 +159,7 @@ environments:
       modules:
         - name: dns-ingress
           source: catalog/aws/dns-ingress
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: name_prefix
               value: acme-bellwether-stg
@@ -187,7 +188,7 @@ environments:
               provenance: preset
         - name: postgres
           source: catalog/aws/postgres
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: backup_retention_days
               value: 14
@@ -222,7 +223,7 @@ environments:
               provenance: derived
         - name: runtime-serverless
           source: catalog/aws/runtime-serverless
-          version: 0.2.0
+          version: 0.3.0
           inputs:
             - key: cpu
               value: "1"
@@ -254,6 +255,7 @@ environments:
               provenance: derived
             - key: secret_names
               value:
+                - DATABASE_URL
                 - SECRET_KEY_BASE
                 - SMTP_PASSWORD
               provenance: derived
@@ -274,7 +276,7 @@ environments:
       modules:
         - name: dns-ingress
           source: catalog/aws/dns-ingress
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: name_prefix
               value: acme-bellwether-prd
@@ -303,7 +305,7 @@ environments:
               provenance: preset
         - name: postgres
           source: catalog/aws/postgres
-          version: 0.1.0
+          version: 0.2.0
           inputs:
             - key: backup_retention_days
               value: 14
@@ -341,7 +343,7 @@ environments:
               provenance: derived
         - name: runtime-serverless
           source: catalog/aws/runtime-serverless
-          version: 0.2.0
+          version: 0.3.0
           inputs:
             - key: cpu
               value: "1"
@@ -373,6 +375,7 @@ environments:
               provenance: derived
             - key: secret_names
               value:
+                - DATABASE_URL
                 - SECRET_KEY_BASE
                 - SMTP_PASSWORD
               provenance: derived
@@ -389,3 +392,4 @@ environments:
             - key: versioning
               value: true
               provenance: preset
+database_secret: DATABASE_URL

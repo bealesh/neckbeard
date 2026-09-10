@@ -57,6 +57,7 @@ var lanes = map[string]lane{
 		emitOrder: []string{"network", "dns-ingress", "runtime-serverless", "postgres", "storage", "secrets", "registry"},
 		wiring: map[string][]kv{
 			"dns-ingress": {
+				{"certificate_arn", "var.certificate_arn"},
 				{"vpc_id", "module.network.vpc_id"},
 				{"public_subnet_ids", "module.network.public_subnet_ids"},
 				{"http_services", `[for s in local.services : { name = s.name, port = s.port, health_path = s.health_path } if s.kind == "http"]`},
@@ -80,8 +81,8 @@ var lanes = map[string]lane{
 		outputs: []rootOutput{
 			{"alb_dns_name", "dns-ingress", "module.dns_ingress.alb_dns_name", "Public entry point (HTTP, M1)"},
 			{"cluster_name", "runtime-serverless", "module.runtime_serverless.cluster_name", "ECS cluster running the services"},
-			{"db_endpoint", "postgres", "module.postgres.endpoint", "PostgreSQL endpoint (credentials: RDS-managed secret)"},
-			{"db_master_user_secret_arn", "postgres", "module.postgres.master_user_secret_arn", "RDS-managed master credentials secret"},
+			{"db_endpoint", "postgres", "module.postgres.endpoint", "PostgreSQL endpoint (credentials: application connection secret)"},
+			{"db_master_user_secret_arn", "postgres", "module.postgres.master_user_secret_arn", "RDS-managed master secret, when managed rotation is enabled"},
 			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
 			{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
 		},
@@ -108,8 +109,8 @@ var lanes = map[string]lane{
 			{"cluster_name", "runtime-k8s", "module.runtime_k8s.cluster_name", "EKS cluster (delivery via Flux lands with the clusters layer)"},
 			{"cluster_endpoint", "runtime-k8s", "module.runtime_k8s.cluster_endpoint", "EKS API endpoint (public at M2; origin lockdown is a hardening roadmap item)"},
 			{"oidc_issuer", "runtime-k8s", "module.runtime_k8s.oidc_issuer", "Cluster OIDC issuer for workload identity"},
-			{"db_endpoint", "postgres", "module.postgres.endpoint", "PostgreSQL endpoint (credentials: RDS-managed secret)"},
-			{"db_master_user_secret_arn", "postgres", "module.postgres.master_user_secret_arn", "RDS-managed master credentials secret"},
+			{"db_endpoint", "postgres", "module.postgres.endpoint", "PostgreSQL endpoint (credentials: application connection secret)"},
+			{"db_master_user_secret_arn", "postgres", "module.postgres.master_user_secret_arn", "RDS-managed master secret, when managed rotation is enabled"},
 			{"bucket_name", "storage", "module.storage.bucket_name", "Application object storage"},
 			{"registry_url", "registry", "module.registry.repository_url", "Container registry (immutable tags)"},
 		},
@@ -150,6 +151,7 @@ var lanes = map[string]lane{
 				{"secret_ids", "module.secrets.secret_ids"},
 			},
 			"dns-ingress": {
+				{"hostname", "var.public_hostname"},
 				{"http_services", `[for s in local.services : { name = s.name, port = s.port, health_path = s.health_path } if s.kind == "http"]`},
 				{"service_names", "module.runtime_serverless.service_names"},
 			},
@@ -309,6 +311,7 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 		files = append(files,
 			ownership.File{Path: ".github/workflows/neckbeard-ci.yml", Content: pipeline.RenderGitHubCI(model), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: ".github/workflows/neckbeard-infra.yml", Content: pipeline.RenderGitHubInfra(model), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: ".github/workflows/neckbeard-release.yml", Content: pipeline.RenderGitHubRelease(model), Owner: ownership.OwnerGenerated},
 		)
 	case "gitlab":
 		files = append(files,
@@ -323,11 +326,12 @@ func WriteSet(bp *blueprint.Blueprint, opts Options) ([]ownership.File, error) {
 			ownership.File{Path: dir + "/backend.tf", Content: backendTF(bp.Cloud), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/providers.tf", Content: l.providers(bp, env), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/main.tf", Content: mainTF(bp, env, l, opts), Owner: ownership.OwnerGenerated},
-			ownership.File{Path: dir + "/outputs.tf", Content: outputsTF(env, l), Owner: ownership.OwnerGenerated},
+			ownership.File{Path: dir + "/outputs.tf", Content: outputsTF(bp, env, l), Owner: ownership.OwnerGenerated},
 			ownership.File{Path: dir + "/custom.tf", Content: customTFStub(env.Name), Owner: ownership.OwnerUser},
 		)
 	}
 	files = append(files, bootstrapFiles(bp, l, opts)...)
+	files = append(files, releaseFiles(bp)...)
 	if l.delivery != nil {
 		files = append(files, l.delivery(bp)...)
 	}
@@ -390,7 +394,8 @@ func azureProviders(bp *blueprint.Blueprint, env blueprint.Environment) []byte {
 	b.WriteString(requiredProviders(bp))
 	fmt.Fprintf(&b, `provider "azurerm" {
   features {}
-  subscription_id = %q
+  storage_use_azuread = true
+  subscription_id     = %q
 }
 `, env.Container)
 	return []byte(b.String())
@@ -446,6 +451,12 @@ func mainTF(bp *blueprint.Blueprint, env blueprint.Environment, l lane, opts Opt
 			continue
 		}
 		lines := []kv{{"source", strconv.Quote(moduleSource(opts, bp, mod))}}
+		if name == "postgres" {
+			lines = append(lines, kv{"manage_app_credentials", "true"}, kv{"application_password", "var.database_password"})
+		}
+		if name == "runtime-serverless" {
+			lines = append(lines, kv{"image", "var.app_image"}, kv{"environment", strconv.Quote(env.Name)})
+		}
 		for _, in := range mod.Inputs {
 			lines = append(lines, kv{in.Key, hclValue(in.Value)})
 		}
@@ -487,7 +498,7 @@ func servicesLocal(services []blueprint.Service) string {
 	return b.String()
 }
 
-func outputsTF(env blueprint.Environment, l lane) []byte {
+func outputsTF(bp *blueprint.Blueprint, env blueprint.Environment, l lane) []byte {
 	present := map[string]bool{}
 	for _, m := range env.Modules {
 		present[m.Name] = true
@@ -499,7 +510,15 @@ func outputsTF(env blueprint.Environment, l lane) []byte {
 			fmt.Fprintf(&b, "output %q {\n  description = %q\n  value       = %s\n}\n\n", c.name, c.desc, c.expr)
 		}
 	}
-	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
+	if present["secrets"] {
+		expr := map[string]string{"aws": "module.secrets.secret_arns", "gcp": "module.secrets.secret_ids", "azure": "module.secrets.secret_uris"}[bp.Cloud]
+		fmt.Fprintf(&b, "output \"secret_locations\" {\n  description = \"Secret names and locations only; values never enter infrastructure state.\"\n  value       = %s\n}\n\n", expr)
+	}
+	if present["postgres"] {
+		host := map[string]string{"aws": "module.postgres.address", "gcp": "module.postgres.private_ip", "azure": "module.postgres.fqdn"}[bp.Cloud]
+		fmt.Fprintf(&b, "output \"database\" {\n  value = {\n    host = %s\n    user = \"neckbeard\"\n    name = \"app\"\n  }\n}\n\n", host)
+	}
+	return []byte(strings.TrimRight(b.String(), "\n") + "\n" + deploymentOutput(bp, env))
 }
 
 func moduleSource(opts Options, bp *blueprint.Blueprint, mod blueprint.ModuleUsage) string {
@@ -774,7 +793,7 @@ func topologyDoc(bp *blueprint.Blueprint) []byte {
 			w("- %s\n", warning)
 		}
 	}
-	return []byte(b.String())
+	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
 }
 
 func orDash(i int) string {

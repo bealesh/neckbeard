@@ -112,7 +112,7 @@ resource "google_compute_url_map" "this" {
 
 resource "google_compute_target_http_proxy" "this" {
   name    = "${var.name_prefix}-http"
-  url_map = google_compute_url_map.this.id
+  url_map = var.hostname == null ? google_compute_url_map.this.id : google_compute_url_map.https_redirect[0].id
 }
 
 resource "google_compute_global_address" "this" {
@@ -125,4 +125,33 @@ resource "google_compute_global_forwarding_rule" "http" {
   port_range            = "80"
   target                = google_compute_target_http_proxy.this.id
   ip_address            = google_compute_global_address.this.id
+}
+
+resource "google_compute_managed_ssl_certificate" "this" {
+  count = var.hostname == null ? 0 : 1
+  name  = "${var.name_prefix}-tls"
+  managed { domains = [var.hostname] }
+}
+resource "google_compute_target_https_proxy" "this" {
+  count            = var.hostname == null ? 0 : 1
+  name             = "${var.name_prefix}-https"
+  url_map          = google_compute_url_map.this.id
+  ssl_certificates = [google_compute_managed_ssl_certificate.this[0].id]
+}
+resource "google_compute_global_forwarding_rule" "https" {
+  count                 = var.hostname == null ? 0 : 1
+  name                  = "${var.name_prefix}-https"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  port_range            = "443"
+  target                = google_compute_target_https_proxy.this[0].id
+  ip_address            = google_compute_global_address.this.id
+}
+resource "google_compute_url_map" "https_redirect" {
+  count = var.hostname == null ? 0 : 1
+  name  = "${var.name_prefix}-https-redirect"
+  default_url_redirect {
+    https_redirect         = true
+    strip_query            = false
+    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+  }
 }

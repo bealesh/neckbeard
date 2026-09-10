@@ -17,6 +17,7 @@ import (
 // renderer needs, nothing it must infer.
 type Model struct {
 	App           string
+	Runtime       string
 	Cloud         string // drives the federation and registry-login steps
 	DefaultBranch string
 	Region        string
@@ -82,6 +83,7 @@ func Build(bp *blueprint.Blueprint) (Model, error) {
 	return Model{
 		App:           bp.App,
 		Cloud:         bp.Cloud,
+		Runtime:       bp.Runtime,
 		DefaultBranch: "main",
 		Region:        bp.Region,
 		TofuVersion:   bp.Pins.OpenTofu,

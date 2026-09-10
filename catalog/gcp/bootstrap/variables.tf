@@ -1,6 +1,10 @@
 variable "name_prefix" {
   description = "Resource name prefix: {org}-{app}-{env}."
   type        = string
+  validation {
+    condition     = length(var.name_prefix) <= 25
+    error_message = "name_prefix must be at most 25 characters so plan and apply service account IDs stay distinct; shorten org or app."
+  }
 }
 
 variable "region" {

@@ -184,32 +184,26 @@ func TestK8sLaneRendersDeliveryLayer(t *testing.T) {
 		"clusters/base/apps/ingress-web.yaml",
 		"clusters/base/apps/cronjob-nightly-report.yaml",
 		"clusters/dev/apps.yaml",
-		"clusters/dev/image-automation.yaml",
 		"clusters/prd/apps/kustomization.yaml",
 	} {
 		if _, ok := byPath[p]; !ok {
 			t.Errorf("missing delivery file %s", p)
 		}
 	}
-	// Image automation is dev-only: stg/prd move by promotion PR (§11.2).
-	for _, env := range []string{"stg", "prd"} {
+	for _, env := range []string{"dev", "stg", "prd"} {
 		if _, ok := byPath["clusters/"+env+"/image-automation.yaml"]; ok {
-			t.Errorf("%s must not have image automation", env)
+			t.Errorf("%s must use the CI-built digest, not registry sorting", env)
 		}
-	}
-	// Setter markers live in the DEV overlay (the automation's update path), not
-	// the base manifests (review finding 2026-09-08).
-	if strings.Contains(byPath["clusters/base/apps/deployment-web.yaml"], `$imagepolicy`) {
-		t.Error("base manifests must not carry image-policy markers (invisible to the automation's path)")
-	}
-	if !strings.Contains(byPath["clusters/dev/apps/kustomization.yaml"], `$imagepolicy`) {
-		t.Error("the dev overlay images pin needs the setter markers")
-	}
-	if strings.Contains(byPath["clusters/stg/apps/kustomization.yaml"], `$imagepolicy`) {
-		t.Error("stg/prd move by promotion PR — no automation markers")
-	}
-	if !strings.Contains(byPath["clusters/dev/apps/kustomization.yaml"], "newTag: bootstrap-pending") {
-		t.Error("env overlays must pin the placeholder tag for the release flow to own")
+		if !strings.Contains(byPath["clusters/"+env+"/apps.yaml"], "path: ./releases/"+env) {
+			t.Errorf("%s does not reconcile the release record", env)
+		}
+		if strings.Contains(byPath["clusters/"+env+"/apps.yaml"], "name: flux-system") {
+			t.Errorf("%s can bypass approval by following the main source", env)
+		}
+		source := byPath["clusters/"+env+"/release-source.yaml"]
+		if !strings.Contains(source, "ssa: IfNotPresent") || !strings.Contains(source, `commit: "0000000000000000000000000000000000000000"`) {
+			t.Errorf("%s release source is not initially blocked and CI-owned", env)
+		}
 	}
 	// The ExternalSecret lives in the apps layer (namespace cycle finding).
 	if _, ok := byPath["clusters/dev/apps/external-secret.yaml"]; !ok {
@@ -242,7 +236,7 @@ func TestGitCatalogSourcePinsRef(t *testing.T) {
 	}
 	for _, f := range ws {
 		if f.Path == "infra/envs/dev/main.tf" {
-			if !strings.Contains(string(f.Content), `git::https://github.com/bealesh/neckbeard.git//catalog/aws/network?ref=catalog-v0.2.0`) {
+			if !strings.Contains(string(f.Content), `git::https://github.com/bealesh/neckbeard.git//catalog/aws/network?ref=catalog-v0.3.0`) {
 				t.Error("git module sources must pin ref=catalog-v<version>")
 			}
 		}

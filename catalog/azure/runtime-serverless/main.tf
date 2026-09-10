@@ -60,6 +60,11 @@ resource "azurerm_container_app_environment" "this" {
   }
 
   lifecycle {
+    # Azure chooses this managed resource-group name when it is omitted. The
+    # provider reads it back as an optional, replacement-triggering value; retain
+    # Azure's choice so a second apply does not replace the entire environment.
+    ignore_changes = [infrastructure_resource_group_name]
+
     precondition {
       condition = (
         (local.cpu_cores == 0.5 && var.memory_gb == 1) ||
@@ -72,12 +77,11 @@ resource "azurerm_container_app_environment" "this" {
 }
 
 # http and worker services. Secret wiring is by Key Vault REFERENCE only: the app's
-# system-assigned identity reads the versionless secret URI at runtime — no secret
+# user-assigned identity reads the versionless secret URI at runtime — no secret
 # value ever passes through neckbeard or OpenTofu state (§10.1). Honest ordering
 # caveat: Container Apps resolves each referenced secret when the app is created,
-# so the FIRST apply of an environment fails until operators have set the secret
-# values out-of-band (the runbook makes setting them a pre-apply step). Static
-# validation and planning are unaffected.
+# so operators seed values before the first runtime apply. Identity and access
+# grants are dependencies of the apps/jobs, avoiding a creation-time RBAC cycle.
 
 # ACR pulls use a dedicated user-assigned identity with AcrPull, created before
 # any revision references a private image — a system identity cannot, because its
@@ -96,6 +100,7 @@ resource "azurerm_role_assignment" "acr_pull" {
 }
 
 resource "azurerm_container_app" "this" {
+  depends_on                   = [azurerm_role_assignment.acr_pull, azurerm_role_assignment.app_kv, azurerm_role_assignment.job_kv]
   for_each                     = local.app_services
   name                         = local.app_name[each.key]
   container_app_environment_id = azurerm_container_app_environment.this.id
@@ -105,7 +110,7 @@ resource "azurerm_container_app" "this" {
 
   identity {
     type         = "SystemAssigned, UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.acr_pull.id]
+    identity_ids = [azurerm_user_assigned_identity.acr_pull.id, azurerm_user_assigned_identity.runtime_access[each.key].id]
   }
 
   registry {
@@ -117,7 +122,7 @@ resource "azurerm_container_app" "this" {
     for_each = var.secret_uris
     content {
       name                = local.ca_secret_name[secret.key]
-      identity            = "System"
+      identity            = azurerm_user_assigned_identity.runtime_access[each.key].id
       key_vault_secret_id = secret.value
     }
   }
@@ -154,6 +159,13 @@ resource "azurerm_container_app" "this" {
       args   = length(each.value.args) > 0 ? each.value.args : null
 
       dynamic "env" {
+        for_each = contains(keys(var.secret_uris), "APP_ENV") ? [] : [1]
+        content {
+          name  = "APP_ENV"
+          value = var.environment
+        }
+      }
+      dynamic "env" {
         for_each = var.secret_uris
         content {
           name        = env.key
@@ -182,6 +194,7 @@ resource "azurerm_container_app" "this" {
 # Cron services: Container App Jobs. Azure accepts standard 5-field cron
 # expressions directly — no translation layer, unlike the AWS lane (§3.3).
 resource "azurerm_container_app_job" "cron" {
+  depends_on                   = [azurerm_role_assignment.acr_pull, azurerm_role_assignment.app_kv, azurerm_role_assignment.job_kv]
   for_each                     = local.cron_services
   name                         = local.app_name[each.key]
   location                     = var.region
@@ -200,7 +213,7 @@ resource "azurerm_container_app_job" "cron" {
 
   identity {
     type         = "SystemAssigned, UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.acr_pull.id]
+    identity_ids = [azurerm_user_assigned_identity.acr_pull.id, azurerm_user_assigned_identity.runtime_access[each.key].id]
   }
 
   registry {
@@ -212,7 +225,7 @@ resource "azurerm_container_app_job" "cron" {
     for_each = var.secret_uris
     content {
       name                = local.ca_secret_name[secret.key]
-      identity            = "System"
+      identity            = azurerm_user_assigned_identity.runtime_access[each.key].id
       key_vault_secret_id = secret.value
     }
   }
@@ -225,6 +238,13 @@ resource "azurerm_container_app_job" "cron" {
       memory = local.memory
       args   = length(each.value.args) > 0 ? each.value.args : null
 
+      dynamic "env" {
+        for_each = contains(keys(var.secret_uris), "APP_ENV") ? [] : [1]
+        content {
+          name  = "APP_ENV"
+          value = var.environment
+        }
+      }
       dynamic "env" {
         for_each = var.secret_uris
         content {
@@ -245,8 +265,8 @@ resource "azurerm_container_app_job" "cron" {
   }
 }
 
-# Each app/job reads its Key Vault references with its own system-assigned
-# identity: "Key Vault Secrets User" scoped to the single vault. Gated on
+# Each app/job's user-assigned identity exists and is granted access before
+# creation. Existing role-assignment addresses are retained. Access: "Key Vault Secrets User" scoped to the single vault. Gated on
 # secret_uris rather than key_vault_id because the map's KEYS are known at plan
 # time (they come from declared secret names) while key_vault_id is an apply-time
 # module output — a for_each on it would fail `tofu plan` on a fresh environment.
@@ -254,12 +274,20 @@ resource "azurerm_role_assignment" "app_kv" {
   for_each             = length(var.secret_uris) > 0 ? local.app_services : {}
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_container_app.this[each.key].identity[0].principal_id
+  principal_id         = azurerm_user_assigned_identity.runtime_access[each.key].principal_id
+}
+
+
+resource "azurerm_user_assigned_identity" "runtime_access" {
+  for_each            = merge(local.app_services, local.cron_services)
+  name                = "${var.name_prefix}-${each.key}-access"
+  location            = var.region
+  resource_group_name = var.resource_group_name
 }
 
 resource "azurerm_role_assignment" "job_kv" {
   for_each             = length(var.secret_uris) > 0 ? local.cron_services : {}
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_container_app_job.cron[each.key].identity[0].principal_id
+  principal_id         = azurerm_user_assigned_identity.runtime_access[each.key].principal_id
 }

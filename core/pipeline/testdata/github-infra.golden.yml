@@ -6,10 +6,10 @@ name: neckbeard-infra
 
 on:
   pull_request:
-    paths: ["infra/**", ".neckbeard/catalog/**", ".checkov.yaml"]
+    paths: ["infra/**", ".neckbeard/catalog/**", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
   push:
     branches: [main]
-    paths: ["infra/**", ".neckbeard/catalog/**", ".checkov.yaml"]
+    paths: ["infra/**", ".neckbeard/catalog/**", ".checkov.yaml", ".neckbeard/release/**", "releases/*.tfvars.json"]
 
 permissions:
   contents: read
@@ -35,15 +35,23 @@ jobs:
   infra-dev:
     needs: [policy]
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ github.event_name == 'pull_request' && 'dev-plan' || 'dev' }}
+    concurrency:
+      group: neckbeard-dev
+      cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
       - uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: 1.12.6 # pinned by the blueprint
+          tofu_wrapper: false
       - name: Static validate (V0)
         run: |
           tofu -chdir=infra/envs/dev init -backend=false -input=false
@@ -61,23 +69,33 @@ jobs:
             exit 0
           fi
           tofu -chdir=infra/envs/dev init -reconfigure -input=false -backend-config=backend.hcl
-          tofu -chdir=infra/envs/dev plan -input=false -out=tfplan
+          plan_flags=(); if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then plan_flags=(-read-only); fi
+          cd .neckbeard/release
+          GOWORK=off go run . infra-plan -root ../.. -env dev "${plan_flags[@]}"
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            tofu -chdir=infra/envs/dev apply -input=false tfplan
+            GOWORK=off go run . infra-apply -root ../.. -env dev
           fi
 
   infra-stg:
     needs: [policy]
     runs-on: ubuntu-latest
-    environment: stg
+    environment: ${{ github.event_name == 'pull_request' && 'stg-plan' || 'stg' }}
+    concurrency:
+      group: neckbeard-stg
+      cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
       - uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: 1.12.6 # pinned by the blueprint
+          tofu_wrapper: false
       - name: Static validate (V0)
         run: |
           tofu -chdir=infra/envs/stg init -backend=false -input=false
@@ -95,23 +113,33 @@ jobs:
             exit 0
           fi
           tofu -chdir=infra/envs/stg init -reconfigure -input=false -backend-config=backend.hcl
-          tofu -chdir=infra/envs/stg plan -input=false -out=tfplan
+          plan_flags=(); if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then plan_flags=(-read-only); fi
+          cd .neckbeard/release
+          GOWORK=off go run . infra-plan -root ../.. -env stg "${plan_flags[@]}"
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            tofu -chdir=infra/envs/stg apply -input=false tfplan
+            GOWORK=off go run . infra-apply -root ../.. -env stg
           fi
 
   infra-prd:
     needs: [policy]
     runs-on: ubuntu-latest
-    environment: prd
+    environment: ${{ github.event_name == 'pull_request' && 'prd-plan' || 'prd' }}
+    concurrency:
+      group: neckbeard-prd
+      cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
       - uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: 1.12.6 # pinned by the blueprint
+          tofu_wrapper: false
       - name: Static validate (V0)
         run: |
           tofu -chdir=infra/envs/prd init -backend=false -input=false
@@ -129,7 +157,9 @@ jobs:
             exit 0
           fi
           tofu -chdir=infra/envs/prd init -reconfigure -input=false -backend-config=backend.hcl
-          tofu -chdir=infra/envs/prd plan -input=false -out=tfplan
+          plan_flags=(); if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then plan_flags=(-read-only); fi
+          cd .neckbeard/release
+          GOWORK=off go run . infra-plan -root ../.. -env prd "${plan_flags[@]}"
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            tofu -chdir=infra/envs/prd apply -input=false tfplan
+            GOWORK=off go run . infra-apply -root ../.. -env prd
           fi

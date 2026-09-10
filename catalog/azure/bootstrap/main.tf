@@ -43,6 +43,7 @@ resource "azurerm_storage_account" "tfstate" {
 }
 
 resource "azurerm_storage_container" "tfstate" {
+  depends_on            = [azurerm_role_assignment.state_rw_deployer]
   name                  = "tfstate"
   storage_account_id    = azurerm_storage_account.tfstate.id
   container_access_type = "private"
@@ -51,17 +52,18 @@ resource "azurerm_storage_container" "tfstate" {
 # --- 2. federated CI identities (plan + apply) ---
 
 locals {
-  github = var.vcs == "github"
-  issuer = local.github ? "https://token.actions.githubusercontent.com" : "https://gitlab.com"
-  # GitHub jobs bind an environment; GitLab subjects pin the default branch.
-  # Entra federated credentials are EXACT-match (no wildcards), so GitLab
-  # merge-request pipelines cannot federate at all: MR runs are validate-only on
-  # Azure, stated in the generated pipeline (review finding, 2026-09-08).
-  # Roadmap: Entra flexible federated identity credentials (claims matching)
-  # once the azuread provider exposes them.
-  subject  = local.github ? "repo:${var.repo}:environment:${var.environment}" : "project_path:${var.repo}:ref_type:branch:ref:main"
-  audience = local.github ? "api://AzureADTokenExchange" : "https://gitlab.com"
+  github                = var.vcs == "github"
+  github_subject_prefix = coalesce(var.github_subject_prefix, "repo:${var.repo}")
+  issuer                = local.github ? "https://token.actions.githubusercontent.com" : "https://gitlab.com"
+  tier                  = { dev = "development", stg = "staging", prd = "production" }[var.environment]
+  # GitHub uses repository/environment/ref; GitLab includes branch protection,
+  # deployment tier, and environment protection in its customized subject.
+  gitlab_suffix = ":ref_protected:true:deployment_tier:${local.tier}:environment_protected:${var.environment == "prd" ? "true" : "false"}"
+  apply_subject = local.github ? "${local.github_subject_prefix}:environment:${var.environment}:ref:refs/heads/main" : "project_path:${var.repo}:ref_type:branch:ref:main${local.gitlab_suffix}"
+  plan_subject  = local.github ? "${local.github_subject_prefix}:environment:${var.environment}-plan:ref:*" : "project_path:${var.repo}:ref_type:*:ref:*:ref_protected:*:deployment_tier:${local.tier}:environment_protected:*"
+  audience      = local.github ? "api://AzureADTokenExchange" : "https://gitlab.com"
 }
+
 
 resource "azuread_application" "ci" {
   for_each     = toset(["plan", "apply"])
@@ -79,7 +81,7 @@ resource "azuread_application_federated_identity_credential" "ci" {
   display_name   = "${var.vcs}-${var.environment}"
   issuer         = local.issuer
   audiences      = [local.audience]
-  subject        = local.subject
+  subject        = local.apply_subject
 }
 
 # --- 3. role assignments ---
@@ -95,7 +97,7 @@ resource "azurerm_role_assignment" "plan_reader" {
 resource "azurerm_role_assignment" "state_rw" {
   for_each             = azuread_service_principal.ci
   scope                = azurerm_storage_account.tfstate.id
-  role_definition_name = "Storage Blob Data Contributor"
+  role_definition_name = each.key == "plan" ? "Storage Blob Data Reader" : "Storage Blob Data Contributor"
   principal_id         = each.value.object_id
 }
 
@@ -118,4 +120,14 @@ resource "azurerm_role_assignment" "apply" {
   scope                = data.azurerm_subscription.current.id
   role_definition_name = each.value
   principal_id         = azuread_service_principal.ci["apply"].object_id
+}
+
+# Exact main credentials retain their original addresses. This additional read-
+# only credential supports PR/MR refs without widening the apply identity.
+resource "azuread_application_flexible_federated_identity_credential" "plan" {
+  application_id             = azuread_application.ci["plan"].id
+  display_name               = "${var.vcs}-${var.environment}-plan"
+  issuer                     = local.issuer
+  audience                   = local.audience
+  claims_matching_expression = "claims['sub'] matches '${local.plan_subject}'"
 }

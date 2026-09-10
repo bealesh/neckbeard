@@ -31,3 +31,9 @@ variable "waf_enabled" {
   description = "Attach a WAFv2 web ACL (AWS managed common rule set) to the load balancer."
   type        = bool
 }
+
+variable "certificate_arn" {
+  description = "Validated ACM certificate in this region. HTTP redirects to HTTPS when set."
+  type        = string
+  default     = null
+}

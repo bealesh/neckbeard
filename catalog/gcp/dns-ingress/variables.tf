@@ -26,3 +26,9 @@ variable "waf_enabled" {
   description = "Attach a Cloud Armor policy (preconfigured SQLi/XSS rules) to the backends."
   type        = bool
 }
+
+variable "hostname" {
+  description = "Public hostname pointing at the load balancer; enables Google-managed HTTPS."
+  type        = string
+  default     = null
+}

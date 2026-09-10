@@ -1,7 +1,6 @@
-# Managed PostgreSQL (Cloud SQL) on private IP only. No database credential is
-# created here: the app's DATABASE_URL secret is operator-provided (DESIGN §8) —
-# unlike RDS there is no provider-managed master password that stays out of state,
-# an honest per-cloud difference (§3.3).
+# Managed PostgreSQL (Cloud SQL) on private IP only. Generated roots opt into a
+# database user whose password arrives through an ephemeral, write-only input.
+# Direct module consumers retain operator-managed authentication by default.
 
 locals {
   # Shared-core tiers exist for Postgres and fit the smallest presets; medium is a
@@ -20,6 +19,7 @@ resource "google_sql_database_instance" "this" {
   deletion_protection = var.deletion_protection
 
   settings {
+    edition           = "ENTERPRISE"
     tier              = local.sql_tier
     availability_type = var.multi_zone ? "REGIONAL" : "ZONAL"
     disk_autoresize   = true
@@ -82,6 +82,7 @@ resource "google_sql_database_instance" "replica" {
   deletion_protection  = false
 
   settings {
+    edition         = "ENTERPRISE"
     tier            = local.sql_tier
     disk_autoresize = true
 
@@ -108,4 +109,12 @@ resource "google_sql_database_instance" "replica" {
       value = "on"
     }
   }
+}
+
+resource "google_sql_user" "app" {
+  count               = var.manage_app_credentials ? 1 : 0
+  name                = "neckbeard"
+  instance            = google_sql_database_instance.this.name
+  password_wo         = var.application_password
+  password_wo_version = 1
 }

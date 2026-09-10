@@ -62,3 +62,16 @@ variable "private_dns_zone_id" {
   description = "Private DNS zone for the server's FQDN (wired from the network module)."
   type        = string
 }
+
+variable "manage_app_credentials" {
+  description = "Provision password authentication using an ephemeral, write-only input."
+  type        = bool
+  default     = false
+}
+variable "application_password" {
+  description = "Fetched from the cloud secret store by the deployment operator; never persisted in plans/state."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  default     = null
+}

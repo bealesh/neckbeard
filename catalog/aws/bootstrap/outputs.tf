@@ -2,6 +2,11 @@ output "state_bucket" {
   value = aws_s3_bucket.tfstate.bucket
 }
 
+output "release_store" {
+  description = "Versioned storage for verified deployment and rollback receipts."
+  value       = "s3://${aws_s3_bucket.tfstate.bucket}"
+}
+
 output "backend_hcl" {
   description = "Contents for infra/envs/<env>/backend.hcl (the pipelines init with it)."
   value       = <<-EOT
@@ -26,4 +31,8 @@ output "ci_variables" {
     "NECKBEARD_AWS_PLAN_ROLE_${upper(var.environment)}"  = aws_iam_role.plan.arn
     "NECKBEARD_AWS_APPLY_ROLE_${upper(var.environment)}" = aws_iam_role.apply.arn
   }
+}
+
+output "github_subject_prefix" {
+  value = local.github ? local.github_subject_prefix : null
 }

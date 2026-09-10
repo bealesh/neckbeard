@@ -59,3 +59,17 @@ variable "allowed_security_group_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "manage_app_credentials" {
+  description = "Use an application-owned cloud password through a write-only input instead of RDS-managed rotation."
+  type        = bool
+  default     = false
+}
+
+variable "application_password" {
+  description = "Cloud-stored application password; never persisted in plans/state."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  default     = null
+}

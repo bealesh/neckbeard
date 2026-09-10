@@ -1,7 +1,6 @@
-# Managed PostgreSQL (RDS). The master password is generated and stored by RDS in
-# Secrets Manager (manage_master_user_password): no credential passes through
-# neckbeard or version control. PITR is a function of automated backups: retention
-# > 0 enables it, enforced below when the preset demands pitr.
+# Managed PostgreSQL (RDS). Direct consumers default to RDS-managed rotating
+# credentials. Generated deployments opt into an ephemeral, write-only password
+# held in the application's cloud connection secret. No password enters state.
 
 locals {
   rds_instance_class = {
@@ -46,8 +45,10 @@ resource "aws_db_instance" "this" {
   max_allocated_storage       = 100
   storage_encrypted           = true
   db_name                     = "app"
-  username                    = "app"
-  manage_master_user_password = true
+  username                    = var.manage_app_credentials ? "neckbeard" : "app"
+  manage_master_user_password = var.manage_app_credentials ? null : true
+  password_wo                 = var.manage_app_credentials ? var.application_password : null
+  password_wo_version         = var.manage_app_credentials ? 1 : null
   multi_az                    = var.multi_zone
   backup_retention_period     = var.backup_retention_days
   deletion_protection         = var.deletion_protection

@@ -14,7 +14,7 @@ func RenderGitLab(m Model) []byte {
 	w := func(f string, a ...any) { fmt.Fprintf(&b, f+"\n", a...) }
 
 	w("%s", generatedYAMLHeader)
-	w("stages: [test, build, infra]")
+	w("stages: [test, build, infra, release]")
 	w("")
 	w("variables:")
 	w("  AWS_REGION: %s", m.Region)
@@ -44,10 +44,12 @@ func RenderGitLab(m Model) []byte {
 	w("    name: bridgecrew/checkov:3.3.10")
 	w("    entrypoint: [\"\"]")
 	w("  rules:")
+	w("    - if: $NECKBEARD_RELEASE_ENV")
+	w("      when: never")
 	w("    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"")
-	w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
+	w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\", \".neckbeard/release/**\", \"releases/*.tfvars.json\"]")
 	w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
-	w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
+	w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\", \".neckbeard/release/**\", \"releases/*.tfvars.json\"]")
 	w("  script:")
 	for _, env := range m.Envs {
 		w("    - checkov -d infra/envs/%s --quiet --compact --framework terraform --config-file .checkov.yaml", env)
@@ -60,13 +62,17 @@ func RenderGitLab(m Model) []byte {
 	w("  image: docker:27")
 	w("  services: [\"docker:27-dind\"]")
 	w("  <<: *oidc")
-	w("  environment: dev")
+	w("  environment:")
+	w("    name: dev")
+	w("    deployment_tier: development")
 	w("  rules:")
+	w("    - if: $NECKBEARD_RELEASE_ENV")
+	w("      when: never")
 	w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
 	w("  variables:")
 	w("    REGISTRY: $%s_DEV", VarRegistry)
 	w("  script:")
-	w("    - docker build -f %s -t \"neckbeard-build:$CI_COMMIT_SHA\" .", shellQuote(m.Dockerfile))
+	w("    - docker build --platform linux/amd64 --provenance=false -f %s -t \"neckbeard-build:$CI_COMMIT_SHA\" .", shellQuote(m.Dockerfile))
 	w("    # Scan gate: HIGH/CRITICAL block (DESIGN §10.1)")
 	w("    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity HIGH,CRITICAL --exit-code 1 \"neckbeard-build:$CI_COMMIT_SHA\"")
 	w("    - |")
@@ -75,34 +81,42 @@ func RenderGitLab(m Model) []byte {
 	w("        exit 0")
 	w("      fi")
 	w("      apk add --no-cache curl jq >/dev/null")
+	w("      umask 077")
 	for _, line := range gitlabRegistryLogin(m) {
 		w("      %s", line)
 	}
 	w("      docker tag \"neckbeard-build:$CI_COMMIT_SHA\" \"$REGISTRY:$CI_COMMIT_SHA\"")
 	w("      docker push \"$REGISTRY:$CI_COMMIT_SHA\"")
-	w("      echo \"Pushed digest:\"")
-	w("      docker inspect --format='{{index .RepoDigests 0}}' \"$REGISTRY:$CI_COMMIT_SHA\"")
+	w("      docker inspect --format='{{index .RepoDigests 0}}' \"$REGISTRY:$CI_COMMIT_SHA\" > built-image.txt")
+	w("  artifacts:")
+	w("    name: built-image-$CI_COMMIT_SHA")
+	w("    paths: [built-image.txt]")
+	w("    expire_in: 90 days")
 	w("")
 	for _, env := range m.Envs {
 		w("infra-%s:", env)
 		w("  stage: infra")
-		w("  image:")
-		w("    name: ghcr.io/opentofu/opentofu:%s # pinned by the blueprint", m.TofuVersion)
-		w("    entrypoint: [\"\"]")
+		w("  image: golang:1.27.1-bookworm")
 		w("  <<: *oidc")
-		w("  environment: %s", env)
+		w("  resource_group: neckbeard-%s", env)
+		w("  environment:")
+		w("    name: %s", env)
+		w("    deployment_tier: %s", map[string]string{"dev": "development", "stg": "staging", "prd": "production"}[env])
 		w("  rules:")
+		w("    - if: $NECKBEARD_RELEASE_ENV")
+		w("      when: never")
 		w("    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"")
-		w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
+		w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\", \".neckbeard/release/**\", \"releases/*.tfvars.json\"]")
 		if env == "prd" {
 			w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
-			w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
+			w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\", \".neckbeard/release/**\", \"releases/*.tfvars.json\"]")
 			w("      when: manual # prd gate: deployment approvals on Premium/Ultimate; protected branch otherwise (§11.3)")
 		} else {
 			w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH")
-			w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\"]")
+			w("      changes: [\"infra/**/*\", \".neckbeard/catalog/**/*\", \".checkov.yaml\", \".neckbeard/release/**\", \"releases/*.tfvars.json\"]")
 		}
 		w("  script:")
+		w("    - bash .neckbeard/install-release-tools.sh")
 		w("    - tofu -chdir=infra/envs/%s init -backend=false -input=false", env)
 		w("    - tofu -chdir=infra/envs/%s validate", env)
 		w("    - |")
@@ -110,28 +124,85 @@ func RenderGitLab(m Model) []byte {
 		w("        echo \"bootstrap pending for %s (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED\"", env)
 		w("        exit 0")
 		w("      fi")
-		if m.Cloud == "azure" {
-			w("      if [ \"$CI_PIPELINE_SOURCE\" = \"merge_request_event\" ]; then")
-			w("        echo \"azure + gitlab: Entra federated credentials are exact-match (no wildcard subjects), so merge-request pipelines cannot federate — validate-only run; plan NOT EXERCISED (docs/bootstrap.md)\"")
+		if m.Runtime == "serverless-containers" {
+			w("      if [ ! -e releases/%s.json ] && [ ! -e releases/%s.tfvars.json ]; then", env, env)
+			w("        echo \"first image pending for %s — pin the successful build artifact; plan/apply NOT EXERCISED\"", env)
 			w("        exit 0")
 			w("      fi")
 		}
+		w("      umask 077")
 		for _, line := range gitlabInfraAuth(m, env) {
 			w("      %s", line)
 		}
+		for _, line := range gitlabCloudLogin(m) {
+			w("      %s", line)
+		}
 		w("      tofu -chdir=infra/envs/%s init -reconfigure -input=false -backend-config=backend.hcl", env)
-		w("      tofu -chdir=infra/envs/%s plan -input=false -out=tfplan", env)
+		w("      plan_flags=(); if [ \"$CI_PIPELINE_SOURCE\" = \"merge_request_event\" ]; then plan_flags=(-read-only); fi")
+		w("      cd .neckbeard/release")
+		w("      GOWORK=off go run . infra-plan -root ../.. -env %s \"${plan_flags[@]}\"", env)
 		w("      if [ \"$CI_COMMIT_BRANCH\" = \"$CI_DEFAULT_BRANCH\" ]; then")
-		w("        tofu -chdir=infra/envs/%s apply -input=false tfplan", env)
+		w("        GOWORK=off go run . infra-apply -root ../.. -env %s", env)
 		w("      fi")
 		w("")
 	}
+	for _, env := range m.Envs {
+		w("release-%s:", env)
+		w("  stage: release")
+		w("  image: golang:1.27.1-bookworm")
+		w("  needs: [test]")
+		w("  <<: *oidc")
+		w("  resource_group: neckbeard-%s", env)
+		w("  environment:")
+		w("    name: %s", env)
+		w("    deployment_tier: %s", map[string]string{"dev": "development", "stg": "staging", "prd": "production"}[env])
+		w("  rules:")
+		w("    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $NECKBEARD_RELEASE_ENV == \"%s\"", env)
+		w("      when: manual")
+		w("  allow_failure: false")
+		w("  script:")
+		w("    - bash .neckbeard/install-release-tools.sh")
+		w("    - |")
+		w("      umask 077")
+		for _, line := range gitlabInfraAuth(m, env) {
+			w("      %s", line)
+		}
+		for _, line := range gitlabCloudLogin(m) {
+			w("      %s", line)
+		}
+		w("      tofu -chdir=infra/envs/%s init -input=false -backend-config=backend.hcl", env)
+		w("      cd .neckbeard/release")
+		w("      GOWORK=off go run . restore-receipts -root ../.. -env %s", env)
+		w("      GOWORK=off go run . stage -root ../.. -env %s", env)
+		w("      GOWORK=off go run . deploy -root ../.. -env %s", env)
+		w("      GOWORK=off go run . save-receipts -root ../.. -env %s", env)
+		w("  artifacts:")
+		w("    name: deployment-%s", env)
+		w("    expire_in: 90 days")
+		w("    paths:")
+		w("      - .neckbeard/deploy/%s.receipt.json", env)
+		w("      - .neckbeard/deploy/%s.previous.json", env)
+		w("")
+	}
+
 	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
 }
 
 func gitlabAudience(m Model) string {
 	// Matches what the bootstrap modules configure as the accepted audience.
 	return "https://gitlab.com"
+}
+
+// Invoke the installed Azure CLI in-process: its federated token parameter has
+// no stdin form, and expanding the token into the shell command exposes argv.
+func gitlabCloudLogin(m Model) []string {
+	switch m.Cloud {
+	case "gcp":
+		return []string{`gcloud auth login --cred-file="$GOOGLE_APPLICATION_CREDENTIALS" --quiet`}
+	case "azure":
+		return []string{`/opt/neckbeard-azure/bin/python -c 'import os,sys; from azure.cli.core import get_default_cli; sys.exit(get_default_cli().invoke(["login", "--service-principal", "--username", os.environ["ARM_CLIENT_ID"], "--tenant", os.environ["ARM_TENANT_ID"], "--federated-token", os.environ["NECKBEARD_OIDC_TOKEN"], "--output", "none"]))'`}
+	}
+	return nil
 }
 
 // gitlabInfraAuth exports the credentials OpenTofu's provider + backend read,
