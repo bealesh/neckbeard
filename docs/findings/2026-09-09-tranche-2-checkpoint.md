@@ -1,5 +1,9 @@
 # Tranche two checkpoint — September 9, 2026
 
+The work recorded below was subsequently committed as `aa127b7` on September 10.
+Descriptions of uncommitted work are historical. See the [launch plan](../launch-plan.md)
+for the remaining acceptance gates; this checkpoint is not a completed release.
+
 Resumed after the user's pause. Work is uncommitted on `feat/tranche-2-deployment`,
 based on merged main `61ba2916ff31aa23aaa0859523e94f7f4cf35411`. This is an
 implementation checkpoint, **not a completed tranche or release**.
