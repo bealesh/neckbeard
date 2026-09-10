@@ -28,7 +28,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-const version = "0.1.0"
+var version = "0.1.0" // overridden with -ldflags=-X for release identity tests
 
 func main() {
 	if len(os.Args) < 2 {

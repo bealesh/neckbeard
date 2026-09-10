@@ -76,15 +76,24 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 	}
 	slices.SortFunc(services, func(a, b blueprint.Service) int { return strings.Compare(a.Name, b.Name) })
 
-	// The secrets module provisions named secret containers (names only — values are
-	// set out-of-band, never by neckbeard): the profile's declared secrets plus one
-	// connection secret per referenced external service.
+	// The blueprint contains secret names only. Database setup fills
+	// its connection secret later, outside OpenTofu and version control.
 	secretNames := map[string]bool{}
 	for _, s := range prof.Secrets {
 		secretNames[s.Name] = true
 	}
 	for _, r := range refs {
 		secretNames[r.SecretName] = true
+	}
+	databaseSecret := ""
+	for _, need := range prof.Needs {
+		if need.Mode == "provision" && need.Capability == "postgres" {
+			databaseSecret = need.SecretName
+			if databaseSecret == "" {
+				databaseSecret = "DATABASE_URL"
+			}
+			secretNames[databaseSecret] = true
+		}
 	}
 
 	var envs []blueprint.Environment
@@ -96,6 +105,26 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 				return nil, fmt.Errorf("catalog cloud %q has no module %q required by this plan", cfg.Cloud, modName)
 			}
 			inputs := resolveInputs(cfg, tier, in.Presets, envName, modName, mod)
+			if cfg.Cloud == "aws" && modName == "network" && (slices.Contains(moduleNames, "dns-ingress") || slices.Contains(moduleNames, "postgres") || cfg.Runtime == "kubernetes") {
+				for i, input := range inputs {
+					if input.Key == "zones" && fmt.Sprint(input.Value) == "1" {
+						if input.Provenance == "override-supported" {
+							return nil, fmt.Errorf("AWS ALB, RDS and EKS require at least two availability zones; remove the zones: 1 override")
+						}
+						inputs[i] = blueprint.Input{Key: "zones", Value: 2, Provenance: "derived"}
+					}
+				}
+			}
+			if cfg.Cloud == "gcp" && modName == "runtime-serverless" {
+				for i, input := range inputs {
+					if input.Key == "cpu" && fmt.Sprint(input.Value) == "0.5" {
+						if input.Provenance == "override-supported" {
+							return nil, fmt.Errorf("this Cloud Run deployment topology requires at least 1 vCPU")
+						}
+						inputs[i] = blueprint.Input{Key: "cpu", Value: "1", Provenance: "derived"}
+					}
+				}
+			}
 			if modName == "secrets" && len(secretNames) > 0 {
 				inputs = insertInput(inputs, blueprint.Input{
 					Key: "secret_names", Value: slices.Sorted(maps.Keys(secretNames)), Provenance: "derived",
@@ -129,18 +158,19 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 			Planner:       in.PlannerVersion,
 			Providers:     providerPins(cloud),
 		},
-		App:          cfg.App,
-		Org:          cfg.Org,
-		Cloud:        cfg.Cloud,
-		Region:       cfg.Region,
-		Runtime:      cfg.Runtime,
-		VCS:          cfg.VCS,
-		Repo:         cfg.Repo,
-		Tier:         cfg.Tier,
-		Services:     services,
-		Environments: envs,
-		References:   refs,
-		Warnings:     warnings,
+		App:            cfg.App,
+		Org:            cfg.Org,
+		Cloud:          cfg.Cloud,
+		Region:         cfg.Region,
+		Runtime:        cfg.Runtime,
+		VCS:            cfg.VCS,
+		Repo:           cfg.Repo,
+		Tier:           cfg.Tier,
+		Services:       services,
+		Environments:   envs,
+		References:     refs,
+		DatabaseSecret: databaseSecret,
+		Warnings:       warnings,
 	}
 	return bp, nil
 }
@@ -203,6 +233,11 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 		case "provision":
 			if err := addCap(need.Capability); err != nil {
 				return nil, nil, nil, err
+			}
+			if need.Capability == "postgres" {
+				if err := addCap("secrets"); err != nil {
+					return nil, nil, nil, err
+				}
 			}
 		case "reference":
 			secretName := need.SecretName

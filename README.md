@@ -171,21 +171,29 @@ NOT EXERCISED. Doctor checks tool availability, not cloud permissions or quotas.
 
 ## Status: pre-alpha, and precise about it
 
-| lane | rendered + statically validated (V0) | deployed & verified live (V2) |
+The current development checkpoint and remaining acceptance gates are tracked in
+the [launch plan](docs/launch-plan.md), with detailed [live deployment evidence](docs/tranche-2.md).
+The live coverage below describes the development checkpoint, not completed
+launch acceptance.
+
+| cloud / VCS | serverless live evidence | Kubernetes live lifecycle |
 |---|---|---|
-| AWS serverless / EKS | ✅ / ✅ | not yet / not yet |
-| GCP serverless / GKE | ✅ / ✅ | not yet / not yet |
-| Azure serverless / AKS | ✅ / ✅ | **✅ (manually)** / not yet |
+| AWS / GitHub | Deploy, update, rollback and failed-release recovery passed | Not yet |
+| GCP / GitHub | Bootstrap/database prepared; app deployment partially applied | Not yet |
+| Azure / GitHub | Deploy, update, rollback and environment recreation passed | Not yet |
+| AWS / GitLab | App deployment not yet exercised | Not yet |
+| GCP / GitLab | App deployment not yet exercised | Not yet |
+| Azure / GitLab | App deployment not yet exercised | Not yet |
 
 The six-lane static matrix runs on every PR using the bundled catalog. Tests also
 run a built binary from three unrelated fixture apps across all 12 cloud/VCS/runtime
 combinations, including an existing database and external Redis. These tests cover
-onboarding and rendering; pricing is stubbed in the automated fixture test. Exactly one lane has survived a real
-cloud so far — deployed, health-checked over its public FQDN, updated, torn
-down ([the findings](docs/findings/2026-09-08-azure-v2.md) are a good read on
-what static validation can't see). The automated release harness that runs all
-lanes against real accounts is the current milestone; until a lane has been
-through it, treat its golden path as *designed and validated*, not *proven*.
+onboarding and rendering; pricing is stubbed in the automated fixture test.
+GitLab's separate-account approval preflight passed, but that does not prove a
+cloud deployment. Full lifecycle acceptance remains **0/12**: promotion, clean
+automated setup/teardown, Kubernetes and the remaining deployment paths are
+unfinished. The live evidence notes also document the current workflow-linter
+compatibility gap. Do not treat static validation as deployment proof.
 
 Also honest: landing zones (org structure, central audit, guardrails — the
 Path F story in [DESIGN.md](DESIGN.md)) are designed but not yet built; the

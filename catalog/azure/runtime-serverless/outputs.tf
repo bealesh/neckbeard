@@ -14,3 +14,10 @@ output "principal_ids" {
   description = "System-assigned identity principal ids per app; app-scoped grants (e.g. storage) attach at the env root."
   value       = { for name, a in azurerm_container_app.this : name => a.identity[0].principal_id }
 }
+
+output "service_names" {
+  value = merge(
+    { for name, app in azurerm_container_app.this : name => app.name },
+    { for name, job in azurerm_container_app_job.cron : name => job.name }
+  )
+}

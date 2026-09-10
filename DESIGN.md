@@ -104,7 +104,7 @@ What an application may need for neckbeard to fully support it:
 | Scheduled jobs | containerized cron-style jobs |
 | Database | managed **PostgreSQL** only |
 | Object storage | buckets with app-scoped IAM |
-| Secrets | cloud secrets manager, synced to runtime; **names/references only, never values** |
+| Secrets | cloud secrets manager, synced to runtime; **names/references only in configuration, plans and state**; deployment-time values pass directly to the cloud secret store |
 | Container images | cloud registry, built in CI, immutable digests |
 | Existing external services | referenced via connection secrets (e.g., an existing DB, a SaaS API) — supported as references, never provisioned |
 
@@ -400,14 +400,18 @@ Build **once**: CI builds the image, pushes to the env registry path, and record
 **digest**. Promotion moves the digest reference; nothing is ever rebuilt per
 environment.
 
-- **kubernetes runtime**: Flux per cluster; [image automation](https://fluxcd.io/flux/components/image/)
-  commits new digests to the dev overlay; promotion to stg/prd is a CI-opened PR/MR
-  bumping the digest in that env's overlay, merged by a human for prd.
-- **serverless-containers runtime**: each env has a small, separate **release state**
-  (just the service revision + digest input) so app deploys are a fast targeted apply
-  that cannot touch base infrastructure; promotion is the same digest-bump PR pattern
-  against a per-env release file. (Decision D3 confirms release-state vs native deploy
-  CLI; release-state is the recommendation for uniformity and auditability.)
+- **kubernetes runtime**: Flux per cluster reconciles `releases/<env>` overlays.
+  CI pins the exact built digest; promotion produces a reviewable digest change.
+  The approved environment job advances a separate GitRepository source to its
+  exact checkout commit. This source starts at an invalid commit and uses Flux's
+  `IfNotPresent` apply policy so parent reconciliation cannot reset the CI-owned
+  pin. Merging a release does not itself deploy it before the environment gate.
+  Commit hashes are never sorted to infer release order.
+- **serverless-containers runtime**: native cloud deployment commands update the
+  runtime image using an explicit `releases/<env>.json` record. Successful
+  verification writes a receipt; the previous verified receipt supplies rollback.
+  The generated runner uses the same code as the CLI. Infrastructure resource
+  addresses stay stable and image ownership remains with release delivery.
 
 Infra changes and app deploys are decoupled: infra PRs run plan → policy → apply jobs
 against `infra/envs/*`; app deploys touch only overlays/release files. A change to both
@@ -530,8 +534,9 @@ alerts notify, they don't cap.
   §6.3 migration caveat applies regardless) vs write our own (control; slower across 3
   clouds). **Recommend wrap for launch** behind our schema, with the §6.3 contract
   making future swaps honest majors.
-- **D3 Serverless deploy mechanism.** Small per-env release state (uniform, audited,
-  slower) vs native deploy CLIs (fast, divergent). **Recommend release state.**
+- **D3 Serverless deploy mechanism.** Native deploy CLIs with digest records and
+  verified receipts, chosen for tranche two. This preserves catalog resource
+  addresses; cloud-specific verification belongs in the tested release runner.
 - **D4 User-facing V2 sandbox automation.** Ship post-launch; V0+V1 with honest NOT
   EXERCISED reporting is the launch posture. **Recommend post-launch.**
 - **D5 Manifest distribution.** Object storage (recommended) vs a file in the platform
@@ -631,7 +636,8 @@ their-app/
 ├── infra/
 │   ├── envs/{dev,stg,prd}/    # generated; independent states
 │   │   └── custom.tf          # user extension point, never regenerated
-│   └── release/{dev,stg,prd}/ # serverless runtime: per-env release state
+│   └── envs/{dev,stg,prd}/    # infrastructure roots
+├── releases/                # immutable release records and Kubernetes overlays
 ├── clusters/{dev,stg,prd}/    # k8s runtime: flux + kustomize overlays
 ├── .github/workflows/ | .gitlab-ci.yml
 ├── costs/estimate-<date>.md

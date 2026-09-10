@@ -13,22 +13,23 @@ import (
 )
 
 type Blueprint struct {
-	Version       int           `yaml:"version"`
-	Hash          string        `yaml:"blueprint_hash"`
-	GeneratedFrom GeneratedFrom `yaml:"generated_from"`
-	Pins          Pins          `yaml:"pins"`
-	App           string        `yaml:"app"`
-	Org           string        `yaml:"org"`
-	Cloud         string        `yaml:"cloud"`
-	Region        string        `yaml:"region"`
-	Runtime       string        `yaml:"runtime"`
-	VCS           string        `yaml:"vcs"`
-	Repo          string        `yaml:"repo"`
-	Tier          string        `yaml:"tier"`
-	Services      []Service     `yaml:"services"`
-	Environments  []Environment `yaml:"environments"`
-	References    []Reference   `yaml:"references,omitempty"`
-	Warnings      []string      `yaml:"warnings,omitempty"`
+	Version        int           `yaml:"version"`
+	Hash           string        `yaml:"blueprint_hash"`
+	GeneratedFrom  GeneratedFrom `yaml:"generated_from"`
+	Pins           Pins          `yaml:"pins"`
+	App            string        `yaml:"app"`
+	Org            string        `yaml:"org"`
+	Cloud          string        `yaml:"cloud"`
+	Region         string        `yaml:"region"`
+	Runtime        string        `yaml:"runtime"`
+	VCS            string        `yaml:"vcs"`
+	Repo           string        `yaml:"repo"`
+	Tier           string        `yaml:"tier"`
+	Services       []Service     `yaml:"services"`
+	Environments   []Environment `yaml:"environments"`
+	References     []Reference   `yaml:"references,omitempty"`
+	DatabaseSecret string        `yaml:"database_secret,omitempty"`
+	Warnings       []string      `yaml:"warnings,omitempty"`
 }
 
 type GeneratedFrom struct {

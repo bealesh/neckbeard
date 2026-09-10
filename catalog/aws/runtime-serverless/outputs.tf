@@ -15,3 +15,10 @@ output "task_role_arn" {
 output "task_role_name" {
   value = aws_iam_role.task.name
 }
+
+output "task_families" {
+  value = { for name, task in aws_ecs_task_definition.service : name => task.family }
+}
+output "cron_rules" {
+  value = { for name, rule in aws_cloudwatch_event_rule.cron : name => rule.name }
+}

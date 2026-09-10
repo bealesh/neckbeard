@@ -49,7 +49,7 @@ jobs:
           role-to-assume: ${{ vars.NECKBEARD_AWS_APPLY_ROLE_DEV }}
           aws-region: us-east-1
       - name: Build image
-        run: docker build -f 'bellwether/Dockerfile' -t "neckbeard-build:${GITHUB_SHA}" .
+        run: docker build --platform linux/amd64 --provenance=false -f 'bellwether/Dockerfile' -t "neckbeard-build:${GITHUB_SHA}" .
       - name: Scan image (HIGH/CRITICAL block the merge gate)
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
@@ -60,5 +60,11 @@ jobs:
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${REGISTRY%%/*}"
           docker tag "neckbeard-build:${GITHUB_SHA}" "${REGISTRY}:${GITHUB_SHA}"
           docker push "${REGISTRY}:${GITHUB_SHA}"
-          echo "Pushed digest:"
-          docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}:${GITHUB_SHA}"
+          docker inspect --format='{{index .RepoDigests 0}}' "${REGISTRY}:${GITHUB_SHA}" > built-image.txt
+      - name: Publish the immutable image for release review
+        if: steps.bootstrap.outputs.push == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-image-${{ github.sha }}
+          path: built-image.txt
+          if-no-files-found: error

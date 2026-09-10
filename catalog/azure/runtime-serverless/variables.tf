@@ -81,3 +81,9 @@ variable "registry_id" {
   description = "ACR resource id for the pull identity's AcrPull role (wired from the registry module)."
   type        = string
 }
+
+variable "environment" {
+  description = "Application environment exposed as APP_ENV unless explicitly supplied as a secret."
+  type        = string
+  default     = "dev"
+}

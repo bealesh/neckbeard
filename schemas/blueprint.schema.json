@@ -52,6 +52,7 @@
     "runtime": { "enum": ["kubernetes", "serverless-containers"] },
     "vcs": { "enum": ["github", "gitlab"] },
     "repo": { "type": "string" },
+    "database_secret": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" },
     "tier": { "type": "string" },
     "services": {
       "description": "Pre-deploy-known service definitions from the app profile. Image digests are deploy-time values owned by the release flow and are never blueprint fields.",

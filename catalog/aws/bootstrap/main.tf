@@ -58,16 +58,21 @@ resource "aws_s3_bucket_public_access_block" "tfstate" {
 # --- 2. OIDC federation ---
 
 locals {
-  github = var.vcs == "github"
-  issuer = local.github ? "token.actions.githubusercontent.com" : "gitlab.com"
-  # Both jobs bind an environment, so GitHub subjects take the environment form;
-  # GitLab subjects carry the project path (branch scoping enforced by the
-  # protected-branch gate, §11.3).
-  subjects = local.github ? ["repo:${var.repo}:environment:${var.environment}"] : ["project_path:${var.repo}:*"]
-  audience = local.github ? "sts.amazonaws.com" : "https://gitlab.com"
+  github                = var.vcs == "github"
+  github_subject_prefix = coalesce(var.github_subject_prefix, "repo:${var.repo}")
+  issuer                = local.github ? "token.actions.githubusercontent.com" : "gitlab.com"
+  tier                  = { dev = "development", stg = "staging", prd = "production" }[var.environment]
+  # GitHub uses repository/environment/ref; GitLab includes branch protection,
+  # deployment tier, and environment protection in its customized subject.
+  gitlab_suffix = ":ref_protected:true:deployment_tier:${local.tier}:environment_protected:${var.environment == "prd" ? "true" : "false"}"
+  apply_subject = local.github ? "${local.github_subject_prefix}:environment:${var.environment}:ref:refs/heads/main" : "project_path:${var.repo}:ref_type:branch:ref:main${local.gitlab_suffix}"
+  plan_subject  = local.github ? "${local.github_subject_prefix}:environment:${var.environment}-plan:ref:*" : "project_path:${var.repo}:ref_type:*:ref:*:ref_protected:*:deployment_tier:${local.tier}:environment_protected:*"
+  audience      = local.github ? "sts.amazonaws.com" : "https://gitlab.com"
 }
 
+
 resource "aws_iam_openid_connect_provider" "ci" {
+  count           = var.existing_oidc_provider_arn == null ? 1 : 0
   url             = "https://${local.issuer}"
   client_id_list  = [local.audience]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"] # informational: AWS validates GitHub/GitLab against trusted CAs
@@ -78,7 +83,7 @@ data "aws_iam_policy_document" "ci_assume" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.ci.arn]
+      identifiers = [var.existing_oidc_provider_arn != null ? var.existing_oidc_provider_arn : aws_iam_openid_connect_provider.ci[0].arn]
     }
     condition {
       test     = "StringEquals"
@@ -88,16 +93,33 @@ data "aws_iam_policy_document" "ci_assume" {
     condition {
       test     = "StringLike"
       variable = "${local.issuer}:sub"
-      values   = local.subjects
+      values   = [local.plan_subject]
+    }
+  }
+}
+data "aws_iam_policy_document" "apply_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [var.existing_oidc_provider_arn != null ? var.existing_oidc_provider_arn : aws_iam_openid_connect_provider.ci[0].arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.issuer}:aud"
+      values   = [local.audience]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.issuer}:sub"
+      values   = [local.apply_subject]
     }
   }
 }
 
 # --- 3. plan (read) and apply (write) roles ---
-# Trust-boundary note, stated rather than implied: both roles trust the same
-# repository subject; which role a job assumes is workflow logic, and prd is
-# additionally gated by environment protection / the protected branch (§11.3).
-# Fork PRs never receive an OIDC token.
+# Apply trust requires main independently of workflow conditionals. The prd
+# environment gate is enforced by the VCS before the environment token is issued.
 
 data "aws_iam_policy_document" "state_access" {
   statement {
@@ -117,14 +139,17 @@ resource "aws_iam_role_policy_attachment" "plan_readonly" {
 }
 
 resource "aws_iam_role_policy" "plan_state" {
-  name   = "tfstate-access"
-  role   = aws_iam_role.plan.id
-  policy = data.aws_iam_policy_document.state_access.json
+  name = "tfstate-access"
+  role = aws_iam_role.plan.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [{
+    Effect   = "Allow", Action = ["s3:ListBucket", "s3:GetObject"],
+    Resource = [aws_s3_bucket.tfstate.arn, "${aws_s3_bucket.tfstate.arn}/*"]
+  }] })
 }
 
 resource "aws_iam_role" "apply" {
   name               = "${var.name_prefix}-ci-apply"
-  assume_role_policy = data.aws_iam_policy_document.ci_assume.json
+  assume_role_policy = data.aws_iam_policy_document.apply_assume.json
 }
 
 # PowerUser + IAM scoped to the app's name prefix. An exhaustively least-privilege
@@ -164,4 +189,9 @@ resource "aws_iam_role_policy" "apply_state" {
   name   = "tfstate-access"
   role   = aws_iam_role.apply.id
   policy = data.aws_iam_policy_document.state_access.json
+}
+
+moved {
+  from = aws_iam_openid_connect_provider.ci
+  to   = aws_iam_openid_connect_provider.ci[0]
 }

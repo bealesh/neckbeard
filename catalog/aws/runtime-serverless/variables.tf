@@ -77,3 +77,9 @@ variable "secret_arns" {
   type        = map(string)
   default     = {}
 }
+
+variable "environment" {
+  description = "Application environment exposed as APP_ENV unless explicitly supplied as a secret."
+  type        = string
+  default     = "dev"
+}

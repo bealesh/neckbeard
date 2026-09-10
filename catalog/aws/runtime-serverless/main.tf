@@ -132,7 +132,8 @@ resource "aws_ecs_task_definition" "service" {
       containerPort = each.value.port
       protocol      = "tcp"
     }] : []
-    secrets = local.container_secrets
+    environment = contains(keys(var.secret_arns), "APP_ENV") ? [] : [{ name = "APP_ENV", value = var.environment }]
+    secrets     = local.container_secrets
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -167,9 +168,14 @@ resource "aws_ecs_service" "this" {
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.service[each.key].arn
   launch_type     = "FARGATE"
-  # http services keep a floor of one task (ECS has no scale-to-zero); workers may
-  # genuinely idle at zero.
-  desired_count = each.value.kind == "http" ? max(var.min_instances, 1) : var.min_instances
+  # HTTP services and queue-less workers need a floor of one task; neither has
+  # an event source that can wake it from zero.
+  desired_count = max(var.min_instances, 1)
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
 
   network_configuration {
     subnets          = var.private_subnet_ids
@@ -189,7 +195,7 @@ resource "aws_ecs_service" "this" {
   lifecycle {
     # The release flow updates the task definition (new image digest); day-to-day
     # applies must not fight it.
-    ignore_changes = [task_definition]
+    ignore_changes = [task_definition, desired_count]
   }
 }
 
@@ -234,7 +240,7 @@ data "aws_iam_policy_document" "events_run_task" {
   count = length(local.cron_services) > 0 ? 1 : 0
   statement {
     actions   = ["ecs:RunTask"]
-    resources = [for name, td in aws_ecs_task_definition.service : td.arn]
+    resources = [for name, td in aws_ecs_task_definition.service : "${trimsuffix(td.arn, ":${td.revision}")}:*" if contains(keys(local.cron_services), name)]
   }
   statement {
     actions   = ["iam:PassRole"]
@@ -266,6 +272,10 @@ resource "aws_cloudwatch_event_target" "cron" {
   rule     = aws_cloudwatch_event_rule.cron[each.key].name
   arn      = aws_ecs_cluster.this.arn
   role_arn = aws_iam_role.events[0].arn
+
+  lifecycle {
+    ignore_changes = [ecs_target[0].task_definition_arn]
+  }
 
   ecs_target {
     task_definition_arn = aws_ecs_task_definition.service[each.key].arn

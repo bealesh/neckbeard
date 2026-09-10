@@ -3,8 +3,8 @@
 # resource addresses do not break; a major may move addresses and must ship a
 # migration path.
 # Pre-1.0: minor releases may change planner defaults with explicit migration
-# notes (0.2.0: image CMD inheritance); schema/address guarantees above still apply.
-version: "0.2.0"
+# notes accompany each revision; schema/address guarantees above still apply.
+version: "0.3.0"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.
 opentofu: "1.12.6"
@@ -22,7 +22,7 @@ clouds:
   aws:
     providers:
       - name: hashicorp/aws
-        version: "6.14.0"   # placeholder pin
+        version: "6.14.0"
     # On kubernetes, ingress is in-cluster (aws-load-balancer-controller via Flux,
     # delivered with the clusters/ layer) — no dns-ingress module (§3.3).
     capabilities:
@@ -33,15 +33,15 @@ clouds:
         source: catalog/aws/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # ECS on Fargate
-        version: "0.2.0"
+        version: "0.3.0"
         source: catalog/aws/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # EKS
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/aws/runtime-k8s
         overridable: [node_shape, min_nodes, max_nodes, spot]
       postgres:                      # RDS for PostgreSQL
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/aws/postgres
         overridable: [instance_class, multi_zone, read_replicas, backup_retention_days, pitr]
       storage:                       # S3
@@ -57,13 +57,13 @@ clouds:
         source: catalog/aws/registry
         overridable: []
       dns-ingress:                   # Route 53 + ALB + ACM
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/aws/dns-ingress
         overridable: [waf_enabled]
   gcp:
     providers:
       - name: hashicorp/google
-        version: "7.2.0"    # placeholder pin
+        version: "7.2.0"
     # On kubernetes, ingress is GKE's built-in class — no dns-ingress module (§3.3).
     capabilities:
       http-ingress/kubernetes: []
@@ -73,7 +73,7 @@ clouds:
         source: catalog/gcp/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # Cloud Run
-        version: "0.2.0"
+        version: "0.3.0"
         source: catalog/gcp/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # GKE
@@ -81,7 +81,7 @@ clouds:
         source: catalog/gcp/runtime-k8s
         overridable: [node_shape, min_nodes, max_nodes, spot]
       postgres:                      # Cloud SQL for PostgreSQL
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/gcp/postgres
         overridable: [instance_class, multi_zone, read_replicas, backup_retention_days, pitr]
       storage:                       # GCS
@@ -97,15 +97,15 @@ clouds:
         source: catalog/gcp/registry
         overridable: []
       dns-ingress:                   # Cloud DNS + External ALB + managed certs
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/gcp/dns-ingress
         overridable: [waf_enabled]
   azure:
     providers:
       - name: hashicorp/azurerm
-        version: "4.30.0"   # placeholder pin
+        version: "4.30.0"
       - name: hashicorp/azuread
-        version: "3.4.0"    # app registrations + federated credentials (bootstrap)
+        version: "3.7.0"    # app registrations + federated credentials (bootstrap)
     # Honest per-cloud difference (§3.3): Container Apps provides HTTPS ingress
     # natively, so http-ingress needs no extra module on Azure.
     capabilities:
@@ -116,7 +116,7 @@ clouds:
         source: catalog/azure/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # Container Apps
-        version: "0.2.0"
+        version: "0.3.0"
         source: catalog/azure/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # AKS
@@ -124,7 +124,7 @@ clouds:
         source: catalog/azure/runtime-k8s
         overridable: [node_shape, min_nodes, max_nodes, spot]
       postgres:                      # Azure Database for PostgreSQL – Flexible Server
-        version: "0.1.0"
+        version: "0.2.0"
         source: catalog/azure/postgres
         overridable: [instance_class, multi_zone, read_replicas, backup_retention_days, pitr]
       storage:                       # Blob Storage

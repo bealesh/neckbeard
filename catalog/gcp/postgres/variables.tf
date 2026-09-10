@@ -53,3 +53,16 @@ variable "private_services_connection" {
   description = "Private services access connection id from the network module; consumed in a precondition to order Cloud SQL after the peering exists."
   type        = string
 }
+
+variable "manage_app_credentials" {
+  description = "Provision password authentication using an ephemeral, write-only input."
+  type        = bool
+  default     = false
+}
+variable "application_password" {
+  description = "Fetched from the cloud secret store by the deployment operator; never persisted in plans/state."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  default     = null
+}

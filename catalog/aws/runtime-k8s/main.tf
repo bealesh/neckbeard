@@ -16,7 +16,7 @@ locals {
     medium = ["m6a.large"]
   }[var.node_shape]
   # Pinned like every other version in the catalog; bumped deliberately.
-  kubernetes_version = "1.33"
+  kubernetes_version = "1.35"
 }
 
 data "aws_iam_policy_document" "cluster_assume" {

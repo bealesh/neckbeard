@@ -5,7 +5,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /bellwether ./bellwether
+ARG APP_VERSION=0.1.0
+RUN CGO_ENABLED=0 go build -ldflags="-X main.version=${APP_VERSION}" -o /bellwether ./bellwether
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /bellwether /bellwether

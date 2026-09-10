@@ -2,6 +2,11 @@ output "state_bucket" {
   value = google_storage_bucket.tfstate.name
 }
 
+output "release_store" {
+  description = "Versioned storage for verified deployment and rollback receipts."
+  value       = "gs://${google_storage_bucket.tfstate.name}"
+}
+
 output "backend_hcl" {
   description = "Contents for infra/envs/<env>/backend.hcl (the pipelines init with it)."
   value       = <<-EOT

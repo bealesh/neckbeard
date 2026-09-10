@@ -19,6 +19,7 @@ import (
 	"github.com/bealesh/neckbeard/core/planner"
 	"github.com/bealesh/neckbeard/core/presets"
 	"github.com/bealesh/neckbeard/core/profile"
+	"github.com/bealesh/neckbeard/core/release"
 	"github.com/bealesh/neckbeard/core/render"
 	"github.com/bealesh/neckbeard/core/skillinstall"
 	"github.com/bealesh/neckbeard/core/validate"
@@ -34,6 +35,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "release":
+		err = release.Main(os.Args[2:])
 	case "version":
 		fmt.Println("neckbeard " + version.Version)
 	case "doctor":
@@ -76,6 +79,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: neckbeard <command>
 
 commands:
+  release   pin, deploy, promote, or roll back an immutable application image
   doctor    check local prerequisites (-for plan|estimate|validate|all); no cloud access
   schema    print an embedded JSON schema
   presets   print supported tiers, sizing, and usage assumptions
