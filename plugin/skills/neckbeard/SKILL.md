@@ -17,7 +17,7 @@ The division of labor is absolute:
   `unsupported` section; you do not improvise HCL, manifests, or pipelines.
   (Design references like §3.2 cite [DESIGN.md](https://github.com/bealesh/neckbeard/blob/main/DESIGN.md).)
 
-Read [the onboarding contract](references/onboarding.md) first. It contains the supported workload shape, confirmation/disposition examples, configuration, and current limitations.
+Read [the onboarding contract](references/onboarding.md) first. It contains the supported workload shape, confirmation/disposition examples, configuration, and current limitations. When the user is past scaffolding and asks about deploying, promoting, or rolling back, read [the release workflow contract](references/release.md) — it covers foundations, database preparation, image pinning, the CI release jobs, and the trust boundary (you prepare reviewable intent; gated CI executes).
 
 ## Prerequisites
 
@@ -36,6 +36,7 @@ neckbeard estimate →  costs/estimate.md — show the user BEFORE scaffolding
 neckbeard scaffold →  infra/, pipelines, (k8s: clusters/) under the ownership contract
 neckbeard validate →  V0 static: fmt, init, validate, checkov, kubeconform
 docs/bootstrap.md  →  the human applies bootstrap per environment (elevated creds)
+neckbeard release … →  deployment lifecycle: see references/release.md
 ```
 
 ## 1. Analyze — facts, inferences, assumptions, confirmed
