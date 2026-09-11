@@ -90,6 +90,10 @@ jobs:
           tofu_wrapper: false
       - name: Install checkov
         run: pipx install checkov==3.3.10 # pinned: skip lists are curated against this version; bumps are deliberate
+      - name: Install actionlint
+        # Exercises the validator's workflow lint path in CI, including the
+        # surgical `queue: max` exclusion for this exact version (issues/680).
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 && echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Build neckbeard
         run: go build -o bin/neckbeard ./cmd/neckbeard
       - name: Install kubeconform
