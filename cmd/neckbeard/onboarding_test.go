@@ -25,11 +25,16 @@ func TestInstalledOnboarding(t *testing.T) {
 		t.Run(shape, func(t *testing.T) {
 			app := t.TempDir()
 			if shape == "multi-image" {
-				writeTest(t, filepath.Join(app, "Dockerfile"), []byte("FROM node:22-alpine\nEXPOSE 3000\n"))
-				if err := os.Mkdir(filepath.Join(app, "worker"), 0755); err != nil {
-					t.Fatal(err)
+				// No repository-root Dockerfile: with no convention to prefer, two
+				// candidates stay two images and the workload gate refuses. (A root
+				// Dockerfile plus extras is the root-preference path, covered in
+				// core/analyze tests: the extras become a plan-gating assumption.)
+				for _, dir := range []string{"web", "worker"} {
+					if err := os.Mkdir(filepath.Join(app, dir), 0755); err != nil {
+						t.Fatal(err)
+					}
+					writeTest(t, filepath.Join(app, dir, "Dockerfile"), []byte("FROM node:22-alpine\nEXPOSE 3000\n"))
 				}
-				writeTest(t, filepath.Join(app, "worker/Dockerfile"), []byte("FROM python:3.12-slim\n"))
 			}
 			cmd := exec.Command(bin, "analyze")
 			cmd.Dir = app
