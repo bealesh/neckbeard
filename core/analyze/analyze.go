@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -45,6 +46,7 @@ var envAccessors = []*regexp.Regexp{
 	regexp.MustCompile(`os\.LookupEnv\(\s*"([A-Z][A-Z0-9_]+)"\s*\)`),     // Go
 	regexp.MustCompile(`process\.env\.([A-Z][A-Z0-9_]+)`),                // Node
 	regexp.MustCompile(`process\.env\[["']([A-Z][A-Z0-9_]+)["']\]`),      // Node
+	regexp.MustCompile(`(?:^|[^.\w])env\.([A-Z][A-Z0-9_]+)\b`),           // typed env wrappers (outline-style `env.REDIS_URL`)
 	regexp.MustCompile(`System\.get_env\(\s*"([A-Z][A-Z0-9_]+)"`),        // Elixir
 	regexp.MustCompile(`ENV\[["']([A-Z][A-Z0-9_]+)["']\]`),               // Ruby
 	regexp.MustCompile(`os\.environ(?:\.get\(|\[)["']([A-Z][A-Z0-9_]+)`), // Python
@@ -99,7 +101,9 @@ func classifyEnv(name string) (envClass, unsupportedHit) {
 		return classUnsupported, unsupportedHit{"redis", name}
 	case strings.Contains(n, "KAFKA") || strings.Contains(n, "AMQP") || strings.Contains(n, "RABBIT") || strings.Contains(n, "SQS_") || strings.Contains(n, "NATS"):
 		return classUnsupported, unsupportedHit{"queues", name}
-	case strings.Contains(n, "MONGO") || strings.Contains(n, "MYSQL") || strings.Contains(n, "MARIADB"):
+	case strings.Contains(n, "ELASTIC") || strings.HasPrefix(n, "ES_") || strings.Contains(n, "OPENSEARCH"):
+		return classUnsupported, unsupportedHit{"elasticsearch", name}
+	case strings.Contains(n, "MONGO") || strings.Contains(n, "MYSQL") || strings.Contains(n, "MARIADB") || strings.Contains(n, "CLICKHOUSE"):
 		return classUnsupported, unsupportedHit{"non-postgres-database", name}
 	case strings.Contains(n, "BUCKET") || strings.HasPrefix(n, "S3_") || strings.HasPrefix(n, "GCS_") || strings.Contains(n, "BLOB_"):
 		return classObjectStorage, unsupportedHit{}
@@ -114,7 +118,11 @@ func classifyEnv(name string) (envClass, unsupportedHit) {
 
 var (
 	exposeRe = regexp.MustCompile(`(?i)^\s*EXPOSE\s+(\d+)`)
-	healthRe = regexp.MustCompile(`"(/(?:healthz|health|readyz|livez))"`)
+	healthRe = regexp.MustCompile(`"(/(?:_?healthz?|readyz|livez))"`)
+	dbURLRe  = regexp.MustCompile(`["']DATABASE_URL["']`)
+	// Template names only — a real .env may hold values and is never scanned.
+	envTemplateRe = regexp.MustCompile(`^\.?env\.(example|sample|template|dist)$`)
+	envAssignRe   = regexp.MustCompile(`^([A-Z][A-Z0-9_]+)=`)
 )
 
 type envHit struct {
@@ -132,12 +140,13 @@ func Dir(root string) (*Result, error) {
 		return nil, fmt.Errorf("%s is not a repository directory", root)
 	}
 	var (
-		dockerfiles []string           // rel paths
-		exposePorts = map[string]int{} // dockerfile rel path → first EXPOSE
-		langs       []profile.Fact
-		envHits     = map[string][]profile.Evidence{}
-		healthPaths = map[string]profile.Evidence{}
-		fileCount   int
+		dockerfiles   []string           // rel paths
+		exposePorts   = map[string]int{} // dockerfile rel path → first EXPOSE
+		langs         []profile.Fact
+		envHits       = map[string][]profile.Evidence{}
+		healthPaths   = map[string]profile.Evidence{}
+		dbURLLiterals []profile.Evidence
+		fileCount     int
 	)
 
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -145,7 +154,10 @@ func Dir(root string) (*Result, error) {
 			return nil // unreadable entries are skipped, not fatal
 		}
 		if d.IsDir() {
-			if skipDirs[d.Name()] {
+			// Dot-directories are tooling by convention (.devcontainer, .github,
+			// .circleci …), never deployed application code; a devcontainer
+			// Dockerfile must not become a draft service.
+			if path != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
 				return fs.SkipDir
 			}
 			return nil
@@ -179,6 +191,18 @@ func Dir(root string) (*Result, error) {
 			return nil
 		}
 
+		// Env-template files (.env.example/.env.sample/.env.template/.env.dist)
+		// declare the app's environment surface by convention — names only; real
+		// .env files are never read.
+		if envTemplateRe.MatchString(base) {
+			scanLines(path, func(line string, n int) {
+				if m := envAssignRe.FindStringSubmatch(line); m != nil && len(envHits[m[1]]) < 5 {
+					envHits[m[1]] = append(envHits[m[1]], profile.Evidence{File: rel, Line: n})
+				}
+			})
+			return nil
+		}
+
 		if !isSourceFile(base) {
 			return nil
 		}
@@ -203,6 +227,9 @@ func Dir(root string) (*Result, error) {
 					healthPaths[m[1]] = profile.Evidence{File: rel, Line: n}
 				}
 			}
+			if dbURLRe.MatchString(line) && len(dbURLLiterals) < 5 {
+				dbURLLiterals = append(dbURLLiterals, profile.Evidence{File: rel, Line: n})
+			}
 		})
 		return nil
 	})
@@ -210,10 +237,10 @@ func Dir(root string) (*Result, error) {
 		return nil, err
 	}
 
-	return synthesize(root, dockerfiles, exposePorts, langs, envHits, healthPaths)
+	return synthesize(root, dockerfiles, exposePorts, langs, envHits, healthPaths, dbURLLiterals)
 }
 
-func synthesize(root string, dockerfiles []string, exposePorts map[string]int, langs []profile.Fact, envHits map[string][]profile.Evidence, healthPaths map[string]profile.Evidence) (*Result, error) {
+func synthesize(root string, dockerfiles []string, exposePorts map[string]int, langs []profile.Fact, envHits map[string][]profile.Evidence, healthPaths map[string]profile.Evidence, dbURLLiterals []profile.Evidence) (*Result, error) {
 	p := profile.AppProfile{Version: 1}
 	var questions []string
 
@@ -225,8 +252,29 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 	if len(dockerfiles) == 0 {
 		questions = append(questions, "No Dockerfile found: the workload contract covers containerized services only — is there a container build, or does one need to be added?")
 	}
+
+	// A repository-root Dockerfile is the application image by convention; the
+	// rest (Dockerfile.base, packaging/, examples) become a loud, plan-gating
+	// assumption instead of synthesized services. Real second images (a
+	// separately deployed service) get added back by the agent and are then
+	// refused honestly as multi-image. Without a root Dockerfile there is no
+	// convention to lean on, so every candidate stays visible.
+	if len(dockerfiles) > 1 && slices.Contains(dockerfiles, "Dockerfile") {
+		others := make([]string, 0, len(dockerfiles)-1)
+		for _, df := range dockerfiles {
+			if df != "Dockerfile" {
+				others = append(others, df)
+			}
+		}
+		dockerfiles = []string{"Dockerfile"}
+		p.Assumptions = append(p.Assumptions, profile.Assumption{
+			ID:        "container-images",
+			Statement: fmt.Sprintf("using the repository-root Dockerfile as the single application image; other container builds (%s) assumed to be dev, base, or packaging images rather than separately deployed services", strings.Join(others, ", ")),
+		})
+		questions = append(questions, fmt.Sprintf("Are any of these other container builds separately deployed services: %s? Multi-image applications are not supported and are refused, not squeezed into one image.", strings.Join(others, ", ")))
+	}
 	healthPath := ""
-	for _, hp := range []string{"/healthz", "/health", "/readyz", "/livez"} {
+	for _, hp := range []string{"/healthz", "/health", "/_health", "/readyz", "/livez"} {
 		if _, found := healthPaths[hp]; found {
 			healthPath = hp
 			break
@@ -289,6 +337,12 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 	}
 	sort.Strings(names)
 	seenNeed := map[string]bool{}
+	type pendingUnsupported struct {
+		vars []string
+		ev   []profile.Evidence
+	}
+	unsupportedByCap := map[string]*pendingUnsupported{}
+	var unsupportedOrder []string
 	for _, name := range names {
 		class, hit := classifyEnv(name)
 		ev := envHits[name]
@@ -312,12 +366,18 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 		case classSecret:
 			p.Secrets = append(p.Secrets, profile.SecretRef{Name: name})
 		case classUnsupported:
-			p.Unsupported = append(p.Unsupported, profile.Unsupported{
-				Capability:  hit.capability,
-				Detected:    fmt.Sprintf("environment variable %s", hit.hint),
-				Explanation: fmt.Sprintf("%s is outside the launch workload contract (DESIGN §3.2); neckbeard will not force-fit it onto the catalog", hit.capability),
-				Evidence:    ev,
-			})
+			// One finding per capability: five REDIS_* variables are one redis
+			// dependency, with every variable named and evidence merged.
+			u := unsupportedByCap[hit.capability]
+			if u == nil {
+				u = &pendingUnsupported{}
+				unsupportedByCap[hit.capability] = u
+				unsupportedOrder = append(unsupportedOrder, hit.capability)
+			}
+			u.vars = append(u.vars, hit.hint)
+			if len(u.ev) < 5 {
+				u.ev = append(u.ev, ev[0])
+			}
 		}
 		if class != classIgnore && class != classPort && class != classUnsupported {
 			p.Facts = append(p.Facts, profile.Fact{
@@ -326,6 +386,33 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 				Evidence:  ev[:1],
 			})
 		}
+	}
+	// PostgreSQL is often read through a configuration helper the accessor
+	// patterns cannot see; the exact quoted literal "DATABASE_URL" is still a
+	// deterministic signal. It lands as an INFERENCE (medium confidence, verify
+	// in code) plus an undecided need, never as a fact.
+	if !seenNeed["postgres"] && len(dbURLLiterals) > 0 {
+		p.Needs = append(p.Needs, profile.Need{Capability: "postgres", Mode: "undecided", Evidence: dbURLLiterals})
+		p.Inferences = append(p.Inferences, profile.Inference{
+			ID:         "postgres-indirect",
+			Statement:  "the app appears to use PostgreSQL configured via DATABASE_URL",
+			Confidence: "medium",
+			Reasoning:  `"DATABASE_URL" appears as a quoted literal but no direct environment read was detected; it is likely consumed through a configuration helper — verify in the code`,
+		})
+		p.Assumptions = append(p.Assumptions, profile.Assumption{
+			ID:        "postgres-mode",
+			Statement: "Database environment variable detected: verify the engine and choose provision or reference; a client does not establish a need for a new database",
+		})
+		p.Secrets = append(p.Secrets, profile.SecretRef{Name: "DATABASE_URL"})
+	}
+	for _, capability := range unsupportedOrder {
+		u := unsupportedByCap[capability]
+		p.Unsupported = append(p.Unsupported, profile.Unsupported{
+			Capability:  capability,
+			Detected:    "environment variables " + strings.Join(u.vars, ", "),
+			Explanation: fmt.Sprintf("%s is outside the launch workload contract (DESIGN §3.2); neckbeard will not force-fit it onto the catalog", capability),
+			Evidence:    u.ev,
+		})
 	}
 	if len(p.Secrets) > 0 && !seenNeed["secrets-cap"] {
 		p.Needs = append(p.Needs, profile.Need{Capability: "secrets", Mode: "provision"})

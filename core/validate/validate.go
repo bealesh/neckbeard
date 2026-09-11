@@ -5,12 +5,59 @@
 package validate
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+type actionlintIssue struct {
+	Message  string `json:"message"`
+	Filepath string `json:"filepath"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column"`
+	Kind     string `json:"kind"`
+}
+
+// filterActionlint drops exactly one known-false diagnostic — the installed
+// actionlint not yet recognizing GitHub's supported concurrency `queue` key
+// (github.com/rhysd/actionlint/issues/680) — and only when the flagged line
+// literally reads `queue: max`. Every other diagnostic is kept; a report that
+// can't be parsed is not filtered at all.
+func filterActionlint(root string, raw []byte) (kept []actionlintIssue, excluded int, err error) {
+	var issues []actionlintIssue
+	if err := json.Unmarshal(raw, &issues); err != nil {
+		return nil, 0, fmt.Errorf("unparseable actionlint output: %w", err)
+	}
+	for _, issue := range issues {
+		if issue.Kind == "syntax-check" &&
+			strings.Contains(issue.Message, `unexpected key "queue" for "concurrency" section`) &&
+			fileLine(filepath.Join(root, issue.Filepath), issue.Line) == "queue: max" {
+			excluded++
+			continue
+		}
+		kept = append(kept, issue)
+	}
+	return kept, excluded, nil
+}
+
+func fileLine(path string, n int) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for i := 1; scanner.Scan(); i++ {
+		if i == n {
+			return strings.TrimSpace(scanner.Text())
+		}
+	}
+	return ""
+}
 
 type Status string
 
@@ -138,13 +185,26 @@ func pipelineChecks(root string) []Check {
 	var checks []Check
 	if workflows, err := filepath.Glob(filepath.Join(root, ".github", "workflows", "neckbeard-*.yml")); err == nil && len(workflows) > 0 {
 		if actionlint, lookErr := exec.LookPath("actionlint"); lookErr == nil {
-			cmd := exec.Command(actionlint, workflows...)
+			cmd := exec.Command(actionlint, append([]string{"-format", "{{json .}}"}, workflows...)...)
 			cmd.Dir = root
 			out, runErr := cmd.CombinedOutput()
 			c := Check{Level: "V0", Name: "actionlint (GitHub workflows)", Status: Passed}
 			if runErr != nil {
-				c.Status = Failed
-				c.Detail = lastLines(string(out), 6)
+				kept, excluded, parseErr := filterActionlint(root, out)
+				switch {
+				case parseErr != nil:
+					c.Status = Failed
+					c.Detail = lastLines(string(out), 6)
+				case len(kept) > 0:
+					c.Status = Failed
+					lines := make([]string, 0, len(kept))
+					for _, issue := range kept {
+						lines = append(lines, fmt.Sprintf("%s:%d:%d: %s [%s]", issue.Filepath, issue.Line, issue.Column, issue.Message, issue.Kind))
+					}
+					c.Detail = lastLines(strings.Join(lines, "\n"), 6)
+				default:
+					c.Detail = fmt.Sprintf("%d diagnostic(s) excluded: installed actionlint does not yet recognize GitHub's supported concurrency `queue` key (github.com/rhysd/actionlint/issues/680); each excluded line reads exactly `queue: max`", excluded)
+				}
 			}
 			checks = append(checks, c)
 		} else {
