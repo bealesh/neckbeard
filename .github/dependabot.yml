@@ -1,0 +1,12 @@
+# Dependabot keeps the SHA-pinned actions and Go deps current via reviewable
+# PRs — pins stay pins; bumps are deliberate (CONTRIBUTING.md).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
