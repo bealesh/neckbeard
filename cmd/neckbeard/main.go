@@ -38,7 +38,7 @@ func main() {
 	case "release":
 		err = release.Main(os.Args[2:])
 	case "version":
-		fmt.Println("neckbeard " + version.Version)
+		fmt.Println("neckbeard " + version.String())
 	case "doctor":
 		err = runDoctor(os.Args[2:])
 	case "schema":
@@ -166,7 +166,7 @@ func runPlan(args []string) error {
 		ProfileDigest:  profDigest,
 		Catalog:        cat,
 		Presets:        pre,
-		PlannerVersion: version.Version,
+		PlannerVersion: version.String(),
 	})
 	if err != nil {
 		return err
