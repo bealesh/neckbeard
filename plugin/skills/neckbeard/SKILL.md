@@ -15,6 +15,7 @@ The division of labor is absolute:
   the config — evidence-backed YAML — plus clear explanations of what the CLI
   reports. If the catalog can't express something, you say so via the profile's
   `unsupported` section; you do not improvise HCL, manifests, or pipelines.
+  (Design references like §3.2 cite [DESIGN.md](https://github.com/bealesh/neckbeard/blob/main/DESIGN.md).)
 
 Read [the onboarding contract](references/onboarding.md) first. It contains the supported workload shape, confirmation/disposition examples, configuration, and current limitations.
 
@@ -30,6 +31,7 @@ degrade honestly — validate reports them NOT EXERCISED.
 ```
 neckbeard analyze  →  you refine app-profile.yaml + write neckbeard.yaml
 neckbeard plan     →  blueprint.yaml (deterministic lockfile) + topology summary
+neckbeard doctor -for estimate  →  checks the estimator prerequisites
 neckbeard estimate →  costs/estimate.md — show the user BEFORE scaffolding
 neckbeard scaffold →  infra/, pipelines, (k8s: clusters/) under the ownership contract
 neckbeard validate →  V0 static: fmt, init, validate, checkov, kubeconform

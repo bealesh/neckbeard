@@ -78,3 +78,25 @@ scaffold → V0 validate.
 
 V1/V2 were NOT EXERCISED throughout — this sweep proves detection and static
 generation against unfamiliar code, not deployability.
+
+## Addendum: live skill-following agent test (same day)
+
+A fresh agent session was given only the installed `.agents/skills/neckbeard/`
+skill and the saleor checkout — no other neckbeard knowledge — and asked to
+onboard the app. It caught the dj_database_url postgres miss with file:line
+evidence (settings.py:136), corrected the health path to `/health/`
+(asgi/__init__.py:40), added the Celery worker and beat-scheduler services from
+pyproject.toml, gave redis/queues external dispositions, and produced a valid
+blueprint on its first `plan`. The division of labor held.
+
+Its friction report drove these fixes: resolved assumptions now print as
+`decision:` lines and live in the blueprint's `decisions` field (warnings are
+reserved for open risks); the app-profile schema now permits `secret_name` on
+provision-mode needs (the planner honored it for postgres's connection binding
+while the schema forbade it); and the skill/onboarding docs gained the
+root-Dockerfile contract, first-class datastore review ("a web framework with
+no database in its draft is a detection gap, not a stateless app"), scheduler-
+singleton guidance, disposition-vs-confirmed clarification, the
+provisioned-capability env-mapping contract (including the honest note that
+object-storage variable wiring is manual today), the `doctor -for estimate`
+step in the flow diagram, and a public DESIGN.md link for section references.
