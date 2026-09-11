@@ -146,8 +146,13 @@ as other generated files. An explicit `-catalog` index requires an explicit
 A different bundled catalog requires re-planning; old blueprints are not silently
 rendered with new module bytes. After upgrading the CLI, review the resulting diff.
 
-Current deployment limitations: only Azure serverless has a recorded manual live
-run, and its database connection was not exercised. Serverless release automation,
+After scaffold + validate, the deployment lifecycle (foundations, database
+preparation, image pinning, releases, promotion, rollback) is covered by
+[release.md](release.md) in this references directory.
+
+Current deployment limitations: AWS and Azure GitHub/serverless have passed
+live deploy, update, and rollback with real database checks; promotion, GitLab
+lanes, and Kubernetes are implemented but not lifecycle-proven. Serverless release automation,
 full promotion/rollback, cloud budget alerts, and automated recovery are subsequent
 work. The generated bootstrap runbook is the next operator step, not a guarantee
 that the application has been deployed. Known live findings:
