@@ -50,7 +50,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 		return nil, fmt.Errorf("no preset for tier %q (available: %s)", cfg.Tier, keysCSV(in.Presets.Tiers))
 	}
 
-	moduleNames, refs, warnings, err := requiredModules(cfg, prof, in.Catalog)
+	moduleNames, refs, warnings, decisions, err := requiredModules(cfg, prof, in.Catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +170,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 		Environments:   envs,
 		References:     refs,
 		DatabaseSecret: databaseSecret,
+		Decisions:      decisions,
 		Warnings:       warnings,
 	}
 	return bp, nil
@@ -178,7 +179,7 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 // requiredModules maps the profile onto catalog capabilities. Returns the sorted
 // module list, external-service references, and warnings. Unknown capabilities are
 // errors with the supported set named — never a nearest-fit.
-func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.Index) ([]string, []blueprint.Reference, []string, error) {
+func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.Index) ([]string, []blueprint.Reference, []string, []string, error) {
 	set := map[string]bool{}
 	addCap := func(capability string) error {
 		mods, ok := idx.CapabilityModules(cfg.Cloud, cfg.Runtime, capability)
@@ -193,29 +194,29 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 
 	if len(prof.Services) > 0 {
 		if err := addCap("service-base"); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 	for _, svc := range prof.Services {
 		if svc.Kind == "http" {
 			if err := addCap("http-ingress"); err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 		}
 	}
 
 	if len(prof.Secrets) > 0 {
 		if err := addCap("secrets"); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 
 	var refs []blueprint.Reference
-	var warnings []string
+	var warnings, decisions []string
 	for _, a := range prof.Assumptions {
 		for _, c := range prof.Confirmed {
 			if c.ID == a.ID {
-				warnings = append(warnings, fmt.Sprintf("resolved assumption %s: %s", a.ID, c.Answer))
+				decisions = append(decisions, fmt.Sprintf("assumption %s resolved: %s", a.ID, c.Answer))
 			}
 		}
 	}
@@ -224,7 +225,7 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 		if u.Disposition == "external" {
 			refs = append(refs, blueprint.Reference{Capability: u.Capability, SecretName: u.SecretName})
 			if err := addCap("secrets"); err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 		}
 	}
@@ -232,11 +233,11 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 		switch need.Mode {
 		case "provision":
 			if err := addCap(need.Capability); err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			if need.Capability == "postgres" {
 				if err := addCap("secrets"); err != nil {
-					return nil, nil, nil, err
+					return nil, nil, nil, nil, err
 				}
 			}
 		case "reference":
@@ -245,10 +246,10 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 			warnings = append(warnings, fmt.Sprintf("%s is referenced, not provisioned: the app expects an existing service reachable via secret %q; neckbeard will not manage its lifecycle", need.Capability, secretName))
 			// A referenced service still needs somewhere to hold its connection secret.
 			if err := addCap("secrets"); err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 		default:
-			return nil, nil, nil, fmt.Errorf("need %q has unknown mode %q (provision|reference)", need.Capability, need.Mode)
+			return nil, nil, nil, nil, fmt.Errorf("need %q has unknown mode %q (provision|reference)", need.Capability, need.Mode)
 		}
 	}
 
@@ -263,7 +264,7 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 	}
 
 	slices.SortFunc(refs, func(a, b blueprint.Reference) int { return strings.Compare(a.Capability, b.Capability) })
-	return slices.Sorted(maps.Keys(set)), refs, warnings, nil
+	return slices.Sorted(maps.Keys(set)), refs, warnings, decisions, nil
 }
 
 // resolveInputs layers, in order: tier preset → per-env adjustment → derived values

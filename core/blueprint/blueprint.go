@@ -29,7 +29,10 @@ type Blueprint struct {
 	Environments   []Environment `yaml:"environments"`
 	References     []Reference   `yaml:"references,omitempty"`
 	DatabaseSecret string        `yaml:"database_secret,omitempty"`
-	Warnings       []string      `yaml:"warnings,omitempty"`
+	// Decisions are the user's resolved answers, kept visible for review; they
+	// are settled inputs, not warnings.
+	Decisions []string `yaml:"decisions,omitempty"`
+	Warnings  []string `yaml:"warnings,omitempty"`
 }
 
 type GeneratedFrom struct {

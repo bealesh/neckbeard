@@ -368,6 +368,12 @@ func printSummary(bp *blueprint.Blueprint, outPath string) {
 			fmt.Printf("reference: %s via secret %q (existing service; not provisioned)\n", r.Capability, r.SecretName)
 		}
 	}
+	if len(bp.Decisions) > 0 {
+		fmt.Println()
+		for _, d := range bp.Decisions {
+			fmt.Println("decision: " + d)
+		}
+	}
 	if len(bp.Warnings) > 0 {
 		fmt.Println()
 		for _, w := range bp.Warnings {

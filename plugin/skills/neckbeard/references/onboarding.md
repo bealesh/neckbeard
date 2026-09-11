@@ -15,8 +15,13 @@ creation and environment-manifest consumption are not implemented.
 
 An application has one image, up to 10 uniquely named HTTP/worker/cron services,
 and repository-root build context. All services declare the same Dockerfile.
-Multiple Dockerfiles are flagged before asking cloud questions: identify which
-one builds the application, or explain that separate images are unsupported.
+Dot-directories (`.devcontainer`, `.github`, …) are never scanned. When a
+repository-root `Dockerfile` exists, it is taken as the application image and
+every other candidate (`Dockerfile.base`, `packaging/`, a possible second
+service image) is listed in a plan-gating `container-images` assumption —
+confirm none is separately deployed, or add the real one back as a service and
+receive the honest multi-image refusal. Without a root Dockerfile all
+candidates stay visible and multi-image is flagged before cloud questions.
 HTTP services need a port and health_path; scheduled jobs need a five-field cron.
 Leave `command` absent to inherit the image's CMD and ENTRYPOINT. A nonempty
 `command` replaces CMD arguments, not ENTRYPOINT. Empty command also inherits.
@@ -26,6 +31,27 @@ Leave `command` absent to inherit the image's CMD and ENTRYPOINT. A nonempty
 Every `assumptions` entry must have a `confirmed` answer with the **same id**.
 Correct the actual services/needs as well: an answer is evidence, not executable
 configuration. Never invent a confirmation on the user's behalf.
+
+**Needs can be missing entirely — review datastores as a first-class step.**
+Deterministic detection only sees direct environment reads, quoted
+`"DATABASE_URL"` literals, and env-template declarations. Framework helpers
+hide the rest (Django's `dj_database_url`, Rails credentials, typed config
+wrappers): read the app's actual configuration code (settings.py,
+config/runtime.exs, …) and add any datastore the draft missed, with file:line
+evidence. A web framework with no database in its draft is almost always a
+detection gap, not a stateless app.
+
+**Process roles.** Model long-running daemons (Celery workers, an in-app
+scheduler like celery beat) as `kind: worker` with an explicit `command`; use
+`kind: cron` only for run-to-completion jobs on a five-field schedule. A
+scheduler daemon is typically a singleton — say so in its confirmed entry and
+review instance counts at plan/override time; duplicate beat processes mean
+duplicate scheduled work.
+
+**The draft's `secrets` list is names only** and errs toward inclusion (plain
+config URLs land there too). Keeping extra names is harmless — they become
+empty secret containers the operator may ignore — but add any connection
+variables the app needs that detection missed.
 
 ```yaml
 assumptions:
@@ -62,6 +88,18 @@ unsupported:
 it does not provision, validate, migrate, or manage the external service. Alternatively
 use `disposition: not-required` and explain why (for example, test-only code).
 Unresolved findings prevent planning. Resolutions remain visible in the blueprint.
+Dispositions are resolved inline — no matching `confirmed` entry is needed for
+an unsupported finding (confirmed entries pair with `assumptions` ids only).
+
+**How provisioned capabilities reach the app.** A provisioned `postgres` need
+binds its connection string into the secret named by the need's `secret_name`
+(default `DATABASE_URL`) — set it to whatever variable the app actually reads.
+Provisioned `object-storage` and `secrets` expose infrastructure outputs
+(bucket names, secret container names); mapping those to app-specific variables
+like `AWS_STORAGE_BUCKET_NAME` is not automatic today — wire them through the
+app's environment explicitly and say so in the topology review. Resolved
+assumptions print as `decision:` lines at plan time; `warning:` is reserved for
+things that still need operator attention.
 
 ## Configuration example
 
@@ -83,6 +121,9 @@ finops:
 Replace the example identifiers with the user's choices. For GCP or Azure also
 set `containers: {dev: PROJECT-OR-SUBSCRIPTION, stg: ..., prd: ...}` and choose a
 region belonging to that cloud. Use short names: cloud resource name limits differ.
+Per-cloud region check: on Azure credit subscriptions, verify the region offers
+PostgreSQL Flexible Server capacity before planning (a real live finding — see
+the findings ledger); AWS and GCP regional gaps surface at V1 plan time.
 
 The available tiers are solo, smallteam, established, regulated. They expand into
 explicit resource sizes, availability targets, recovery objectives, and usage
