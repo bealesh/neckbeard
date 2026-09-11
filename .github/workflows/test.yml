@@ -5,15 +5,51 @@ on:
   push:
     branches: [main]
 
+# The permanent invariant (CONTRIBUTING.md): pull requests never touch a cloud
+# account. This repository holds no cloud secrets and no OIDC provider anywhere
+# trusts it; every job below runs credential-free with read-only permissions.
+# Live deployment tests run from dedicated private fixture repositories via the
+# release harness, dispatched by a maintainer — never from a pull request.
 permissions:
   contents: read
 
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Mechanical enforcement of the invariant above: a PR that tries to give CI
+  # credentials (or the write-token event fork PRs inherit secrets from) fails
+  # here before a human has to catch it in review.
+  fork-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: PR-triggered workflows must stay credential-free
+        # Bracket classes keep these patterns from matching their own source.
+        run: |
+          set -eu
+          fail=0
+          if grep -RnE 'pull_request[_]target' .github/workflows/; then
+            echo '::error::the pull_request write-token event is banned in this repository'
+            fail=1
+          fi
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -e "$f" ] || continue
+            if grep -qE '^[[:space:]]*pull_request[[:space:]]*:' "$f"; then
+              if grep -nE 'id[-]token|secrets[.]' "$f"; then
+                echo "::error file=$f::a workflow with a pull_request trigger must not request OIDC tokens or reference secrets"
+                fail=1
+              fi
+            fi
+          done
+          exit "$fail"
+
   go:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -23,8 +59,8 @@ jobs:
   tofu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: opentofu/setup-opentofu@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
         with:
           tofu_version: 1.12.6
       - name: catalog modules are fmt-clean
@@ -44,11 +80,11 @@ jobs:
           - { cloud: azure, runtime: kubernetes }
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: opentofu/setup-opentofu@v1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
         with:
           tofu_version: 1.12.6
           tofu_wrapper: false
@@ -59,7 +95,7 @@ jobs:
       - name: Install kubeconform
         if: matrix.runtime == 'kubernetes'
         run: |
-          go install github.com/yannh/kubeconform/cmd/kubeconform@latest
+          go install github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0 # pinned; bumps are deliberate
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Plan, scaffold, validate (${{ matrix.cloud }}/${{ matrix.runtime }})
         run: |

@@ -152,6 +152,15 @@ use the artifacts intended for release.
 - [ ] Test versioned release artifacts and supported installation paths from
   clean machines/checkouts, including bundled references, upgrade/regeneration,
   migration notes, and recovery guidance.
+- [ ] Repository settings, partially applied 2026-09-11: default workflow token
+  read-only with Actions PR-approval disabled; fork-PR workflow approval
+  required for **all** outside collaborators; an active `main` ruleset requiring
+  PR-only squash merges and the `go`/`tofu`/`fork-safety` checks (no deletions
+  or force pushes). Still gated on going public: secret scanning with push
+  protection, private vulnerability reporting, and raising the ruleset's
+  required approvals once there is more than one maintainer. The
+  credential-free CI invariant (CONTRIBUTING.md) is enforced by the
+  `fork-safety` job regardless of visibility.
 - [ ] Run the full release matrix and recovery suite on the tagged candidate.
   Keep evidence tied to that exact commit/catalog. Rerun affected checks after
   changes, and run the final full suite again before publishing.

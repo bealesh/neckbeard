@@ -1,0 +1,9 @@
+# Default owner for everything; review is required before merge either way.
+* @bealesh
+
+# The trust-sensitive surfaces deserve the extra flag when ownership broadens:
+# catalog modules are the product's security posture, workflows are its CI
+# trust boundary, and core/release handles deployment credentials.
+/catalog/ @bealesh
+/.github/workflows/ @bealesh
+/core/release/ @bealesh
