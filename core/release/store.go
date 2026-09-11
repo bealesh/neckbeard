@@ -42,9 +42,9 @@ func (s ReleaseStore) location(t Target) (*url.URL, error) {
 }
 
 // SyncReceipts moves a single atomic bundle, so a failed upload cannot publish
-// half of a rollback pair. CI serializes this with deployment by environment.
-// ponytail: CI resource groups serialize writers; concurrent manual deployments
-// require a distributed lock before they can share this storage safely.
+// half of a rollback pair. CI concurrency groups serialize writers per
+// environment; concurrent manual deployments would need a distributed lock
+// before they could share this storage safely.
 func (r Runner) SyncReceipts(ctx context.Context, t Target, upload bool) error {
 	if err := t.Validate(t.Environment); err != nil {
 		return err

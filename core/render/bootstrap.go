@@ -175,6 +175,14 @@ func bootstrapRunbook(bp *blueprint.Blueprint) []byte {
 	w("```")
 	w("Commit the non-secret store location with the backend configuration. Release jobs restore and save verified deployment receipts in this versioned cloud storage; CI artifact expiration does not remove rollback history.")
 	w("")
+	w("### The plan identity's trust boundary, stated plainly")
+	w("")
+	w("Pull-request pipelines run code the PR authored — the OpenTofu configuration under `infra/` and the release runner sources under `.neckbeard/release/` — with the **plan** identity. That is safe for the same reason planning PR-modified HCL is safe, and only for that reason: the plan identity is read-only, cannot write state, and has no secret-value access, and PR plans substitute a public placeholder for the database password. Do not grant the plan identity anything beyond what bootstrap created; a wider plan role turns every pull request into a deployment.")
+	if bp.VCS == "github" {
+		w("")
+		w("PR plan jobs bind the `<env>-plan` GitHub environments (the OIDC trust names them exactly). Their first run creates them unprotected — leave them that way: a protection rule on a `-plan` environment blocks pull-request plans, and approval belongs on the deploy environments (`dev`, `stg`, `prd`), not on read-only plans. Fork pull requests receive no OIDC token at all and degrade to validate-only.")
+	}
+	w("")
 	w("## 5. Verify")
 	w("")
 	w("Push a no-op change under `infra/`: the infra pipeline should stop reporting")
