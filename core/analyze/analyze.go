@@ -286,56 +286,72 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 			break
 		}
 	}
-	for i, df := range dockerfiles {
-		name := serviceNameFor(df, i)
+	procs := filterProcfileRoles(readProcfile(root))
+	// One image, optional HTTP/worker/cron processes: a root Procfile is mechanical
+	// evidence for those roles. Prefer it over inventing a single http draft.
+	if len(procs) > 0 && len(dockerfiles) == 1 {
+		df := dockerfiles[0]
 		port := exposePorts[df]
-		svc := profile.Service{Name: name, Kind: "http", Dockerfile: df}
-		if port != 0 {
-			svc.Port = port
-			p.Facts = append(p.Facts, profile.Fact{
-				ID:        "expose-" + name,
-				Statement: fmt.Sprintf("%s EXPOSEs port %d", df, port),
-				Evidence:  []profile.Evidence{{File: df}},
-			})
-		} else {
-			svc.Port = 8080
-			p.Assumptions = append(p.Assumptions, profile.Assumption{
-				ID:        "port-" + name,
-				Statement: fmt.Sprintf("service %q assumed to listen on 8080 (no EXPOSE found)", name),
-			})
-			questions = append(questions, fmt.Sprintf("What port does %q listen on?", name))
+		procNames := make([]string, 0, len(procs))
+		source := procs[0].File
+		devNote := ""
+		if source == "Procfile.dev" {
+			devNote = "; dev process file — confirm these roles exist in production"
 		}
-		if healthPath != "" {
-			svc.HealthPath = healthPath
-			ev := healthPaths[healthPath]
+		for _, proc := range procs {
+			procNames = append(procNames, proc.Name)
+			name := sanitizeName(proc.Name)
+			kind := procfileKind(proc.Name)
+			svc := profile.Service{Name: name, Kind: kind, Dockerfile: df}
 			p.Facts = append(p.Facts, profile.Fact{
-				ID:        "health-" + name,
-				Statement: fmt.Sprintf("health-check path %q referenced in source", healthPath),
-				Evidence:  []profile.Evidence{ev},
+				ID:        "procfile-" + name,
+				Statement: fmt.Sprintf("Procfile process %q runs %q", proc.Name, proc.Command) + devNote,
+				Evidence:  []profile.Evidence{{File: proc.File, Line: proc.Line}},
 			})
-		} else {
-			svc.HealthPath = "/healthz"
-			p.Assumptions = append(p.Assumptions, profile.Assumption{
-				ID:        "health-" + name,
-				Statement: fmt.Sprintf("service %q assumed to serve /healthz (no health path found in source)", name),
-			})
-			questions = append(questions, fmt.Sprintf("What is %q's health-check path?", name))
+			if kind == "http" {
+				applyHTTPServiceDefaults(&p, &questions, &svc, df, port, healthPath, healthPaths)
+			} else {
+				// Kind is still a draft for the agent/user to confirm; the Procfile
+				// name is only medium-confidence evidence of a worker role.
+				p.Inferences = append(p.Inferences, profile.Inference{
+					ID:         "kind-" + name,
+					Statement:  fmt.Sprintf("process %q looks like a worker (Procfile name is not web/http)", proc.Name),
+					Confidence: "medium",
+					Reasoning:  fmt.Sprintf("%s:%d defines %q as %q; confirm kind (worker vs cron) and any schedule", proc.File, proc.Line, proc.Name, proc.Command),
+				})
+			}
+			p.Services = append(p.Services, svc)
 		}
-		p.Assumptions = append(p.Assumptions, profile.Assumption{
-			ID:        "kind-" + name,
-			Statement: fmt.Sprintf("service %q assumed kind=http; workers and cron jobs cannot be detected mechanically", name),
-		})
-		p.Services = append(p.Services, svc)
+		questions = append(questions,
+			fmt.Sprintf("Confirm process roles from the Procfile (%s) — especially non-web kinds and any cron schedules.", strings.Join(procNames, ", ")),
+			"Expected sustained traffic, availability objective, and RPO/RTO? These pick the tier.",
+			"For each detected datastore: provision new, or reference an existing managed service?",
+		)
+		p.Assumptions = append(p.Assumptions,
+			profile.Assumption{ID: "workload-roles", Statement: fmt.Sprintf("Procfile processes detected (%s); confirm HTTP vs worker vs cron and whether each should ship", strings.Join(procNames, ", ")) + devNote},
+			profile.Assumption{ID: "capacity", Statement: "Confirm expected traffic, availability and recovery needs, and select the tier in neckbeard.yaml"},
+		)
+	} else {
+		for i, df := range dockerfiles {
+			name := serviceNameFor(df, i)
+			svc := profile.Service{Name: name, Kind: "http", Dockerfile: df}
+			applyHTTPServiceDefaults(&p, &questions, &svc, df, exposePorts[df], healthPath, healthPaths)
+			p.Assumptions = append(p.Assumptions, profile.Assumption{
+				ID:        "kind-" + name,
+				Statement: fmt.Sprintf("service %q assumed kind=http; workers and cron jobs cannot be detected mechanically", name),
+			})
+			p.Services = append(p.Services, svc)
+		}
+		questions = append(questions,
+			"Are there background workers or scheduled jobs (and their schedules)? Detection cannot see process roles.",
+			"Expected sustained traffic, availability objective, and RPO/RTO? These pick the tier.",
+			"For each detected datastore: provision new, or reference an existing managed service?",
+		)
+		p.Assumptions = append(p.Assumptions,
+			profile.Assumption{ID: "workload-roles", Statement: "Confirm HTTP services, workers, and scheduled jobs; one Dockerfile does not establish process roles"},
+			profile.Assumption{ID: "capacity", Statement: "Confirm expected traffic, availability and recovery needs, and select the tier in neckbeard.yaml"},
+		)
 	}
-	questions = append(questions,
-		"Are there background workers or scheduled jobs (and their schedules)? Detection cannot see process roles.",
-		"Expected sustained traffic, availability objective, and RPO/RTO? These pick the tier.",
-		"For each detected datastore: provision new, or reference an existing managed service?",
-	)
-	p.Assumptions = append(p.Assumptions,
-		profile.Assumption{ID: "workload-roles", Statement: "Confirm HTTP services, workers, and scheduled jobs; one Dockerfile does not establish process roles"},
-		profile.Assumption{ID: "capacity", Statement: "Confirm expected traffic, availability and recovery needs, and select the tier in neckbeard.yaml"},
-	)
 
 	names := make([]string, 0, len(envHits))
 	for n := range envHits {
@@ -772,6 +788,110 @@ func applyComposeCapabilities(p *profile.AppProfile, hits []composeCapability, s
 		if len(u.ev) < 5 {
 			u.ev = append(u.ev, ev[0])
 		}
+	}
+}
+
+type procEntry struct {
+	Name    string
+	Command string
+	File    string
+	Line    int
+}
+
+// readProcfile returns repository-root Procfile entries. Prefers Procfile over
+// Procfile.dev; blank lines and # comments are ignored.
+func readProcfile(root string) []procEntry {
+	for _, name := range []string{"Procfile", "Procfile.dev"} {
+		path := filepath.Join(root, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var out []procEntry
+		for i, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			namePart, cmd, ok := strings.Cut(line, ":")
+			if !ok {
+				continue
+			}
+			procName := strings.TrimSpace(namePart)
+			cmd = strings.TrimSpace(cmd)
+			if procName == "" || cmd == "" {
+				continue
+			}
+			out = append(out, procEntry{Name: procName, Command: cmd, File: name, Line: i + 1})
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
+}
+
+func procfileIgnored(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "release", "migrate":
+		return true
+	default:
+		return false
+	}
+}
+
+func filterProcfileRoles(procs []procEntry) []procEntry {
+	var out []procEntry
+	for _, proc := range procs {
+		if procfileIgnored(proc.Name) {
+			continue
+		}
+		out = append(out, proc)
+	}
+	return out
+}
+
+func procfileKind(name string) string {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "web", "www", "http", "https", "api", "server", "app":
+		return "http"
+	default:
+		return "worker"
+	}
+}
+
+// applyHTTPServiceDefaults fills port and health_path on an HTTP service draft.
+func applyHTTPServiceDefaults(p *profile.AppProfile, questions *[]string, svc *profile.Service, df string, port int, healthPath string, healthPaths map[string]profile.Evidence) {
+	if port != 0 {
+		svc.Port = port
+		p.Facts = append(p.Facts, profile.Fact{
+			ID:        "expose-" + svc.Name,
+			Statement: fmt.Sprintf("%s EXPOSEs port %d", df, port),
+			Evidence:  []profile.Evidence{{File: df}},
+		})
+	} else {
+		svc.Port = 8080
+		p.Assumptions = append(p.Assumptions, profile.Assumption{
+			ID:        "port-" + svc.Name,
+			Statement: fmt.Sprintf("service %q assumed to listen on 8080 (no EXPOSE found)", svc.Name),
+		})
+		*questions = append(*questions, fmt.Sprintf("What port does %q listen on?", svc.Name))
+	}
+	if healthPath != "" {
+		svc.HealthPath = healthPath
+		ev := healthPaths[healthPath]
+		p.Facts = append(p.Facts, profile.Fact{
+			ID:        "health-" + svc.Name,
+			Statement: fmt.Sprintf("health-check path %q referenced in source", healthPath),
+			Evidence:  []profile.Evidence{ev},
+		})
+	} else {
+		svc.HealthPath = "/healthz"
+		p.Assumptions = append(p.Assumptions, profile.Assumption{
+			ID:        "health-" + svc.Name,
+			Statement: fmt.Sprintf("service %q assumed to serve /healthz (no health path found in source)", svc.Name),
+		})
+		*questions = append(*questions, fmt.Sprintf("What is %q's health-check path?", svc.Name))
 	}
 }
 

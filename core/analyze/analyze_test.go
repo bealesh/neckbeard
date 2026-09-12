@@ -7,6 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/bealesh/neckbeard/core/profile"
 	"github.com/bealesh/neckbeard/schemas"
 )
 
@@ -696,5 +697,126 @@ func TestUnsupportedMixedEnvAndComposeDetected(t *testing.T) {
 	want := "environment variables REDIS_URL; compose service cache(redis:7)"
 	if got != want {
 		t.Fatalf("Detected=%q want %q", got, want)
+	}
+}
+
+func TestProcfileExpandsProcessRoles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
+	writeFile(t, dir, "Procfile", "web: bundle exec puma\nworker: bundle exec sidekiq\n")
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Profile.Services) != 2 {
+		t.Fatalf("expected web+worker services from Procfile, got %+v", res.Profile.Services)
+	}
+	byName := map[string]profile.Service{}
+	for _, s := range res.Profile.Services {
+		byName[s.Name] = s
+	}
+	web, ok := byName["web"]
+	if !ok || web.Kind != "http" || web.Port != 3000 || web.Dockerfile != "Dockerfile" {
+		t.Fatalf("web service: %+v", web)
+	}
+	worker, ok := byName["worker"]
+	if !ok || worker.Kind != "worker" || worker.Dockerfile != "Dockerfile" {
+		t.Fatalf("worker service: %+v", worker)
+	}
+	if len(web.Command) != 0 || len(worker.Command) != 0 {
+		t.Fatalf("Procfile commands must not become container args, web=%v worker=%v", web.Command, worker.Command)
+	}
+	inferred := false
+	for _, inf := range res.Profile.Inferences {
+		if inf.ID == "kind-worker" && inf.Confidence == "medium" {
+			inferred = true
+		}
+	}
+	if !inferred {
+		t.Fatal("expected medium-confidence worker-role inference")
+	}
+	named := false
+	for _, a := range res.Profile.Assumptions {
+		if a.ID == "workload-roles" && strings.Contains(a.Statement, "web") && strings.Contains(a.Statement, "worker") {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatal("workload-roles assumption must name Procfile entries")
+	}
+	for _, q := range res.Questions {
+		if strings.Contains(q, "Procfile") && strings.Contains(q, "worker") {
+			return
+		}
+	}
+	t.Fatal("open questions must name discovered Procfile processes")
+}
+
+func TestProcfileDevUsedWhenProcfileMissing(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "Procfile.dev", "web: npm start\nclock: bundle exec clockwork\n")
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Profile.Services) != 2 {
+		t.Fatalf("Procfile.dev should expand roles, got %+v", res.Profile.Services)
+	}
+	foundClock := false
+	for _, s := range res.Profile.Services {
+		if s.Name == "clock" && s.Kind == "worker" {
+			foundClock = true
+		}
+		if len(s.Command) != 0 {
+			t.Fatalf("Procfile.dev command must not become container args: %+v", s.Command)
+		}
+	}
+	if !foundClock {
+		t.Fatalf("clock process missing: %+v", res.Profile.Services)
+	}
+	devNoted := false
+	for _, f := range res.Profile.Facts {
+		if strings.Contains(f.Statement, "dev process file") && strings.Contains(f.Statement, "confirm these roles exist in production") {
+			devNoted = true
+		}
+	}
+	if !devNoted {
+		t.Fatal("Procfile.dev facts must say it is a dev process file")
+	}
+	assumed := false
+	for _, a := range res.Profile.Assumptions {
+		if a.ID == "workload-roles" && strings.Contains(a.Statement, "dev process file") {
+			assumed = true
+		}
+	}
+	if !assumed {
+		t.Fatal("Procfile.dev workload-roles assumption must say it is a dev process file")
+	}
+}
+
+func TestProcfileIgnoresReleaseAndMigrate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "Procfile", "web: bundle exec puma\nrelease: rake db:migrate\nmigrate: python manage.py migrate\nworker: bundle exec sidekiq\n")
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]profile.Service{}
+	for _, s := range res.Profile.Services {
+		byName[s.Name] = s
+	}
+	if _, ok := byName["release"]; ok {
+		t.Fatal("release process must not become a service")
+	}
+	if _, ok := byName["migrate"]; ok {
+		t.Fatal("migrate process must not become a service")
+	}
+	if byName["web"].Kind != "http" || byName["worker"].Kind != "worker" {
+		t.Fatalf("expected web+worker, got %+v", res.Profile.Services)
+	}
+	if len(res.Profile.Services) != 2 {
+		t.Fatalf("expected only web+worker, got %+v", res.Profile.Services)
 	}
 }
