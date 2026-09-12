@@ -150,6 +150,7 @@ func Dir(root string) (*Result, error) {
 	)
 
 	manifestPostgres := readManifestPostgresEvidence(root)
+	manifestORM := readManifestORMEvidence(root)
 
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -239,10 +240,10 @@ func Dir(root string) (*Result, error) {
 		return nil, err
 	}
 
-	return synthesize(root, dockerfiles, exposePorts, langs, envHits, healthPaths, dbURLLiterals, manifestPostgres)
+	return synthesize(root, dockerfiles, exposePorts, langs, envHits, healthPaths, dbURLLiterals, manifestPostgres, manifestORM)
 }
 
-func synthesize(root string, dockerfiles []string, exposePorts map[string]int, langs []profile.Fact, envHits map[string][]profile.Evidence, healthPaths map[string]profile.Evidence, dbURLLiterals []profile.Evidence, manifestPostgres []profile.Evidence) (*Result, error) {
+func synthesize(root string, dockerfiles []string, exposePorts map[string]int, langs []profile.Fact, envHits map[string][]profile.Evidence, healthPaths map[string]profile.Evidence, dbURLLiterals []profile.Evidence, manifestPostgres, manifestORM []profile.Evidence) (*Result, error) {
 	p := profile.AppProfile{Version: 1}
 	var questions []string
 
@@ -413,18 +414,31 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 	// confidence inference + undecided need, never a fact.
 	if !seenNeed["postgres"] && len(manifestPostgres) > 0 {
 		p.Needs = append(p.Needs, profile.Need{Capability: "postgres", Mode: "undecided", Evidence: manifestPostgres})
+		reasoning := "an allowlisted datastore dependency marker was found in a package manifest but no direct DATABASE_URL environment read was detected — verify in the code"
+		if hasPackageJSONEvidence(manifestPostgres) {
+			reasoning += ". The dependency may be dev-only"
+		}
 		p.Inferences = append(p.Inferences, profile.Inference{
 			ID:         "postgres-manifest",
 			Statement:  "the app appears to use PostgreSQL via a dependency that typically reads DATABASE_URL",
 			Confidence: "medium",
-			Reasoning:  "an allowlisted datastore dependency marker was found in a package manifest but no direct DATABASE_URL environment read was detected — verify in the code",
+			Reasoning:  reasoning,
 		})
 		p.Assumptions = append(p.Assumptions, profile.Assumption{
 			ID:        "postgres-mode",
-			Statement: "Database environment variable detected: verify the engine and choose provision or reference; a client does not establish a need for a new database",
+			Statement: "Database dependency found in a package manifest: verify the engine and choose provision or reference; a dependency does not establish a need for a new database.",
 		})
 		p.Secrets = append(p.Secrets, profile.SecretRef{Name: "DATABASE_URL"})
 		seenNeed["postgres"] = true
+	}
+	// prisma/sequelize are multi-engine ORMs: they are not evidence of postgres.
+	if !seenNeed["postgres"] && len(manifestORM) > 0 {
+		p.Inferences = append(p.Inferences, profile.Inference{
+			ID:         "database-orm-manifest",
+			Statement:  "a database ORM is present; the engine is unverified — confirm postgres vs another engine, which would be an unsupported finding",
+			Confidence: "medium",
+			Reasoning:  "prisma or sequelize was found in a package manifest; these ORMs support multiple engines so postgres is not inferred — confirm the engine in the code. The dependency may be dev-only",
+		})
 	}
 	for _, capability := range unsupportedOrder {
 		u := unsupportedByCap[capability]
@@ -445,7 +459,6 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 	return &Result{Profile: p, Questions: questions}, nil
 }
 
-
 // manifestRule maps dependency-manifest markers onto a postgres capability signal.
 // anyOf: one marker is enough; allOf: every marker must appear in the same file set.
 type manifestRule struct {
@@ -463,7 +476,7 @@ var postgresManifestRules = []manifestRule{
 	},
 	{
 		files: []string{"package.json"},
-		anyOf: []string{"pg", "sequelize", "prisma"},
+		anyOf: []string{"pg"},
 		match: matchNodeManifestDep,
 	},
 	{
@@ -478,6 +491,14 @@ var postgresManifestRules = []manifestRule{
 	},
 }
 
+var nodeORMManifestRules = []manifestRule{
+	{
+		files: []string{"package.json"},
+		anyOf: []string{"prisma", "sequelize"},
+		match: matchNodeManifestDep,
+	},
+}
+
 func matchPythonManifestDep(line, marker string) bool {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -489,23 +510,31 @@ func matchPythonManifestDep(line, marker string) bool {
 }
 
 func matchNodeManifestDep(line, marker string) bool {
-	return regexp.MustCompile(`"`+regexp.QuoteMeta(marker)+`"\s*:`).MatchString(line)
+	return regexp.MustCompile(`"` + regexp.QuoteMeta(marker) + `"\s*:`).MatchString(line)
 }
 
 func matchElixirManifestDep(line, marker string) bool {
-	return regexp.MustCompile(`\{:`+regexp.QuoteMeta(marker)+`\b`).MatchString(line)
+	return regexp.MustCompile(`\{:` + regexp.QuoteMeta(marker) + `\b`).MatchString(line)
 }
 
 func matchRubyManifestDep(line, marker string) bool {
-	return regexp.MustCompile(`gem\s+['"]`+regexp.QuoteMeta(marker)+`['"]`).MatchString(line)
+	return regexp.MustCompile(`gem\s+['"]` + regexp.QuoteMeta(marker) + `['"]`).MatchString(line)
 }
 
 // readManifestPostgresEvidence scans root dependency manifests for allowlisted
 // datastore markers. A hit is evidence only — synthesize turns it into an
 // inference, never a fact.
 func readManifestPostgresEvidence(root string) []profile.Evidence {
+	return readManifestEvidence(root, postgresManifestRules)
+}
+
+func readManifestORMEvidence(root string) []profile.Evidence {
+	return readManifestEvidence(root, nodeORMManifestRules)
+}
+
+func readManifestEvidence(root string, rules []manifestRule) []profile.Evidence {
 	var out []profile.Evidence
-	for _, rule := range postgresManifestRules {
+	for _, rule := range rules {
 		hits := matchManifestRule(root, rule)
 		if len(hits) == 0 {
 			continue
@@ -516,6 +545,15 @@ func readManifestPostgresEvidence(root string) []profile.Evidence {
 		}
 	}
 	return out
+}
+
+func hasPackageJSONEvidence(ev []profile.Evidence) bool {
+	for _, e := range ev {
+		if e.File == "package.json" {
+			return true
+		}
+	}
+	return false
 }
 
 func matchManifestRule(root string, rule manifestRule) []profile.Evidence {
