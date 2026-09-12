@@ -18,6 +18,8 @@ import (
 	"sort"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/bealesh/neckbeard/core/profile"
 )
 
@@ -240,10 +242,11 @@ func Dir(root string) (*Result, error) {
 		return nil, err
 	}
 
-	return synthesize(root, dockerfiles, exposePorts, langs, envHits, healthPaths, dbURLLiterals, manifestPostgres, manifestORM)
+	composeHits := readComposeCapabilities(root)
+	return synthesize(root, dockerfiles, exposePorts, langs, envHits, healthPaths, dbURLLiterals, composeHits, manifestPostgres, manifestORM)
 }
 
-func synthesize(root string, dockerfiles []string, exposePorts map[string]int, langs []profile.Fact, envHits map[string][]profile.Evidence, healthPaths map[string]profile.Evidence, dbURLLiterals []profile.Evidence, manifestPostgres, manifestORM []profile.Evidence) (*Result, error) {
+func synthesize(root string, dockerfiles []string, exposePorts map[string]int, langs []profile.Fact, envHits map[string][]profile.Evidence, healthPaths map[string]profile.Evidence, dbURLLiterals []profile.Evidence, composeHits []composeCapability, manifestPostgres, manifestORM []profile.Evidence) (*Result, error) {
 	p := profile.AppProfile{Version: 1}
 	var questions []string
 
@@ -340,10 +343,6 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 	}
 	sort.Strings(names)
 	seenNeed := map[string]bool{}
-	type pendingUnsupported struct {
-		vars []string
-		ev   []profile.Evidence
-	}
 	unsupportedByCap := map[string]*pendingUnsupported{}
 	var unsupportedOrder []string
 	for _, name := range names {
@@ -440,11 +439,15 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 			Reasoning:  "prisma or sequelize was found in a package manifest; these ORMs support multiple engines so postgres is not inferred — confirm the engine in the code. The dependency may be dev-only",
 		})
 	}
+	// Compose image services (root docker-compose.yml / compose.yaml) are mechanical
+	// evidence of datastores the app runs beside in development. Merge by capability
+	// with env/literal/manifest hits — never duplicate a need/unsupported already recorded.
+	applyComposeCapabilities(&p, composeHits, seenNeed, unsupportedByCap, &unsupportedOrder)
 	for _, capability := range unsupportedOrder {
 		u := unsupportedByCap[capability]
 		p.Unsupported = append(p.Unsupported, profile.Unsupported{
 			Capability:  capability,
-			Detected:    "environment variables " + strings.Join(u.vars, ", "),
+			Detected:    formatUnsupportedDetected(u.vars),
 			Explanation: fmt.Sprintf("%s is outside the launch workload contract (DESIGN §3.2); neckbeard will not force-fit it onto the catalog", capability),
 			Evidence:    u.ev,
 		})
@@ -594,6 +597,182 @@ func matchManifestRule(root string, rule manifestRule) []profile.Evidence {
 		}
 	}
 	return out
+}
+
+type pendingUnsupported struct {
+	vars []string
+	ev   []profile.Evidence
+}
+
+type composeCapability struct {
+	Capability string // postgres | object-storage | redis | queues | non-postgres-database
+	AsNeed     bool   // true → undecided need; false → unsupported finding
+	Image      string
+	Service    string
+	File       string
+	Line       int
+}
+
+// readComposeCapabilities maps well-known images in a root compose file to
+// capabilities. Services with a build: key (the app image) are skipped; only
+// image-based sidecar services count.
+func readComposeCapabilities(root string) []composeCapability {
+	var out []composeCapability
+	seenCap := map[string]bool{}
+	for _, name := range []string{"docker-compose.yml", "docker-compose.yaml", "compose.yaml", "compose.yml"} {
+		path := filepath.Join(root, name)
+		hits := parseComposeFile(name, path)
+		for _, h := range hits {
+			if seenCap[h.Capability] {
+				continue
+			}
+			seenCap[h.Capability] = true
+			out = append(out, h)
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
+}
+
+func parseComposeFile(rel, path string) []composeCapability {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		Services map[string]struct {
+			Image yaml.Node `yaml:"image"`
+			Build any       `yaml:"build"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil
+	}
+	var out []composeCapability
+	for name, svc := range doc.Services {
+		if svc.Build != nil {
+			continue
+		}
+		if svc.Image.Kind != yaml.ScalarNode {
+			continue
+		}
+		img := strings.TrimSpace(svc.Image.Value)
+		if img == "" {
+			continue
+		}
+		cap, asNeed, ok := classifyComposeImage(img)
+		if !ok {
+			continue
+		}
+		out = append(out, composeCapability{
+			Capability: cap,
+			AsNeed:     asNeed,
+			Image:      img,
+			Service:    name,
+			File:       rel,
+			Line:       svc.Image.Line,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Line != out[j].Line {
+			return out[i].Line < out[j].Line
+		}
+		return out[i].Service < out[j].Service
+	})
+	return out
+}
+
+func classifyComposeImage(image string) (capability string, asNeed bool, ok bool) {
+	base := composeImageName(image)
+	switch base {
+	case "postgres", "postgis":
+		return "postgres", true, true
+	case "redis", "valkey":
+		return "redis", false, true
+	case "rabbitmq":
+		return "queues", false, true
+	case "minio":
+		return "object-storage", true, true
+	case "mysql", "mariadb", "mongo", "mongodb", "clickhouse":
+		return "non-postgres-database", false, true
+	default:
+		return "", false, false
+	}
+}
+
+func formatUnsupportedDetected(vars []string) string {
+	var envVars, composeVars []string
+	for _, v := range vars {
+		if strings.HasPrefix(v, "compose:") {
+			composeVars = append(composeVars, strings.TrimPrefix(v, "compose:"))
+		} else {
+			envVars = append(envVars, v)
+		}
+	}
+	switch {
+	case len(envVars) > 0 && len(composeVars) > 0:
+		return "environment variables " + strings.Join(envVars, ", ") + "; compose service " + strings.Join(composeVars, ", ")
+	case len(composeVars) > 0:
+		return "compose services " + strings.Join(composeVars, ", ")
+	default:
+		return "environment variables " + strings.Join(envVars, ", ")
+	}
+}
+
+func composeImageName(image string) string {
+	image = strings.TrimSpace(image)
+	if i := strings.Index(image, "@"); i >= 0 {
+		image = image[:i]
+	}
+	if i := strings.LastIndex(image, "/"); i >= 0 {
+		image = image[i+1:]
+	}
+	if i := strings.LastIndex(image, ":"); i >= 0 {
+		image = image[:i]
+	}
+	return strings.ToLower(image)
+}
+
+func applyComposeCapabilities(p *profile.AppProfile, hits []composeCapability, seenNeed map[string]bool, unsupportedByCap map[string]*pendingUnsupported, unsupportedOrder *[]string) {
+	for _, h := range hits {
+		ev := []profile.Evidence{{File: h.File, Line: h.Line}}
+		if h.AsNeed {
+			if seenNeed[h.Capability] {
+				continue
+			}
+			p.Needs = append(p.Needs, profile.Need{Capability: h.Capability, Mode: "undecided", Evidence: ev})
+			p.Inferences = append(p.Inferences, profile.Inference{
+				ID:         "compose-" + h.Capability,
+				Statement:  fmt.Sprintf("compose service %q runs image %q (%s)", h.Service, h.Image, h.Capability),
+				Confidence: "medium",
+				Reasoning:  fmt.Sprintf("%s:%d declares image %q; treat as an undecided %s need and confirm provision vs reference", h.File, h.Line, h.Image, h.Capability),
+			})
+			switch h.Capability {
+			case "postgres":
+				p.Assumptions = append(p.Assumptions, profile.Assumption{
+					ID:        "postgres-mode",
+					Statement: "Database environment variable detected: verify the engine and choose provision or reference; a client does not establish a need for a new database",
+				})
+			case "object-storage":
+				p.Assumptions = append(p.Assumptions, profile.Assumption{ID: "object-storage-mode", Statement: "Choose provision or reference for the detected object storage"})
+			}
+			seenNeed[h.Capability] = true
+			continue
+		}
+		u := unsupportedByCap[h.Capability]
+		if u == nil {
+			u = &pendingUnsupported{}
+			unsupportedByCap[h.Capability] = u
+			*unsupportedOrder = append(*unsupportedOrder, h.Capability)
+		}
+		hint := fmt.Sprintf("compose:%s(%s)", h.Service, h.Image)
+		u.vars = append(u.vars, hint)
+		if len(u.ev) < 5 {
+			u.ev = append(u.ev, ev[0])
+		}
+	}
 }
 
 func serviceNameFor(dockerfile string, i int) string {
