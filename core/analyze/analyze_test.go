@@ -271,3 +271,230 @@ func TestDatabaseURLLiteralBecomesInferenceNotFact(t *testing.T) {
 		}
 	}
 }
+
+func TestManifestDatastoreHeuristics(t *testing.T) {
+	const manifestAssumption = "Database dependency found in a package manifest: verify the engine and choose provision or reference; a dependency does not establish a need for a new database."
+	cases := []struct {
+		name         string
+		files        map[string]string
+		wantPostgres bool
+		wantORM      bool
+	}{
+		{
+			name: "python-dj-database-url",
+			files: map[string]string{
+				"Dockerfile":       "FROM x\nEXPOSE 8000\n",
+				"requirements.txt": "Django==4.2\ndj-database-url==2.1.0\n",
+			},
+			wantPostgres: true,
+		},
+		{
+			name: "python-django-environ-pyproject",
+			files: map[string]string{
+				"Dockerfile":     "FROM x\nEXPOSE 8000\n",
+				"pyproject.toml": "[project]\ndependencies = [\"django-environ>=0.11\"]\n",
+			},
+			wantPostgres: true,
+		},
+		{
+			name: "node-prisma",
+			files: map[string]string{
+				"Dockerfile":   "FROM x\nEXPOSE 3000\n",
+				"package.json": "{\n  \"dependencies\": {\n    \"prisma\": \"^5.0.0\"\n  }\n}\n",
+			},
+			wantORM: true,
+		},
+		{
+			name: "node-pg",
+			files: map[string]string{
+				"Dockerfile":   "FROM x\nEXPOSE 3000\n",
+				"package.json": "{\n  \"dependencies\": {\n    \"pg\": \"^8.11.0\"\n  }\n}\n",
+			},
+			wantPostgres: true,
+		},
+		{
+			name: "node-pg-devDependencies",
+			files: map[string]string{
+				"Dockerfile":   "FROM x\nEXPOSE 3000\n",
+				"package.json": "{\n  \"devDependencies\": {\n    \"pg\": \"^8.11.0\"\n  }\n}\n",
+			},
+			wantPostgres: true,
+		},
+		{
+			name: "node-sequelize",
+			files: map[string]string{
+				"Dockerfile":   "FROM x\nEXPOSE 3000\n",
+				"package.json": "{\n  \"dependencies\": {\n    \"sequelize\": \"^6.0.0\"\n  }\n}\n",
+			},
+			wantORM: true,
+		},
+		{
+			name: "node-pg-and-prisma-prefers-postgres",
+			files: map[string]string{
+				"Dockerfile":   "FROM x\nEXPOSE 3000\n",
+				"package.json": "{\n  \"dependencies\": {\n    \"pg\": \"^8.11.0\",\n    \"prisma\": \"^5.0.0\"\n  }\n}\n",
+			},
+			wantPostgres: true,
+		},
+		{
+			name: "elixir-ecto-and-postgrex",
+			files: map[string]string{
+				"Dockerfile": "FROM x\nEXPOSE 4000\n",
+				"mix.exs":    "defp deps do\n  [{:ecto_sql, \"~> 3.10\"}, {:postgrex, \">= 0.0.0\"}]\nend\n",
+			},
+			wantPostgres: true,
+		},
+		{
+			name: "elixir-ecto-alone-not-enough",
+			files: map[string]string{
+				"Dockerfile": "FROM x\nEXPOSE 4000\n",
+				"mix.exs":    "defp deps do\n  [{:ecto_sql, \"~> 3.10\"}]\nend\n",
+			},
+		},
+		{
+			name: "ruby-activerecord-and-pg",
+			files: map[string]string{
+				"Dockerfile": "FROM x\nEXPOSE 3000\n",
+				"Gemfile":    "gem \"activerecord\", \"~> 7.0\"\ngem \"pg\", \"~> 1.5\"\n",
+			},
+			wantPostgres: true,
+		},
+		{
+			name: "ruby-pg-alone-not-enough",
+			files: map[string]string{
+				"Dockerfile": "FROM x\nEXPOSE 3000\n",
+				"Gemfile":    "gem \"pg\", \"~> 1.5\"\n",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, content := range tc.files {
+				writeFile(t, dir, name, content)
+			}
+			res, err := Dir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			needFound, inferred, factClaim, ormInferred := false, false, false, false
+			var needEv []string
+			var reasoning, assumption, ormStatement, ormReasoning string
+			for _, n := range res.Profile.Needs {
+				if n.Capability == "postgres" && n.Mode == "undecided" {
+					needFound = true
+					for _, e := range n.Evidence {
+						needEv = append(needEv, e.File)
+					}
+				}
+			}
+			for _, inf := range res.Profile.Inferences {
+				if inf.ID == "postgres-manifest" && inf.Confidence == "medium" {
+					inferred = true
+					reasoning = inf.Reasoning
+				}
+				if inf.ID == "database-orm-manifest" {
+					ormInferred = true
+					ormStatement = inf.Statement
+					ormReasoning = inf.Reasoning
+				}
+			}
+			for _, a := range res.Profile.Assumptions {
+				if a.ID == "postgres-mode" {
+					assumption = a.Statement
+				}
+			}
+			for _, f := range res.Profile.Facts {
+				if strings.Contains(strings.ToLower(f.Statement), "postgres") || strings.Contains(f.Statement, "dj-database-url") {
+					factClaim = true
+				}
+			}
+			if tc.wantPostgres {
+				if !needFound {
+					t.Fatalf("expected undecided postgres need, evidence=%v", needEv)
+				}
+				if !inferred {
+					t.Fatal("expected medium-confidence postgres-manifest inference")
+				}
+				if factClaim {
+					t.Fatal("manifest markers must not become facts")
+				}
+				if len(needEv) == 0 {
+					t.Fatal("postgres need must cite the manifest file as evidence")
+				}
+				if assumption != manifestAssumption {
+					t.Fatalf("manifest postgres-mode must not claim an env var was detected, got %q", assumption)
+				}
+				if _, ok := tc.files["package.json"]; ok && !strings.Contains(reasoning, "dev-only") {
+					t.Fatal("node manifest reasoning must note the dependency may be dev-only")
+				}
+			} else if needFound || inferred {
+				t.Fatalf("must not infer postgres (need=%v inf=%v)", needFound, inferred)
+			}
+			if tc.wantORM {
+				if !ormInferred {
+					t.Fatal("expected database-orm-manifest inference")
+				}
+				if !strings.Contains(ormStatement, "engine is unverified") {
+					t.Fatalf("ORM statement too strong: %q", ormStatement)
+				}
+				if !strings.Contains(ormReasoning, "dev-only") {
+					t.Fatal("ORM reasoning must note the dependency may be dev-only")
+				}
+			} else if ormInferred {
+				t.Fatal("unexpected database-orm-manifest inference")
+			}
+		})
+	}
+}
+
+func TestManifestHeuristicYieldsToDirectEnvRead(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8000\n")
+	writeFile(t, dir, "requirements.txt", "dj-database-url==2.1.0\n")
+	writeFile(t, dir, "app.py", `url = os.environ["DATABASE_URL"]`)
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, inf := range res.Profile.Inferences {
+		if inf.ID == "postgres-manifest" {
+			t.Fatal("direct DATABASE_URL env read must win; no manifest inference")
+		}
+	}
+	found := false
+	for _, n := range res.Profile.Needs {
+		if n.Capability == "postgres" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("direct env read should still yield a postgres need")
+	}
+}
+
+func TestORMHeuristicYieldsToDirectEnvRead(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
+	writeFile(t, dir, "package.json", "{\n  \"dependencies\": {\n    \"prisma\": \"^5.0.0\"\n  }\n}\n")
+	writeFile(t, dir, "app.js", `const url = process.env.DATABASE_URL`)
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, inf := range res.Profile.Inferences {
+		if inf.ID == "database-orm-manifest" || inf.ID == "postgres-manifest" {
+			t.Fatalf("direct DATABASE_URL env read must win; got %s", inf.ID)
+		}
+	}
+	found := false
+	for _, n := range res.Profile.Needs {
+		if n.Capability == "postgres" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("direct env read should still yield a postgres need")
+	}
+}
