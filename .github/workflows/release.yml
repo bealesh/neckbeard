@@ -38,7 +38,7 @@ jobs:
             tar -C dist -czf "dist/neckbeard_${ver}_${target%/*}_${target#*/}.tar.gz" neckbeard
             rm dist/neckbeard
           done
-          (cd dist && sha256sum ./*.tar.gz > checksums.txt && cat checksums.txt)
+          (cd dist && sha256sum neckbeard_*.tar.gz > checksums.txt && cat checksums.txt) # bare names: install.sh matches on them
           # Blueprints record the producing version; a release binary must report its tag.
           tar -xzf "dist/neckbeard_${ver}_linux_amd64.tar.gz" -C dist
           got="$(dist/neckbeard version)"

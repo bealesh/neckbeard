@@ -73,7 +73,9 @@ if [ -n "$tag" ]; then
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
   if curl -fsSL -o "$tmp/$asset" "$base/$asset" && curl -fsSL -o "$tmp/checksums.txt" "$base/checksums.txt"; then
-    want="$(grep "[[:space:]]$asset\$" "$tmp/checksums.txt" | awk '{print $1}' || true)"
+    # sha256sum lines are "<hash>  <name>"; tolerate a "./" prefix and the "*"
+    # binary-mode marker so a differently generated checksums.txt still matches.
+    want="$(grep -E "[[:space:]]\\*?(\\./)?$asset\$" "$tmp/checksums.txt" | awk '{print $1}' || true)"
     if [ -z "$want" ]; then
       echo "refusing: checksums.txt for $tag has no entry for $asset" >&2
       exit 1
