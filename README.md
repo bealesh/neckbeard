@@ -1,23 +1,65 @@
-# neckbeard
 <p align="center">
   <img src="docs/assets/neckbeard.png" alt="neckbeard" width="320">
 </p>
 
-**A plugin for your coding agent that turns an app into reviewable cloud
-infrastructure and a cost estimate.** Plans and scaffolds for AWS, GCP, or Azure,
-with GitHub Actions or GitLab CI, from a bundled catalog of maintained OpenTofu
-modules. Pre-alpha: deployment coverage and delivery automation are incomplete.
+<h1 align="center">neckbeard</h1>
 
-Inspired by [ponytail](https://github.com/dietrichgebert/ponytail). The neckbeard handles your infra so you don't have to.
+<p align="center">
+  <em>The neckbeard handles your infra so you don't have to.</em>
+</p>
+
+**A plugin for your coding agent that turns an app into reviewable cloud
+infrastructure and a monthly cost estimate.** AWS, GCP, or Azure; GitHub Actions
+or GitLab CI; serverless containers or Kubernetes — rendered from a bundled
+catalog of tested OpenTofu modules. The agent reads your app and explains; the
+planning, rendering, and validation are deterministic code. **The agent never
+invents infrastructure.**
+
+Inspired by [ponytail](https://github.com/DietrichGebert/ponytail).
+
+## Install
+
+**Claude Code**, as two separate prompts:
+
+```
+/plugin marketplace add bealesh/neckbeard
+```
+```
+/plugin install neckbeard@neckbeard
+```
+
+Then, in your app's repo: `/neckbeard:analyze`. Your first `/neckbeard:` command installs the
+small `neckbeard` CLI the plugin drives (a sha256-verified release binary, or
+`go install` when Go is present) — nothing else to set up. Cost estimates and
+static validation use tools you may already have (Infracost, OpenTofu, Checkov);
+`/neckbeard:doctor` tells you which are missing and what each unlocks.
+
+**Codex, Cursor, or any [SKILL.md](https://developers.openai.com/codex/skills)-speaking agent:** see [INSTALL.md](INSTALL.md).
+
+## What happens
 
 ```
 you:    /neckbeard:analyze
 agent:  reads your repo → evidence-backed profile → asks what code can't tell it
-you:    resolve the draft's questions, pick a cloud and a tier
-agent:  plan → estimate ($83/mo, here's the table) → scaffold → validate
-you:    review the files and follow docs/bootstrap.md per environment
-next:   configure cloud access and verify deployment (coverage varies by lane)
+you:    answer the questions, pick a cloud and a tier
+you:    /neckbeard:estimate
+agent:  plans against the catalog → "$77/mo expected — here's the table, and
+        here's what Infracost can't price"
+you:    /neckbeard:sync
+agent:  scaffold → validate → "V0 PASSED; V1/V2 NOT EXERCISED; next step is
+        docs/bootstrap.md"
+you:    review the files like any PR; follow the runbook per environment
 ```
+
+## Commands
+
+| Command | What it does |
+|---------|--------------|
+| `/neckbeard:analyze` | Reads the repo into an evidence-backed `app-profile.yaml` (facts with file:line, inferences with confidence, loud assumptions), asks the open questions, proposes `neckbeard.yaml`. |
+| `/neckbeard:estimate [comparison]` | Plans against the module catalog and shows the monthly cost table — low/expected/high per environment, usage assumptions, and every unpriced resource — before anything exists. `serverless vs kubernetes` or `solo vs smallteam` runs both. |
+| `/neckbeard:sync` | The loop: plan → estimate → scaffold → validate, under the ownership contract (your edits are never silently overwritten). Ends with PASSED / FAILED / NOT EXERCISED. |
+| `/neckbeard:doctor [plan\|estimate\|validate\|all]` | Installs the CLI if missing; reports which prerequisites are present and what each unlocks. |
+| `/neckbeard:help` | The quick reference. |
 
 ## Why this exists
 
@@ -26,17 +68,16 @@ failure mode is always the same: plausible-looking HCL that is subtly broken,
 insecure by default, and unestimable. neckbeard inverts the roles:
 
 - **Humans maintain the golden path** — versioned OpenTofu modules, pipeline
-  templates, GitOps layouts, per cloud.
+  templates, GitOps layouts, per cloud, tested in CI on every change.
 - **The agent analyzes, parameterizes, and explains.** It reads your app,
-  figures out what it needs, and maps that onto catalog inputs — with file:line
-  evidence for every claim it makes.
-- **Everything in between is deterministic code.** Same inputs, same bytes:
-  the planner emits a hash-verified `blueprint.yaml` lockfile, the renderer is
-  a pure function of it, and regeneration never silently overwrites your edits.
+  figures out what it needs, and maps that onto catalog inputs — with evidence
+  for every claim it makes.
+- **Everything in between is deterministic.** Same inputs, same bytes: the
+  planner emits a hash-verified `blueprint.yaml` lockfile, the renderer is a
+  pure function of it, and regeneration never silently overwrites your edits.
 
-**The agent never invents infrastructure.** Needs the catalog can't express
-become named findings ("redis is outside the workload contract"), not
-force-fits onto the nearest module.
+Needs the catalog can't express become named findings ("redis is outside the
+workload contract"), not force-fits onto the nearest module.
 
 ## The part nobody else tells you: what it costs
 
@@ -49,13 +90,10 @@ tier, all three environments, live prices via Infracost:
 
 \* Infracost can't price Container Apps compute yet — and instead of letting a
 low number lie, the report **names every unpriced resource**. That's the house
-style: `neckbeard estimate` gives you baseline-while-idle costs, explicit usage
-assumptions (a tier name is not a usage estimate — the numbers are, and you can
-edit them), low/expected/high scenario ranges, and a provenance footer. Cloud budget alerts are planned; the current CLI does
-not configure them. When implemented, alerts will notify, not cap spending.
-
-It also prices your *decisions*: the table above is why neckbeard tells solo
-developers "you don't need Kubernetes yet" — with receipts.
+style: baseline-while-idle costs, explicit usage assumptions you can edit,
+low/expected/high scenarios, and a provenance footer. It also prices your
+*decisions*: this table is why neckbeard tells solo developers "you don't need
+Kubernetes yet" — with receipts.
 
 ## Honesty as architecture
 
@@ -67,137 +105,61 @@ V0   PASSED         tofu validate [prd]
 V0   PASSED         checkov policy [prd]        ← every skip carries a written reason
 V0   PASSED         kubeconform (clusters/)
 V1   NOT EXERCISED  authenticated plan          requires cloud credentials
-V2   NOT EXERCISED  deployment verification     release-harness only for now
+V2   NOT EXERCISED  deployment verification     requires cloud credentials
 ```
 
-- Static validation **never claims deployability** — V0/V1/V2 are distinct
+- Static validation **never claims deployability**. V0/V1/V2 are distinct
   levels, each reported as exercised or not.
-- Every checkov skip in the generated `.checkov.yaml` states its reason. A
+- Every Checkov skip in the generated `.checkov.yaml` states its reason. A
   skip without a reason is a lie about your security posture.
 - When live runs break, the failures become public
-  [findings](docs/findings/) and then harness requirements. Our first real
-  deployment produced ten of them; five became catalog fixes the same day.
-- Placeholder pins say "placeholder". Degraded paths print why (Azure + GitLab
-  merge-request plans can't federate — the pipeline says so instead of failing
-  mysteriously).
+  [findings](docs/findings/) and then catalog fixes. Our first real deployment
+  produced ten; five became fixes the same day.
+- Degraded paths say why (Azure + GitLab merge-request plans can't federate —
+  the pipeline says so instead of failing mysteriously).
 
 ## What you get
 
 - **Three isolated environments** (dev/stg/prd) with independent state, sized
   by tier presets over explicit dimensions: traffic, availability, RPO/RTO,
-  operating capacity. Every preset value is visible and overridable within the
-  catalog's tested envelope — and values outside it are *marked*, not blessed.
+  operating capacity. Every value is visible and overridable within the
+  catalog's tested envelope; values outside it are *marked*, not blessed.
 - **Two runtimes per cloud**: serverless containers (Cloud Run / ECS Fargate /
-  Container Apps) or Kubernetes (EKS / GKE / AKS) with Flux manifests for dev
-  image automation. Complete promotion, rollback, and serverless release
-  automation remain subsequent work; initial image references are placeholders.
-- **CI/CD for GitHub Actions or GitLab CI** from one internal model: test →
-  build → scan (trivy blocks HIGH/CRITICAL) → push; infra plans on PRs with a
-  read-only role, applies on main with a write role, prd gated by environment
-  protection. **Zero static cloud keys** — OIDC federation everywhere,
-  enforced by a test that fails if a rendered pipeline ever mentions
-  `AWS_SECRET_ACCESS_KEY`.
+  Container Apps) or Kubernetes (EKS / GKE / AKS) with Flux manifests.
+- **CI/CD for GitHub Actions or GitLab CI** from one model: test → build →
+  scan (trivy blocks HIGH/CRITICAL) → push; infra plans on PRs with a
+  read-only identity, applies on main with a write identity, production gated
+  by environment protection. **Zero static cloud keys** — OIDC federation
+  everywhere, enforced by a test that fails if a rendered pipeline ever
+  mentions `AWS_SECRET_ACCESS_KEY`.
 - **Security posture as explicit controls**: private-by-default networks,
-  secrets managers holding *names* the operator fills (values never touch
+  secret managers holding *names* the operator fills (values never touch
   neckbeard, its state, or your git history), scoped CI identities, managed
   WAF rules where the tier enables them.
-- **A bootstrap runbook** (`docs/bootstrap.md`) that takes a human with
-  elevated credentials through federated CI setup per environment —
-  state backend first, then OIDC trust, then CI roles.
+- **A bootstrap runbook** (`docs/bootstrap.md`) that walks a human with
+  elevated credentials through state backend → OIDC trust → CI identities, per
+  environment. Everything after `validate` is deliberately human-in-the-loop.
 
-## Quick start
-
-As a Claude Code plugin:
-
-```
-/plugin marketplace add bealesh/neckbeard
-/plugin install neckbeard@neckbeard
-```
-
-then, in your app's repo: `/neckbeard:analyze`.
-
-**Codex CLI, Cursor, or any [SKILL.md](https://developers.openai.com/codex/skills)-speaking agent:**
-
-```sh
-go install github.com/bealesh/neckbeard/cmd/neckbeard@latest
-neckbeard skill install                  # .agents/skills/ — the open standard
-neckbeard skill install -target cursor   # + repo slash commands for Cursor
-neckbeard skill install -scope user      # once, for every repo on this machine
-```
-
-The skill is the same operating manual everywhere; only the discovery path
-differs. Codex invokes it via `/skills` or `$neckbeard`; Cursor loads it on
-demand and gets `/neckbeard-analyze` and `/neckbeard-sync` as commands.
-
-Or drive the CLI directly:
-
-```sh
-go install github.com/bealesh/neckbeard/cmd/neckbeard@latest
-
-neckbeard doctor -for plan # checks the bundled catalog; no cloud access
-neckbeard analyze          # draft profile + the questions code can't answer
-$EDITOR app-profile.yaml   # resolve each assumption with a same-id confirmed answer
-$EDITOR neckbeard.yaml     # cloud, region, tier, runtime, repo
-neckbeard plan             # deterministic blueprint + topology summary
-neckbeard doctor -for estimate
-neckbeard estimate         # the money table, before anything exists
-neckbeard scaffold         # infra/, pipelines, clusters/ — yours to review
-neckbeard validate         # V0: fmt, validate, checkov, kubeconform
-```
-
-The binary bundles the catalog, schemas, presets, and installed skill references:
-**no neckbeard source checkout is needed**. Use `neckbeard schema neckbeard`,
-`neckbeard schema app-profile`, and `neckbeard presets` for exact inputs. See the
-[onboarding guide](plugin/skills/neckbeard/references/onboarding.md) for a complete
-config and examples for existing databases and unsupported dependencies.
-
-The supported workload is **one image, up to 10 HTTP/worker/cron processes**, with
-repository-root build context. Omitted or empty `command` preserves image defaults.
-`plan` refuses unresolved assumptions, undecided datastore provisioning, and
-unsupported findings without an explicit disposition. Existing services use
-`mode: reference` and a connection `secret_name`; their lifecycle remains external.
-
-Scaffold includes pinned module contents under `.neckbeard/catalog/`. Commit that
-directory with the generated infrastructure and ownership manifest. Upgrading to
-a different bundled catalog requires a new plan and review of the diff. Explicit
-`-catalog` and `-catalog-source` remain available for catalog development.
-
-Planning and scaffolding need no external tools or cloud credentials. Estimates
-need Infracost **0.10.x** and its pricing login. Validation needs the pinned
-OpenTofu version, with Checkov, kubeconform (Kubernetes), and actionlint (GitHub)
-for their respective gates. `neckbeard doctor -for estimate|validate|all` reports
-missing or incompatible tools; `validate` reports unavailable checks as
-NOT EXERCISED. Doctor checks tool availability, not cloud permissions or quotas.
+The supported workload is **one image, up to 10 HTTP/worker/cron processes,
+Postgres, object storage, secrets**, deployed into existing accounts, projects,
+or subscriptions. Anything else is an explicit `unsupported` finding.
 
 ## Status: pre-alpha, and precise about it
 
-The current development checkpoint and remaining acceptance gates are tracked in
-the [launch plan](docs/launch-plan.md), with detailed [live deployment evidence](docs/tranche-2.md).
-The live coverage below describes the development checkpoint, not completed
-launch acceptance.
+What is proven, and how:
 
-| cloud / VCS | serverless live evidence | Kubernetes live lifecycle |
-|---|---|---|
-| AWS / GitHub | Deploy, update, rollback and failed-release recovery passed | Not yet |
-| GCP / GitHub | Bootstrap/database prepared; app deployment partially applied | Not yet |
-| Azure / GitHub | Deploy, update, rollback and environment recreation passed | Not yet |
-| AWS / GitLab | App deployment not yet exercised | Not yet |
-| GCP / GitLab | App deployment not yet exercised | Not yet |
-| Azure / GitLab | App deployment not yet exercised | Not yet |
+| Claim | Evidence |
+|---|---|
+| analyze → plan → estimate → scaffold → validate on all 12 cloud × VCS × runtime paths | Static matrix runs in CI on every PR; three unrelated fixture apps onboard end to end |
+| Live deploy → update → rollback, serverless | Passed on AWS/GitHub and Azure/GitHub with real database checks ([evidence](docs/tranche-2.md)) |
+| Live deploy on GCP, GitLab lanes, Kubernetes, promotion, recovery drills | **Not yet.** Implemented, NOT EXERCISED |
 
-The six-lane static matrix runs on every PR using the bundled catalog. Tests also
-run a built binary from three unrelated fixture apps across all 12 cloud/VCS/runtime
-combinations, including an existing database and external Redis. These tests cover
-onboarding and rendering; pricing is stubbed in the automated fixture test.
-GitLab's separate-account approval preflight passed, but that does not prove a
-cloud deployment. Full lifecycle acceptance remains **0/12**: promotion, clean
-automated setup/teardown, Kubernetes and the remaining deployment paths are
-unfinished. The live evidence notes also document the current workflow-linter
-compatibility gap. Do not treat static validation as deployment proof.
-
-Also honest: landing zones (org structure, central audit, guardrails — the
-Path F story in [DESIGN.md](DESIGN.md)) are designed but not yet built; the
-adopt path (existing accounts/projects/subscriptions) is what ships today.
+The plugin's product today is the onboarding half: reviewable infrastructure,
+pipelines, a cost estimate, and a bootstrap runbook you can hand to a human.
+The deployment lifecycle (`neckbeard release …`, documented in the skill) is
+experimental and tracked gate by gate in the [launch plan](docs/launch-plan.md).
+Do not treat static validation as deployment proof. Landing zones (org
+structure, guardrails — Path F in [DESIGN.md](DESIGN.md)) are designed, not built.
 
 ## How it hangs together
 
@@ -215,6 +177,18 @@ repo ──▶│ analyze: facts w/    │  profile   │ plan: catalog @ pinned
                                    scenarios,     contract:       V1 plan,
                                    unpriced       never silently  V2 deploy —
                                    named          overwrite       each reported
+```
+
+The repository root is the plugin: [`skills/neckbeard/SKILL.md`](skills/neckbeard/SKILL.md)
+is the agent's operating manual, [`commands/`](commands/) are the slash
+commands, and the Go CLI under [`cmd/`](cmd/neckbeard) with the module catalog
+under [`catalog/`](catalog/) is the deterministic half. The CLI also drives
+everything without an agent:
+
+```sh
+go install github.com/bealesh/neckbeard/cmd/neckbeard@latest
+neckbeard analyze && $EDITOR app-profile.yaml neckbeard.yaml
+neckbeard plan && neckbeard estimate && neckbeard scaffold && neckbeard validate
 ```
 
 Deep dives: [DESIGN.md](DESIGN.md) (the full design, kept honest since day

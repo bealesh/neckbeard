@@ -11,9 +11,9 @@ import (
 	"regexp"
 	"strings"
 
+	pluginassets "github.com/bealesh/neckbeard"
 	catalogassets "github.com/bealesh/neckbeard/catalog"
 	"github.com/bealesh/neckbeard/core/presets"
-	pluginassets "github.com/bealesh/neckbeard/plugin"
 	"github.com/bealesh/neckbeard/schemas"
 )
 
@@ -106,11 +106,21 @@ func Install(root string, t Target) ([]string, error) {
 	// Cursor also supports repo-level slash commands; the Claude command bodies
 	// port directly once their claude-plugin frontmatter is stripped.
 	if t == TargetCursor {
-		if err := write(filepath.Join(".cursor", "commands", "neckbeard-analyze.md"), commandBody(pluginassets.AnalyzeCommand)); err != nil {
+		entries, err := fs.ReadDir(pluginassets.Commands, "commands")
+		if err != nil {
 			return nil, err
 		}
-		if err := write(filepath.Join(".cursor", "commands", "neckbeard-sync.md"), commandBody(pluginassets.SyncCommand)); err != nil {
-			return nil, err
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			md, err := pluginassets.Commands.ReadFile("commands/" + e.Name())
+			if err != nil {
+				return nil, err
+			}
+			if err := write(filepath.Join(".cursor", "commands", "neckbeard-"+e.Name()), commandBody(md)); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return written, nil
@@ -119,9 +129,11 @@ func Install(root string, t Target) ([]string, error) {
 var frontmatterRe = regexp.MustCompile(`(?s)\A---\n.*?\n---\n`)
 
 // commandBody strips the plugin-command frontmatter and the Claude-specific
-// $ARGUMENTS placeholder, leaving a plain prompt file.
+// $ARGUMENTS placeholder, and rewrites the /neckbeard:<cmd> namespace to
+// Cursor's flat /neckbeard-<cmd> command names, leaving a plain prompt file.
 func commandBody(md []byte) []byte {
 	body := frontmatterRe.ReplaceAll(md, nil)
 	body = []byte(strings.ReplaceAll(string(body), "$ARGUMENTS", ""))
+	body = []byte(strings.ReplaceAll(string(body), "/neckbeard:", "/neckbeard-"))
 	return []byte(strings.TrimSpace(string(body)) + "\n")
 }

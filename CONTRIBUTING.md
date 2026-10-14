@@ -55,6 +55,27 @@ never rubber-stamped.
 4. **Findings are assets.** If a live run breaks, the failure goes into
    `docs/findings/` and becomes a harness requirement.
 
+## Plugin layout
+
+The repository root is the Claude Code plugin (`.claude-plugin/plugin.json` +
+`marketplace.json` with `source: "./"`), the same shape as ponytail:
+
+- `skills/neckbeard/SKILL.md` — the agent's operating manual, plus
+  `references/` (onboarding and release contracts). The binary embeds these
+  (`assets.go`) so `neckbeard skill install` can place them for Codex, Cursor,
+  and any SKILL.md-speaking tool.
+- `commands/*.md` — the `/neckbeard:*` slash commands. Frontmatter needs a
+  `description`; `skill install -target cursor` strips it and rewrites the
+  namespace to `/neckbeard-*`.
+- `hooks/` — one read-only SessionStart hook that reports whether the CLI is
+  on PATH. Hooks never install or download.
+- `scripts/install.sh` — the CLI bootstrap: a GitHub Release binary verified
+  against `checksums.txt`, else `go install`, else instructions.
+
+Changing the skill or a command changes agent behaviour for every user: say in
+the PR what you observed before and after, ideally in a fresh agent session on
+a repo you did not write.
+
 ## Catalog changes
 
 Module input schemas and resource addresses are contractual within a major

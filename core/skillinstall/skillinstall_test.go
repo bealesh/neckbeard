@@ -1,12 +1,13 @@
 package skillinstall
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	pluginassets "github.com/bealesh/neckbeard/plugin"
+	pluginassets "github.com/bealesh/neckbeard"
 )
 
 func TestEmbeddedAssetsAreReal(t *testing.T) {
@@ -63,5 +64,28 @@ func TestCursorGetsCommands(t *testing.T) {
 func TestUnknownTargetRefused(t *testing.T) {
 	if _, err := Install(t.TempDir(), Target("vscode")); err == nil || !strings.Contains(err.Error(), "plugin marketplace") {
 		t.Errorf("unknown targets need a helpful refusal, got: %v", err)
+	}
+}
+
+func TestEveryCommandHasFrontmatter(t *testing.T) {
+	entries, err := fs.ReadDir(pluginassets.Commands, "commands")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) < 2 {
+		t.Fatalf("expected the plugin commands to be embedded, got %d entries", len(entries))
+	}
+	for _, e := range entries {
+		md, err := pluginassets.Commands.ReadFile("commands/" + e.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(md)
+		if !strings.HasPrefix(s, "---\n") || !strings.Contains(s, "\ndescription:") {
+			t.Errorf("%s: plugin commands need frontmatter with a description", e.Name())
+		}
+		if !strings.Contains(s, "\n---\n") {
+			t.Errorf("%s: unterminated frontmatter", e.Name())
+		}
 	}
 }

@@ -1,0 +1,50 @@
+name: release
+
+# Builds the CLI for linux/darwin × amd64/arm64 when a v* tag is pushed and
+# attaches the archives plus a sha256 checksums.txt to a GitHub Release. The
+# plugin's scripts/install.sh downloads from that release and refuses any
+# archive whose digest is not in checksums.txt.
+#
+# The fork-safety invariant (CONTRIBUTING.md) holds here too: no pull_request
+# trigger, no cloud credentials, no OIDC — only the repository's own token,
+# scoped to publishing the release.
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the binary reports the tag it was built from (go ≥1.24 reads it from VCS)
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - name: Build archives
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -eu
+          ver="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -trimpath -o dist/neckbeard ./cmd/neckbeard
+            tar -C dist -czf "dist/neckbeard_${ver}_${target%/*}_${target#*/}.tar.gz" neckbeard
+            rm dist/neckbeard
+          done
+          (cd dist && sha256sum ./*.tar.gz > checksums.txt && cat checksums.txt)
+          # Blueprints record the producing version; a release binary must report its tag.
+          tar -xzf "dist/neckbeard_${ver}_linux_amd64.tar.gz" -C dist
+          got="$(dist/neckbeard version)"
+          test "$got" = "neckbeard ${ver}" || { echo "::error::binary reports '$got', expected 'neckbeard ${ver}'"; exit 1; }
+          rm dist/neckbeard
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"

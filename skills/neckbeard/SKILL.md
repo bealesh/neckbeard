@@ -21,10 +21,19 @@ Read [the onboarding contract](references/onboarding.md) first. It contains the 
 
 ## Prerequisites
 
-The `neckbeard` binary must be on PATH (`go install github.com/bealesh/neckbeard/cmd/neckbeard@latest`
-or a release binary), plus `tofu` for validation. `infracost` 0.10.x (logged in)
-enables estimates; `checkov`/`kubeconform` enable those V0 checks. Missing tools
-degrade honestly — validate reports them NOT EXERCISED.
+The `neckbeard` binary does the deterministic half. If it is not on PATH, run
+the plugin's installer before anything else:
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/install.sh"` (if that placeholder is
+unfilled, use the plugin root the session-start context reported). It installs
+a sha256-verified release binary into `~/.local/bin`, or falls back to
+`go install github.com/bealesh/neckbeard/cmd/neckbeard@latest` when Go is
+present; it never executes anything it did not verify. Outside Claude Code,
+`go install` is the documented path. Planning and scaffolding need nothing
+else. `tofu` enables validation; `infracost` 0.10.x (logged in) enables
+estimates; `checkov`, `kubeconform`, and `actionlint` enable their V0 gates.
+Missing tools degrade honestly — `neckbeard doctor` lists them and validate
+reports NOT EXERCISED. Those tools are the user's toolchain: give install
+commands, don't install them unasked.
 
 ## The flow
 
