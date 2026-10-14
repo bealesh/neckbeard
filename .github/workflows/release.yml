@@ -32,19 +32,26 @@ jobs:
         run: |
           set -eu
           ver="${GITHUB_REF_NAME#v}"
-          mkdir -p dist
+          # Build outside the checkout: an untracked dist/ inside it would make
+          # Go's VCS stamp report "+dirty" for every archive after the first.
+          dist="$RUNNER_TEMP/dist"
+          mkdir -p "$dist"
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
-            GOOS="${target%/*}" GOARCH="${target#*/}" go build -trimpath -o dist/neckbeard ./cmd/neckbeard
-            tar -C dist -czf "dist/neckbeard_${ver}_${target%/*}_${target#*/}.tar.gz" neckbeard
-            rm dist/neckbeard
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -trimpath -o "$dist/neckbeard" ./cmd/neckbeard
+            tar -C "$dist" -czf "$dist/neckbeard_${ver}_${target%/*}_${target#*/}.tar.gz" neckbeard
+            rm "$dist/neckbeard"
           done
-          (cd dist && sha256sum neckbeard_*.tar.gz > checksums.txt && cat checksums.txt) # bare names: install.sh matches on them
-          # Blueprints record the producing version; a release binary must report its tag.
-          tar -xzf "dist/neckbeard_${ver}_linux_amd64.tar.gz" -C dist
-          got="$(dist/neckbeard version)"
+          (cd "$dist" && sha256sum neckbeard_*.tar.gz > checksums.txt && cat checksums.txt) # bare names: install.sh matches on them
+          # Blueprints record the producing version; a release binary must report
+          # its tag exactly. The last-built archive is checked so a dirty tree
+          # part-way through the loop cannot slip past.
+          test -z "$(git status --porcelain)" || { echo "::error::checkout is dirty after the build"; git status --porcelain; exit 1; }
+          tar -xzf "$dist/neckbeard_${ver}_linux_amd64.tar.gz" -C "$dist"
+          got="$("$dist/neckbeard" version)"
           test "$got" = "neckbeard ${ver}" || { echo "::error::binary reports '$got', expected 'neckbeard ${ver}'"; exit 1; }
-          rm dist/neckbeard
+          rm "$dist/neckbeard"
+          echo "DIST=$dist" >> "$GITHUB_ENV"
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" "$DIST"/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
