@@ -8,7 +8,7 @@ scaffolds cloud infrastructure with explicit, tested security controls: environm
 CI/CD, GitOps, observability — with an honest cost estimate attached, and optionally a
 full organization landing zone underneath.
 
-Sibling of ponytail. The neckbeard handles your infra so you don't have to.
+Inspired by [ponytail](https://github.com/DietrichGebert/ponytail). The neckbeard handles your infra so you don't have to.
 
 ---
 

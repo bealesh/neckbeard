@@ -1,0 +1,14 @@
+{
+  "name": "neckbeard",
+  "version": "0.2.0",
+  "description": "Turn an app into reviewable cloud infrastructure and a cost estimate. The agent analyzes and explains; planning, rendering, and validation are deterministic from a tested OpenTofu module catalog — the agent never invents infrastructure.",
+  "author": {
+    "name": "bealesh",
+    "url": "https://github.com/bealesh"
+  },
+  "homepage": "https://github.com/bealesh/neckbeard",
+  "repository": "https://github.com/bealesh/neckbeard",
+  "license": "Apache-2.0",
+  "keywords": ["infrastructure", "opentofu", "terraform", "aws", "gcp", "azure", "ci-cd", "cost-estimate"],
+  "hooks": "./hooks/hooks.json"
+}
