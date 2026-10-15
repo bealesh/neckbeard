@@ -1,13 +1,17 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "neckbeard",
+  "description": "The neckbeard handles your infra so you don't have to: analyze an app, plan against a tested module catalog, estimate real costs, scaffold, validate.",
   "owner": {
-    "name": "bealesh"
+    "name": "bealesh",
+    "url": "https://github.com/bealesh"
   },
   "plugins": [
     {
       "name": "neckbeard",
-      "source": "./plugin",
-      "description": "Analyze your app and scaffold tested, cost-honest cloud infrastructure: environments, CI/CD, GitOps, observability — on AWS, GCP, or Azure."
+      "description": "Analyze your app and scaffold tested, cost-honest cloud infrastructure: environments, CI/CD, GitOps — on AWS, GCP, or Azure.",
+      "source": "./",
+      "category": "devops"
     }
   ]
 }

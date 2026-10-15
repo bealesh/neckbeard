@@ -52,4 +52,4 @@ now tackle real bootstrap, image publication/deployment, application and databas
 verification, update, and teardown. Serverless release automation, promotion and
 rollback, cloud budget alerts, and recovery verification remain subsequent work.
 
-User-facing setup: [onboarding guide](../plugin/skills/neckbeard/references/onboarding.md).
+User-facing setup: [onboarding guide](../skills/neckbeard/references/onboarding.md).

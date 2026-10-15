@@ -217,8 +217,19 @@ func pipelineChecks(root string) []Check {
 	return checks
 }
 
+// crdCatalog is the community CRD schema catalog (Flux, external-secrets)
+// kubeconform validates against, pinned to a commit so a V0 verdict never
+// changes because a third-party repository regenerated a file. Bumps are
+// deliberate: re-run the kubernetes lanes before moving the pin. Pinned at the
+// parent of datreeio/CRDs-catalog#988 (2026-10-08): that regeneration of
+// external-secrets.io/clustersecretstore_v1.json is unloadable by kubeconform
+// 0.8.0 and current main ("could not find schema", even from a local file),
+// which is what broke tracking `main`. Older pins lack the Kustomization
+// schema (added 2026-08-02).
+const crdCatalog = "https://raw.githubusercontent.com/datreeio/CRDs-catalog/f1e7f6bc0537bf0622ffe6e47dbaa85914fabbec/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+
 // manifestChecks validates the kubernetes delivery layer (clusters/) with
-// kubeconform: core schemas plus the community CRD catalog for Flux resources.
+// kubeconform: core schemas plus the pinned community CRD catalog.
 func manifestChecks(root string) []Check {
 	clustersDir := filepath.Join(root, "clusters")
 	if _, err := os.Stat(clustersDir); err != nil {
@@ -231,7 +242,7 @@ func manifestChecks(root string) []Check {
 	cmd := exec.Command(kubeconform,
 		"-strict", "-summary",
 		"-schema-location", "default",
-		"-schema-location", "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+		"-schema-location", crdCatalog,
 		clustersDir)
 	out, runErr := cmd.CombinedOutput()
 	c := Check{Level: "V0", Name: "kubeconform (clusters/)", Status: Passed}

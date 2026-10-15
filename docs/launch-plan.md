@@ -1,5 +1,14 @@
 # Launch plan
 
+> **Scope decision, 2026-10-14.** neckbeard ships as a plugin first. The launch
+> product is the onboarding half — `analyze → estimate → scaffold → validate`
+> plus the bootstrap runbook — on the 12 cloud × VCS × runtime paths the static
+> CI matrix proves on every PR. The deployment-lifecycle gates below (live
+> matrix, operations drills, independent-user trials) remain the acceptance
+> plan for the `release` workflow, which stays labeled experimental until they
+> pass; they are no longer launch blockers for the plugin. Status labels in the
+> README and the skill must keep saying exactly that.
+
 Status: proposed execution plan, 2026-09-10. The deployment checkpoint is not a
 release candidate. This plan preserves the launch requirement of **AWS, GCP and
 Azure × GitHub and GitLab × serverless containers and Kubernetes: 12 paths**.
