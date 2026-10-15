@@ -18,6 +18,25 @@ The plugin installs the CLI on first use via `scripts/install.sh` (a
 sha256-verified release binary into `~/.local/bin`, or `go install` when Go is
 present); `/neckbeard:doctor` reports the rest of the toolchain.
 
+## Running alongside ponytail
+
+The intended pairing is [ponytail](https://github.com/DietrichGebert/ponytail)
+for the application code and neckbeard for what it runs on. Both plugins
+installed into one Claude Code config (2.1.296) load cleanly: ponytail adds
+SessionStart, SubagentStart and UserPromptSubmit hooks and about 430 always-on
+tokens, neckbeard adds one SessionStart hook and about 280; the two hooks
+don't collide, and both emit their context on the same session start. Nothing
+in ponytail's ruleset argues against using an installed tool (its rung four is
+"an installed dependency? use it"), and neckbeard's skill is explicit that the
+agent never hand-writes infrastructure.
+
+What has not been checked is behaviour: a full onboarding run with both plugins
+active, watching whether ponytail's "smallest change that works" ever talks the
+agent out of running the CLI. That is tracked in
+[#27](https://github.com/bealesh/neckbeard/issues/27). If you run the pair and
+it misbehaves, open an issue with the transcript; the fix goes in the skill,
+not the docs.
+
 ## Codex CLI
 
 ```sh
