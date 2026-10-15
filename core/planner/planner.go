@@ -9,6 +9,7 @@ package planner
 import (
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -59,6 +60,32 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 	// accounts are implied by the federated credentials.
 	if cfg.Cloud != "aws" && len(cfg.Containers) == 0 {
 		return nil, fmt.Errorf("cloud %q requires per-environment container ids (GCP project ids / Azure subscription ids); set containers: {dev: …, stg: …, prd: …} in neckbeard.yaml", cfg.Cloud)
+	}
+
+	// Budgets are config-driven, not profile-driven: the app doesn't know what
+	// it may cost, the operator does. A budget with nobody to notify is
+	// theatre, so recipients are required; on GCP budgets live on the billing
+	// account, which the project id cannot imply.
+	budgetPerEnv := 0.0
+	if cfg.FinOps.MonthlyBudgetAlert > 0 {
+		if len(cfg.FinOps.AlertEmails) == 0 {
+			return nil, fmt.Errorf("finops.monthly_budget_alert is set but finops.alert_emails is empty: a budget alert needs someone to alert")
+		}
+		if cfg.Cloud == "gcp" && cfg.FinOps.BillingAccount == "" {
+			return nil, fmt.Errorf("finops.monthly_budget_alert on gcp needs finops.billing_account (budgets are created on the billing account, not the project)")
+		}
+		mods, ok := in.Catalog.CapabilityModules(cfg.Cloud, cfg.Runtime, "budget")
+		if !ok {
+			return nil, fmt.Errorf("catalog has no budget module for %s; remove finops.monthly_budget_alert or upgrade the catalog", cfg.Cloud)
+		}
+		for _, m := range mods {
+			if !slices.Contains(moduleNames, m) {
+				moduleNames = append(moduleNames, m)
+			}
+		}
+		sort.Strings(moduleNames)
+		budgetPerEnv = math.Round(cfg.FinOps.MonthlyBudgetAlert/float64(len(cfg.Environments))*100) / 100
+		decisions = append(decisions, fmt.Sprintf("budget: %.2f/month total split evenly as %.2f per environment (%s); alerts at 80%% and 100%% actual and 100%% forecasted notify %s — they do not cap spend", cfg.FinOps.MonthlyBudgetAlert, budgetPerEnv, strings.Join(cfg.Environments, "/"), strings.Join(cfg.FinOps.AlertEmails, ", ")))
 	}
 
 	// Overrides must target modules the plan actually uses and allowlisted inputs.
@@ -123,6 +150,14 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 						}
 						inputs[i] = blueprint.Input{Key: "cpu", Value: "1", Provenance: "derived"}
 					}
+				}
+			}
+			if modName == "budget" {
+				inputs = insertInput(inputs, blueprint.Input{Key: "monthly_amount", Value: budgetPerEnv, Provenance: "derived"})
+				inputs = insertInput(inputs, blueprint.Input{Key: "currency", Value: currencyOr(cfg), Provenance: "derived"})
+				inputs = insertInput(inputs, blueprint.Input{Key: "alert_emails", Value: slices.Clone(cfg.FinOps.AlertEmails), Provenance: "derived"})
+				if cfg.Cloud == "gcp" {
+					inputs = insertInput(inputs, blueprint.Input{Key: "billing_account", Value: cfg.FinOps.BillingAccount, Provenance: "derived"})
 				}
 			}
 			if modName == "secrets" && len(secretNames) > 0 {
@@ -328,6 +363,13 @@ func providerPins(cloud catalog.Cloud) []blueprint.Provider {
 	}
 	slices.SortFunc(out, func(a, b blueprint.Provider) int { return strings.Compare(a.Name, b.Name) })
 	return out
+}
+
+func currencyOr(cfg *config.Config) string {
+	if cfg.FinOps.Currency != "" {
+		return cfg.FinOps.Currency
+	}
+	return "USD"
 }
 
 func keysCSV[V any](m map[string]V) string {
