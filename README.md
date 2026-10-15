@@ -196,8 +196,9 @@ If you've run anything in production for long enough, you know the expensive
 mistakes rarely live in the application code. They live in the account bill
 and the 3am page. This is a tool for catching them while they're still a diff.
 
-More, if you want it: [DESIGN.md](DESIGN.md) is the full design, kept honest
-since day one. [docs/findings/](docs/findings/) is what reality taught us.
+More, if you want it: [docs/roadmap.md](docs/roadmap.md) is what the Hacker
+News thread taught us and what comes next. [DESIGN.md](DESIGN.md) is the full
+design, kept honest since day one. [docs/findings/](docs/findings/) is what reality taught us.
 [CONTRIBUTING.md](CONTRIBUTING.md) is how to help.
 
 ## License
