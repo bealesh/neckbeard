@@ -141,6 +141,7 @@ jobs:
               cp bellwether/neckbeard.yaml "$LANE/" ;;
             gcp)
               sed -e 's/^cloud: aws/cloud: gcp/' -e 's/^region: us-east-1/region: us-central1/' \
+                  -e 's/^  monthly_budget_alert: 100$/  monthly_budget_alert: 100\n  billing_account: "012345-6789AB-CDEF01"/' \
                 bellwether/neckbeard.yaml > "$LANE/neckbeard.yaml"
               printf 'containers:\n  dev: ci-dev\n  stg: ci-stg\n  prd: ci-prd\n' >> "$LANE/neckbeard.yaml" ;;
             azure)

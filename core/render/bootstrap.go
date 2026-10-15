@@ -188,6 +188,32 @@ func bootstrapRunbook(bp *blueprint.Blueprint) []byte {
 	w("Push a no-op change under `infra/`: the infra pipeline should stop reporting")
 	w("\"bootstrap pending\" and produce a real plan (V1). Until this succeeds, treat")
 	w("plan/apply as NOT EXERCISED — V0 never proved deployability (§12).")
+	if hasModule(bp, "budget") {
+		w("")
+		w("## Budgets")
+		w("")
+		w("Each environment renders a monthly cost budget that notifies the addresses in")
+		w("`finops.alert_emails` at 80% and 100% of actual spend and at 100% forecasted.")
+		w("Budgets notify; they do not cap spend. The only hard limit is")
+		w("`finops.monthly_ceiling`, enforced before anything exists.")
+		switch bp.Cloud {
+		case "aws":
+			w("")
+			w("One-time prerequisite per account: activate the user-defined cost allocation")
+			w("tags `neckbeard-app` and `neckbeard-env` (Billing → Cost allocation tags).")
+			w("Until they are active the budget's tag filter matches nothing and it never")
+			w("fires. Activation can take up to 24 hours to show in reports.")
+		case "gcp":
+			w("")
+			w("Prerequisites on the billing account `" + billingAccount(bp) + "`: the Cloud Billing")
+			w("Budget API enabled and `billing.budgets.create` for the apply identity (Billing")
+			w("Account Costs Manager). Project-level roles are not enough.")
+		case "azure":
+			w("")
+			w("Azure budgets are denominated in the subscription's billing currency; the")
+			w("start date is fixed at first apply and ignored afterwards.")
+		}
+	}
 	if bp.Cloud == "azure" {
 		w("")
 		w("## Azure notes")
@@ -199,4 +225,31 @@ func bootstrapRunbook(bp *blueprint.Blueprint) []byte {
 		w("  `az feature register --namespace Microsoft.Compute --name EncryptionAtHost`.")
 	}
 	return []byte(b.String())
+}
+
+func hasModule(bp *blueprint.Blueprint, name string) bool {
+	for _, env := range bp.Environments {
+		for _, m := range env.Modules {
+			if m.Name == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func billingAccount(bp *blueprint.Blueprint) string {
+	for _, env := range bp.Environments {
+		for _, m := range env.Modules {
+			if m.Name != "budget" {
+				continue
+			}
+			for _, in := range m.Inputs {
+				if in.Key == "billing_account" {
+					return fmt.Sprint(in.Value)
+				}
+			}
+		}
+	}
+	return ""
 }

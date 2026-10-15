@@ -4,7 +4,7 @@
 # migration path.
 # Pre-1.0: minor releases may change planner defaults with explicit migration
 # notes accompany each revision; schema/address guarantees above still apply.
-version: "0.3.0"
+version: "0.4.0"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.
 opentofu: "1.12.6"
@@ -17,6 +17,7 @@ capabilities:
   postgres: [postgres]
   object-storage: [storage]
   secrets: [secrets]
+  budget: [budget]                            # finops.monthly_budget_alert set (config-driven, not profile-driven)
 
 clouds:
   aws:
@@ -60,6 +61,11 @@ clouds:
         version: "0.2.0"
         source: catalog/aws/dns-ingress
         overridable: [waf_enabled]
+      budget:                        # AWS Budgets, tag-scoped
+        version: "0.1.0"
+        source: catalog/aws/budget
+        overridable: []
+
   gcp:
     providers:
       - name: hashicorp/google
@@ -100,6 +106,11 @@ clouds:
         version: "0.2.0"
         source: catalog/gcp/dns-ingress
         overridable: [waf_enabled]
+      budget:                        # Cloud Billing budget, project-scoped
+        version: "0.1.0"
+        source: catalog/gcp/budget
+        overridable: []
+
   azure:
     providers:
       - name: hashicorp/azurerm
@@ -138,4 +149,8 @@ clouds:
       registry:                      # ACR
         version: "0.1.0"
         source: catalog/azure/registry
+        overridable: []
+      budget:                        # Consumption budget, resource-group-scoped
+        version: "0.1.0"
+        source: catalog/azure/budget
         overridable: []

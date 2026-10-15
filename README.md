@@ -141,7 +141,11 @@ cloud keys anywhere. It's OIDC federation end to end, and a test fails the
 build if a rendered pipeline so much as mentions `AWS_SECRET_ACCESS_KEY`.
 Networks are private by default, secret managers hold the names the operator
 fills in (values never pass through neckbeard, its state, or your git
-history), and managed WAF rules switch on where the tier calls for them.
+history), and managed WAF rules switch on where the tier calls for them. Money
+gets two controls that are never confused with each other: `monthly_budget_alert`
+renders a real cloud budget per environment that notifies people, and
+`monthly_ceiling` is the one that actually refuses, enforced at the only point
+a limit can be enforced, before the resources exist.
 
 ## Where it actually stands
 

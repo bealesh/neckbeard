@@ -192,12 +192,16 @@ func runScaffold(args []string) error {
 	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
 	root := fs.String("root", ".", "repository root to scaffold into")
 	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "bundled (default), or an explicit git/local catalog source")
+	configPath := fs.String("config", "", "path to neckbeard.yaml (default: <root>/neckbeard.yaml when present); needed to enforce finops.monthly_ceiling")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	bp, err := blueprint.Load(*blueprintPath)
 	if err != nil {
+		return err
+	}
+	if err := enforceCeiling(*root, *configPath, bp); err != nil {
 		return err
 	}
 	ws, err := render.WriteSet(bp, render.Options{CatalogSource: *catalogSource})
@@ -278,6 +282,19 @@ func runEstimate(args []string) error {
 	}
 	fmt.Printf("\nexpected total: %.2f %s/mo (%.2f/yr) — full report: %s\n", total, res.Currency, total*12, *outPath)
 	fmt.Println("estimates ride on section 2's usage assumptions; budget alerts notify, they don't cap")
+
+	// The sidecar is what scaffold checks a ceiling against: same blueprint, or
+	// no deal. Written even without a ceiling so adding one later just works.
+	summaryPath := estimate.SummaryPath(*outPath)
+	if err := estimate.WriteSummary(summaryPath, estimate.Summarize(res, bp.Hash, time.Now())); err != nil {
+		return err
+	}
+	if cfg.FinOps.MonthlyCeiling > 0 {
+		if err := estimate.CheckCeiling(summaryPath, bp.Hash, cfg.FinOps.MonthlyCeiling); err != nil {
+			return err
+		}
+		fmt.Printf("ceiling: %.2f %s/mo — expected total is under it\n", cfg.FinOps.MonthlyCeiling, res.Currency)
+	}
 	return nil
 }
 
@@ -382,4 +399,25 @@ func printSummary(bp *blueprint.Blueprint, outPath string) {
 	}
 	fmt.Printf("\nblueprint: %s (%s)\n", outPath, bp.Hash)
 	fmt.Println("next: `neckbeard estimate` to see cost consequences before scaffolding")
+}
+
+// enforceCeiling is scaffold's half of finops.monthly_ceiling: the only point
+// where a spending limit can actually be enforced is before the resources
+// exist. The config must be the one the blueprint was planned from, and the
+// estimate sidecar must be for this exact blueprint; otherwise refuse.
+func enforceCeiling(root, configPath string, bp *blueprint.Blueprint) error {
+	if configPath == "" {
+		configPath = filepath.Join(root, "neckbeard.yaml")
+		if _, err := os.Stat(configPath); err != nil {
+			return nil // no config alongside the blueprint: nothing to enforce (plan already read it)
+		}
+	}
+	cfg, digest, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("loading %s: %w", configPath, err)
+	}
+	if digest != bp.GeneratedFrom.NeckbeardYAML {
+		return fmt.Errorf("blueprint was planned from a different neckbeard.yaml (recorded %s, %s is %s): re-run `neckbeard plan`", bp.GeneratedFrom.NeckbeardYAML, configPath, digest)
+	}
+	return estimate.CheckCeiling(filepath.Join(root, "costs", "estimate.json"), bp.Hash, cfg.FinOps.MonthlyCeiling)
 }

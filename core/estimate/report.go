@@ -66,8 +66,18 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 		if mid > alert {
 			rel = "OVER"
 		}
-		w("Budget alert threshold: %s — the expected total is **%s** it. Budget alerts", money(alert), rel)
-		w("notify; they do not cap spending.")
+		w("Budget alert threshold: %s total, rendered as a real cloud budget of %s per", money(alert), money(alert/float64(len(res.Envs))))
+		w("environment notifying %s at 80%% and 100%% actual and 100%% forecasted. The expected", strings.Join(cfg.FinOps.AlertEmails, ", "))
+		w("total is **%s** it. Budget alerts notify; they do not cap spending.", rel)
+		w("")
+	}
+	if ceiling := cfg.FinOps.MonthlyCeiling; ceiling > 0 {
+		if mid > ceiling {
+			w("**Ceiling: %s. The expected total is OVER it by %s; `scaffold` will refuse until the**", money(ceiling), money(mid-ceiling))
+			w("**plan changes or the ceiling does.**")
+		} else {
+			w("Ceiling: %s; the expected total is under it by %s. `scaffold` enforces this.", money(ceiling), money(ceiling-mid))
+		}
 		w("")
 	}
 

@@ -88,9 +88,16 @@ GCP/Azure the per-env `containers`. Show the user the choices before running pla
 ## 2. Plan → estimate → scaffold → validate
 
 - `plan` prints the topology per environment; walk the user through it.
-- `estimate` writes `costs/estimate.md`. ALWAYS show the scenario table and the
-  "unpriced/unmodeled" section before scaffolding — consequences before
-  generation is a core promise. Budget alerts notify; they do not cap.
+- `estimate` writes `costs/estimate.md` (and `costs/estimate.json`, which
+  scaffold checks). ALWAYS show the scenario table and the "unpriced/unmodeled"
+  section before scaffolding — consequences before generation is a core promise.
+- Money controls, two kinds, never confused: `finops.monthly_budget_alert`
+  renders a real cloud budget per environment (its even share of the total;
+  needs `finops.alert_emails`, and on GCP `finops.billing_account`) — alerts
+  NOTIFY, they do not cap. `finops.monthly_ceiling` is the cap, enforced where a
+  cap can be enforced: `estimate` exits nonzero and `scaffold` refuses while the
+  expected total exceeds it, or while no estimate exists for the current
+  blueprint. Offer the ceiling when the user names a number they can't exceed.
 - `scaffold` writes files under the ownership contract:
   - `blueprint.yaml` is a hash-verified lockfile: **never edit it** — change
     the profile/config and re-plan.

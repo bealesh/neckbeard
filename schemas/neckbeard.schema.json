@@ -45,7 +45,22 @@
       "additionalProperties": false,
       "properties": {
         "currency": { "type": "string", "default": "USD" },
-        "monthly_budget_alert": { "type": "number", "exclusiveMinimum": 0 },
+        "monthly_budget_alert": {
+          "description": "Total monthly budget across environments. When set, each environment gets a real cloud budget (AWS Budgets / GCP billing budget / Azure consumption budget) for its even share. Budgets notify; they do not cap.",
+          "type": "number", "exclusiveMinimum": 0
+        },
+        "alert_emails": {
+          "description": "Recipients of budget notifications. Required when monthly_budget_alert is set.",
+          "type": "array", "minItems": 1, "items": { "type": "string", "format": "email" }
+        },
+        "billing_account": {
+          "description": "GCP only: the billing account id (XXXXXX-XXXXXX-XXXXXX) budgets are created on. Required on GCP when monthly_budget_alert is set.",
+          "type": "string", "pattern": "^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$"
+        },
+        "monthly_ceiling": {
+          "description": "The hard limit, enforced where a limit can actually be enforced: before anything exists. estimate exits nonzero and scaffold refuses when the expected total exceeds it.",
+          "type": "number", "exclusiveMinimum": 0
+        },
         "usage": {
           "description": "Explicit usage assumptions overriding tier defaults. A tier name is not a usage estimate; these numbers are.",
           "type": "object",
