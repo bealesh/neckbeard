@@ -7,6 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/bealesh/neckbeard/core/profile"
 	"github.com/bealesh/neckbeard/schemas"
 )
 
@@ -496,5 +497,326 @@ func TestORMHeuristicYieldsToDirectEnvRead(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("direct env read should still yield a postgres need")
+	}
+}
+
+func TestComposeImagesBecomeInferencesAndUnsupported(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "docker-compose.yml", `services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+  db:
+    image: postgres:16
+  cache:
+    image: redis:7
+  broker:
+    image: rabbitmq:3
+  blobs:
+    image: minio/minio:latest
+  legacy:
+    image: mysql:8
+`)
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	needCaps := map[string]bool{}
+	for _, n := range res.Profile.Needs {
+		needCaps[n.Capability] = true
+		if n.Capability == "postgres" || n.Capability == "object-storage" {
+			if n.Mode != "undecided" {
+				t.Fatalf("%s need must be undecided, got %q", n.Capability, n.Mode)
+			}
+			if len(n.Evidence) == 0 || n.Evidence[0].File != "docker-compose.yml" {
+				t.Fatalf("%s evidence should point at compose file, got %+v", n.Capability, n.Evidence)
+			}
+		}
+	}
+	if !needCaps["postgres"] {
+		t.Error("postgres compose image must create an undecided postgres need")
+	}
+	if !needCaps["object-storage"] {
+		t.Error("minio compose image must create an undecided object-storage need")
+	}
+
+	infIDs := map[string]bool{}
+	for _, inf := range res.Profile.Inferences {
+		infIDs[inf.ID] = true
+		if strings.HasPrefix(inf.ID, "compose-") && inf.Confidence != "medium" {
+			t.Errorf("%s confidence want medium, got %s", inf.ID, inf.Confidence)
+		}
+	}
+	if !infIDs["compose-postgres"] || !infIDs["compose-object-storage"] {
+		t.Errorf("missing compose inferences: %+v", infIDs)
+	}
+
+	unsup := map[string]bool{}
+	for _, u := range res.Profile.Unsupported {
+		unsup[u.Capability] = true
+		if len(u.Evidence) == 0 || u.Evidence[0].File != "docker-compose.yml" {
+			t.Errorf("%s unsupported evidence want compose file, got %+v", u.Capability, u.Evidence)
+		}
+	}
+	for _, cap := range []string{"redis", "queues", "non-postgres-database"} {
+		if !unsup[cap] {
+			t.Errorf("compose image should surface unsupported %s", cap)
+		}
+	}
+
+	// app build: . service must not invent a datastore from itself
+	for _, inf := range res.Profile.Inferences {
+		if strings.Contains(inf.Statement, `service "web"`) {
+			t.Errorf("build:. web service must not map as a datastore inference: %s", inf.Statement)
+		}
+	}
+}
+
+func TestComposeDedupesWithEnvPostgres(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "main.go", `package main; import "os"; var _ = os.Getenv("DATABASE_URL")`)
+	writeFile(t, dir, "compose.yaml", `services:
+  db:
+    image: postgres:16
+`)
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postgresNeeds := 0
+	for _, n := range res.Profile.Needs {
+		if n.Capability == "postgres" {
+			postgresNeeds++
+		}
+	}
+	if postgresNeeds != 1 {
+		t.Fatalf("env+compose must dedupe to one postgres need, got %d", postgresNeeds)
+	}
+	for _, inf := range res.Profile.Inferences {
+		if inf.ID == "compose-postgres" {
+			t.Error("compose postgres inference must not fire when env already established the need")
+		}
+	}
+}
+
+func TestComposeImageNameStripsRegistryAndTag(t *testing.T) {
+	cases := map[string]string{
+		"postgres:16":                 "postgres",
+		"postgis/postgis:15-3.4":      "postgis",
+		"redis:7-alpine":              "redis",
+		"valkey/valkey:8":             "valkey",
+		"docker.io/library/mongo:6":   "mongo",
+		"minio/minio@sha256:deadbeef": "minio",
+	}
+	for in, want := range cases {
+		if got := composeImageName(in); got != want {
+			t.Errorf("composeImageName(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
+func TestComposeParsesFourSpaceIndent(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "docker-compose.yml", "services:\n    db:\n        image: postgres:16\n")
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, n := range res.Profile.Needs {
+		if n.Capability != "postgres" {
+			continue
+		}
+		found = true
+		if len(n.Evidence) == 0 || n.Evidence[0].File != "docker-compose.yml" || n.Evidence[0].Line != 3 {
+			t.Fatalf("want compose image line 3, got %+v", n.Evidence)
+		}
+	}
+	if !found {
+		t.Fatal("4-space compose must still yield a postgres need")
+	}
+}
+
+func TestComposeDedupesWithQuotedDatabaseURLLiteral(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 4000\n")
+	writeFile(t, dir, "runtime.exs", `db = get_var_from_path_or_env(dir, "DATABASE_URL")`)
+	writeFile(t, dir, "docker-compose.yml", `services:
+  db:
+    image: postgres:16
+`)
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postgresNeeds, postgresModes := 0, 0
+	for _, n := range res.Profile.Needs {
+		if n.Capability == "postgres" {
+			postgresNeeds++
+		}
+	}
+	for _, a := range res.Profile.Assumptions {
+		if a.ID == "postgres-mode" {
+			postgresModes++
+		}
+	}
+	if postgresNeeds != 1 {
+		t.Fatalf("quoted DATABASE_URL + compose must dedupe to one postgres need, got %d", postgresNeeds)
+	}
+	if postgresModes != 1 {
+		t.Fatalf("postgres-mode assumption must not duplicate, got %d", postgresModes)
+	}
+	for _, inf := range res.Profile.Inferences {
+		if inf.ID == "compose-postgres" {
+			t.Error("compose postgres inference must not fire when quoted DATABASE_URL already established the need")
+		}
+	}
+}
+
+func TestUnsupportedMixedEnvAndComposeDetected(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "app.js", `const r = process.env.REDIS_URL;`)
+	writeFile(t, dir, "docker-compose.yml", `services:
+  cache:
+    image: redis:7
+`)
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Profile.Unsupported) != 1 || res.Profile.Unsupported[0].Capability != "redis" {
+		t.Fatalf("want one redis unsupported, got %+v", res.Profile.Unsupported)
+	}
+	got := res.Profile.Unsupported[0].Detected
+	want := "environment variables REDIS_URL; compose service cache(redis:7)"
+	if got != want {
+		t.Fatalf("Detected=%q want %q", got, want)
+	}
+}
+
+func TestProcfileExpandsProcessRoles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
+	writeFile(t, dir, "Procfile", "web: bundle exec puma\nworker: bundle exec sidekiq\n")
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Profile.Services) != 2 {
+		t.Fatalf("expected web+worker services from Procfile, got %+v", res.Profile.Services)
+	}
+	byName := map[string]profile.Service{}
+	for _, s := range res.Profile.Services {
+		byName[s.Name] = s
+	}
+	web, ok := byName["web"]
+	if !ok || web.Kind != "http" || web.Port != 3000 || web.Dockerfile != "Dockerfile" {
+		t.Fatalf("web service: %+v", web)
+	}
+	worker, ok := byName["worker"]
+	if !ok || worker.Kind != "worker" || worker.Dockerfile != "Dockerfile" {
+		t.Fatalf("worker service: %+v", worker)
+	}
+	if len(web.Command) != 0 || len(worker.Command) != 0 {
+		t.Fatalf("Procfile commands must not become container args, web=%v worker=%v", web.Command, worker.Command)
+	}
+	inferred := false
+	for _, inf := range res.Profile.Inferences {
+		if inf.ID == "kind-worker" && inf.Confidence == "medium" {
+			inferred = true
+		}
+	}
+	if !inferred {
+		t.Fatal("expected medium-confidence worker-role inference")
+	}
+	named := false
+	for _, a := range res.Profile.Assumptions {
+		if a.ID == "workload-roles" && strings.Contains(a.Statement, "web") && strings.Contains(a.Statement, "worker") {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatal("workload-roles assumption must name Procfile entries")
+	}
+	for _, q := range res.Questions {
+		if strings.Contains(q, "Procfile") && strings.Contains(q, "worker") {
+			return
+		}
+	}
+	t.Fatal("open questions must name discovered Procfile processes")
+}
+
+func TestProcfileDevUsedWhenProcfileMissing(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "Procfile.dev", "web: npm start\nclock: bundle exec clockwork\n")
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Profile.Services) != 2 {
+		t.Fatalf("Procfile.dev should expand roles, got %+v", res.Profile.Services)
+	}
+	foundClock := false
+	for _, s := range res.Profile.Services {
+		if s.Name == "clock" && s.Kind == "worker" {
+			foundClock = true
+		}
+		if len(s.Command) != 0 {
+			t.Fatalf("Procfile.dev command must not become container args: %+v", s.Command)
+		}
+	}
+	if !foundClock {
+		t.Fatalf("clock process missing: %+v", res.Profile.Services)
+	}
+	devNoted := false
+	for _, f := range res.Profile.Facts {
+		if strings.Contains(f.Statement, "dev process file") && strings.Contains(f.Statement, "confirm these roles exist in production") {
+			devNoted = true
+		}
+	}
+	if !devNoted {
+		t.Fatal("Procfile.dev facts must say it is a dev process file")
+	}
+	assumed := false
+	for _, a := range res.Profile.Assumptions {
+		if a.ID == "workload-roles" && strings.Contains(a.Statement, "dev process file") {
+			assumed = true
+		}
+	}
+	if !assumed {
+		t.Fatal("Procfile.dev workload-roles assumption must say it is a dev process file")
+	}
+}
+
+func TestProcfileIgnoresReleaseAndMigrate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+	writeFile(t, dir, "Procfile", "web: bundle exec puma\nrelease: rake db:migrate\nmigrate: python manage.py migrate\nworker: bundle exec sidekiq\n")
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]profile.Service{}
+	for _, s := range res.Profile.Services {
+		byName[s.Name] = s
+	}
+	if _, ok := byName["release"]; ok {
+		t.Fatal("release process must not become a service")
+	}
+	if _, ok := byName["migrate"]; ok {
+		t.Fatal("migrate process must not become a service")
+	}
+	if byName["web"].Kind != "http" || byName["worker"].Kind != "worker" {
+		t.Fatalf("expected web+worker, got %+v", res.Profile.Services)
+	}
+	if len(res.Profile.Services) != 2 {
+		t.Fatalf("expected only web+worker, got %+v", res.Profile.Services)
 	}
 }
