@@ -15,7 +15,7 @@
 set -euo pipefail
 
 : "${DIGITALOCEAN_TOKEN:?set DIGITALOCEAN_TOKEN}"
-REGION="${DISCO_LANE_REGION:-nyc1}" # s-1vcpu-2gb is not offered in nyc3
+REGION="${DISCO_LANE_REGION:-}" # default: the first region offering both the size and the image (capacity moves)
 SIZE="${DISCO_LANE_SIZE:-s-1vcpu-2gb}"
 IMAGE="${DISCO_LANE_IMAGE:-disco}" # the Disco 1-click on the DigitalOcean marketplace
 PROJECT=bellwether
@@ -45,15 +45,23 @@ if ! command -v disco >/dev/null; then
   PATH="$WORK/.disco/bin:$PATH"
 fi
 
+# --- region: where both the size and the image are available right now ---
+if [ -z "$REGION" ]; then
+  SIZE_REGIONS=$(do_api "$API/sizes?per_page=200" | jq -c --arg s "$SIZE" '[.sizes[] | select(.slug==$s) | .regions[]]')
+  REGION=$(do_api "$API/images/$IMAGE" | jq -r --argjson r "$SIZE_REGIONS" '[.image.regions[] | select(. as $x | $r | index($x))] | sort | first // empty')
+  [ -n "$REGION" ] || { echo "no region offers both $SIZE and $IMAGE right now"; exit 1; }
+fi
+
 # --- droplet with a pinned host key ---
 ssh-keygen -q -t ed25519 -N "" -C "$NAME" -f "$WORK/id_ed25519"
 ssh-keygen -q -t ed25519 -N "" -C host -f "$WORK/host_ed25519"
 USER_DATA="$(printf '#cloud-config\nssh_deletekeys: true\nssh_genkeytypes: []\nssh_keys:\n  ed25519_private: |\n%s\n  ed25519_public: %s\n' \
   "$(sed 's/^/    /' "$WORK/host_ed25519")" "$(cat "$WORK/host_ed25519.pub")")"
 KEY_ID=$(do_api -X POST "$API/account/keys" -d "$(jq -n --arg n "$NAME" --arg k "$(cat "$WORK/id_ed25519.pub")" '{name:$n, public_key:$k}')" | jq -r .ssh_key.id)
-DROPLET_ID=$(do_api -X POST "$API/droplets" -d "$(jq -n --arg n "$NAME" --arg r "$REGION" --arg s "$SIZE" --arg i "$IMAGE" --arg u "$USER_DATA" --argjson k "$KEY_ID" \
-  '{name:$n, region:$r, size:$s, image:$i, ssh_keys:[$k], tags:["neckbeard-disco-lane"], user_data:$u}')" | jq -r .droplet.id)
-[ "$DROPLET_ID" != null ] || { echo "droplet creation failed"; exit 1; }
+CREATE=$(do_api -X POST "$API/droplets" -d "$(jq -n --arg n "$NAME" --arg r "$REGION" --arg s "$SIZE" --arg i "$IMAGE" --arg u "$USER_DATA" --argjson k "$KEY_ID" \
+  '{name:$n, region:$r, size:$s, image:$i, ssh_keys:[$k], tags:["neckbeard-disco-lane"], user_data:$u}')") || { echo "droplet creation refused: $CREATE"; exit 1; }
+DROPLET_ID=$(echo "$CREATE" | jq -r .droplet.id)
+[ "$DROPLET_ID" != null ] || { echo "droplet creation failed: $CREATE"; exit 1; }
 mark "droplet requested ($DROPLET_ID, $IMAGE, $SIZE, $REGION)"
 
 IP=""
@@ -95,6 +103,9 @@ mark "upgraded disco $FROM -> $V"
 SRC="$WORK/src"
 git -C "$REPO" ls-files -z | (cd "$REPO" && xargs -0 tar cf -) | (mkdir -p "$SRC" && tar xf - -C "$SRC")
 (cd "$SRC" && "$WORK/neckbeard" disco -profile bellwether/app-profile.yaml -project "$PROJECT" -force)
+# the cron runs at 03:00 UTC: for the lane only, every minute, so the schedule can be seen firing
+CRON=$(jq -r '.services | to_entries[] | select(.value.type=="cron") | .key' "$SRC/disco.json" | head -1)
+jq --arg c "$CRON" '.services[$c].schedule = "* * * * *"' "$SRC/disco.json" > "$SRC/disco.json.lane" && mv "$SRC/disco.json.lane" "$SRC/disco.json"
 disco projects:add --name "$PROJECT" >/dev/null
 disco postgres:create --project "$PROJECT" >/dev/null
 disco env:set --project "$PROJECT" APP_ENV=dev >/dev/null # never deployed yet: no redeploy
@@ -109,6 +120,18 @@ until curl -fsS -m 10 "https://$DOMAIN/healthz" >/dev/null 2>&1; do sleep 3; don
 python3 "$REPO/bellwether/probe.py" --release "$WORK/release.json" --note "$WORK/note.json" --create
 mark "probe 1 passed (https, db, worker)"
 
+# the cron: wait for a tick and look for bellwether's report line in the project logs
+# (vector streams the cron container's output while it runs)
+CRON_OK=""
+for i in 1 2 3; do
+  timeout 75 disco logs --project "$PROJECT" >"$WORK/logs-$i.txt" 2>&1 || true
+  if grep -m1 "bellwether report (env dev)" "$WORK/logs-$i.txt" >"$WORK/cron-line.txt"; then
+    CRON_OK=1; break
+  fi
+done
+[ -n "$CRON_OK" ] || { echo "cron: no report line in 3 minutes of logs"; tail -20 "$WORK/logs-3.txt"; exit 1; }
+mark "cron $CRON fired: $(grep -o 'bellwether report.*' "$WORK/cron-line.txt")"
+
 (cd "$SRC" && disco deploy --project "$PROJECT" --dir . >"$WORK/deploy-2.log" 2>&1) || true
 grep -q "Deployment complete" "$WORK/deploy-2.log" || { tail -30 "$WORK/deploy-2.log"; exit 1; }
 mark "redeploy complete"
@@ -120,5 +143,5 @@ echo "| step | seconds since start |"
 echo "|---|---|"
 for t in "${TIMES[@]}"; do echo "| ${t%%|*} | ${t##*|} |"; done
 echo
-echo "cron (nightly-report): NOT EXERCISED (Disco discards cron output; schedule 0 3 * * * UTC)"
+echo "cron ($CRON): rendered with its real schedule, run every minute in the lane; its report line (counts from the db) is above"
 echo "artifacts: $WORK"
