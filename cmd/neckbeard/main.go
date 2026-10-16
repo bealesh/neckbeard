@@ -14,6 +14,7 @@ import (
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/catalog"
 	"github.com/bealesh/neckbeard/core/config"
+	"github.com/bealesh/neckbeard/core/disco"
 	"github.com/bealesh/neckbeard/core/estimate"
 	"github.com/bealesh/neckbeard/core/ownership"
 	"github.com/bealesh/neckbeard/core/planner"
@@ -63,6 +64,8 @@ func main() {
 		err = runValidate(os.Args[2:])
 	case "estimate":
 		err = runEstimate(os.Args[2:])
+	case "disco":
+		err = runDisco(os.Args[2:])
 	case "skill":
 		err = runSkill(os.Args[2:])
 	default:
@@ -88,8 +91,45 @@ commands:
   estimate  cost report from the blueprint (rendered to scratch; no cloud creds)
   scaffold  render the blueprint into the repo under the ownership contract
   validate  V0 static checks over the rendered env roots (fmt, init, validate)
+  disco     render app-profile.yaml for Disco (disco.json + docs/disco.md); prototype, issue #33
   skill     install the neckbeard agent skill (Codex CLI, Cursor, any SKILL.md tool)
   version   print version`)
+}
+
+func runDisco(args []string) error {
+	fs := flag.NewFlagSet("disco", flag.ExitOnError)
+	prof := fs.String("profile", "app-profile.yaml", "reviewed app profile")
+	project := fs.String("project", "", "Disco project name (required)")
+	out := fs.String("out", "disco.json", "disco.json output path")
+	runbookOut := fs.String("runbook", "docs/disco.md", "runbook output path")
+	force := fs.Bool("force", false, "overwrite existing outputs")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *project == "" {
+		return fmt.Errorf("usage: neckbeard disco -project <name> [-profile app-profile.yaml] [-out disco.json] [-runbook docs/disco.md]")
+	}
+	p, _, err := profile.Load(*prof)
+	if err != nil {
+		return err
+	}
+	res, err := disco.Render(p, *project)
+	if err != nil {
+		return err
+	}
+	for path, data := range map[string][]byte{*out: res.DiscoJSON, *runbookOut: res.Runbook} {
+		if _, err := os.Stat(path); err == nil && !*force {
+			return fmt.Errorf("%s already exists; pass -force to overwrite", path)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return err
+		}
+		fmt.Println("wrote", path)
+	}
+	return nil
 }
 
 func runAnalyze(args []string) error {
