@@ -53,6 +53,30 @@ func TestRenderBellwether(t *testing.T) {
 	}
 }
 
+func TestRenderExternalUnsupported(t *testing.T) {
+	p := bellwether(t)
+	p.Unsupported = append(p.Unsupported, profile.Unsupported{
+		Capability: "redis", Detected: "redis client", Explanation: "not in the catalog",
+		Disposition: "external", SecretName: "REDIS_URL", Resolution: "the team's managed redis",
+	}, profile.Unsupported{
+		Capability: "queue", Detected: "x", Explanation: "y",
+		Disposition: "not-required", Resolution: "dead code",
+	})
+	out, err := Render(p, "bellwether")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb := string(out.Runbook)
+	for _, s := range []string{"REDIS_URL=<connection for your redis>", "- redis at `REDIS_URL`: the team's managed redis"} {
+		if !strings.Contains(rb, s) {
+			t.Errorf("runbook missing %q", s)
+		}
+	}
+	if strings.Contains(rb, "queue") {
+		t.Error("a not-required capability should not appear in the runbook")
+	}
+}
+
 func TestRenderRefuses(t *testing.T) {
 	cases := map[string]func(p *profile.AppProfile){
 		"open assumption": func(p *profile.AppProfile) {

@@ -152,6 +152,16 @@ func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byt
 			return nil, fmt.Errorf("%s with mode %s: no Disco mapping yet (named, not invented)", n.Capability, n.Mode)
 		}
 	}
+	// unsupported capabilities the user resolved as external (e.g. their own redis at REDIS_URL):
+	// the app still reads that variable, so it must be set; not-required ones need nothing.
+	var external []profile.Unsupported
+	for _, u := range p.Unsupported {
+		if u.Disposition == "external" && !set[u.SecretName] {
+			envLines = append(envLines, fmt.Sprintf("%s=<connection for your %s>", u.SecretName, u.Capability))
+			set[u.SecretName] = true
+			external = append(external, u)
+		}
+	}
 	for _, s := range p.Secrets {
 		if !set[s.Name] {
 			envLines = append(envLines, s.Name+"=<value>")
@@ -164,6 +174,15 @@ func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byt
 		w("```sh")
 		w("disco env:set --project %s %s", project, strings.Join(envLines, " "))
 		w("```")
+		w("")
+	}
+
+	if len(external) > 0 {
+		w("Provided outside this project (resolved as external in app-profile.yaml):")
+		w("")
+		for _, u := range external {
+			w("- %s at `%s`: %s", u.Capability, u.SecretName, u.Resolution)
+		}
 		w("")
 	}
 
