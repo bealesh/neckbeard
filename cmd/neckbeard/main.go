@@ -117,19 +117,50 @@ func runDisco(args []string) error {
 	if err != nil {
 		return err
 	}
-	for path, data := range map[string][]byte{*out: res.DiscoJSON, *runbookOut: res.Runbook} {
-		if _, err := os.Stat(path); err == nil && !*force {
-			return fmt.Errorf("%s already exists; pass -force to overwrite", path)
+	outputs := []struct {
+		path string
+		data []byte
+	}{{*out, res.DiscoJSON}, {*runbookOut, res.Runbook}}
+	if filepath.Clean(*out) == filepath.Clean(*runbookOut) {
+		return fmt.Errorf("-out and -runbook are both %s; they must be different files", *out)
+	}
+	// check everything before writing anything, so a refusal leaves no partial output
+	for _, o := range outputs {
+		if _, err := os.Stat(o.path); err == nil && !*force {
+			return fmt.Errorf("%s already exists; pass -force to overwrite", o.path)
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	}
+	for _, o := range outputs {
+		if err := writeAtomic(o.path, o.data); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			return err
-		}
-		fmt.Println("wrote", path)
+		fmt.Println("wrote", o.path)
 	}
 	return nil
+}
+
+// writeAtomic writes through a temp file in the same directory and renames it into place.
+func writeAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".disco-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Chmod(0o644); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
 func runAnalyze(args []string) error {

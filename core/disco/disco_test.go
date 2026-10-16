@@ -67,7 +67,7 @@ func TestRenderExternalUnsupported(t *testing.T) {
 		t.Fatal(err)
 	}
 	rb := string(out.Runbook)
-	for _, s := range []string{"REDIS_URL=<connection for your redis>", "- redis at `REDIS_URL`: the team's managed redis"} {
+	for _, s := range []string{`disco env:set --project bellwether REDIS_URL="$REDIS_URL"`, "- `REDIS_URL`: connection for your redis", "- redis at `REDIS_URL`: the team's managed redis"} {
 		if !strings.Contains(rb, s) {
 			t.Errorf("runbook missing %q", s)
 		}
@@ -123,6 +123,48 @@ func TestRenderRefuses(t *testing.T) {
 		if _, err := Render(bellwether(t), bad); err == nil {
 			t.Errorf("project name %q accepted", bad)
 		}
+	}
+}
+
+func TestRenderEnvVars(t *testing.T) {
+	p := bellwether(t)
+	p.Secrets = append(p.Secrets, profile.SecretRef{Name: "SESSION_SECRET"})
+	p.Needs = append(p.Needs, profile.Need{Capability: "redis", Mode: "reference", SecretName: "CACHE_URL"})
+	out, err := Render(p, "bellwether")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb := string(out.Runbook)
+	for _, s := range []string{
+		`disco env:set --project bellwether CACHE_URL="$CACHE_URL" SESSION_SECRET="$SESSION_SECRET"` + "\n",
+		"- `SESSION_SECRET`: secret",
+		"- `CACHE_URL`: connection for the existing redis",
+	} {
+		if !strings.Contains(rb, s) {
+			t.Errorf("runbook missing %q", s)
+		}
+	}
+	for _, line := range strings.Split(rb, "\n") {
+		if strings.HasPrefix(line, "disco ") && strings.ContainsAny(line, "<>") {
+			t.Errorf("command has a <placeholder>, a shell redirection if pasted: %s", line)
+		}
+	}
+
+	for _, bad := range []string{"", "MY KEY", "A&B", "1X", "X=Y", "$(id)", "A;B"} {
+		p := bellwether(t)
+		p.Secrets = append(p.Secrets, profile.SecretRef{Name: bad})
+		if _, err := Render(p, "bellwether"); err == nil {
+			t.Errorf("secret name %q accepted", bad)
+		}
+	}
+	p = bellwether(t)
+	for i := range p.Needs {
+		if p.Needs[i].Capability == "postgres" {
+			p.Needs[i].SecretName = "DB URL"
+		}
+	}
+	if _, err := Render(p, "bellwether"); err == nil {
+		t.Error("postgres secret_name with a space accepted")
 	}
 }
 

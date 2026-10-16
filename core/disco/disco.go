@@ -101,7 +101,10 @@ func Render(p *profile.AppProfile, project string) (Output, error) {
 	return Output{DiscoJSON: data.Bytes(), Runbook: rb}, nil
 }
 
-var projectName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,41}$`)
+var (
+	projectName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,41}$`)
+	envName     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+)
 
 func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byte, error) {
 	var b strings.Builder
@@ -124,13 +127,17 @@ func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byt
 	w("## 2. Datastores and secrets")
 	w("")
 	set := map[string]bool{}
-	var envLines []string
+	type envVar struct{ name, what string }
+	var envVars []envVar
 	for _, n := range p.Needs {
 		switch {
 		case n.Capability == "postgres" && n.Mode == "provision":
 			env := n.SecretName
 			if env == "" {
 				env = "DATABASE_URL"
+			}
+			if !envName.MatchString(env) {
+				return nil, fmt.Errorf("postgres secret_name %q is not an environment variable name", env)
 			}
 			w("Postgres on the Disco server (the Postgres addon; data on this server's disk, back it up):")
 			w("")
@@ -144,7 +151,7 @@ func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byt
 			w("")
 			set[env] = true
 		case n.Mode == "reference":
-			envLines = append(envLines, fmt.Sprintf("%s=<connection for the existing %s>", n.SecretName, n.Capability))
+			envVars = append(envVars, envVar{n.SecretName, "connection for the existing " + n.Capability})
 			set[n.SecretName] = true
 		case n.Capability == "secrets":
 			// Disco stores env vars encrypted at rest; secrets become env vars below.
@@ -157,22 +164,33 @@ func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byt
 	var external []profile.Unsupported
 	for _, u := range p.Unsupported {
 		if u.Disposition == "external" && !set[u.SecretName] {
-			envLines = append(envLines, fmt.Sprintf("%s=<connection for your %s>", u.SecretName, u.Capability))
+			envVars = append(envVars, envVar{u.SecretName, "connection for your " + u.Capability})
 			set[u.SecretName] = true
 			external = append(external, u)
 		}
 	}
 	for _, s := range p.Secrets {
 		if !set[s.Name] {
-			envLines = append(envLines, s.Name+"=<value>")
+			envVars = append(envVars, envVar{s.Name, "secret"})
 			set[s.Name] = true
 		}
 	}
-	if len(envLines) > 0 {
+	if len(envVars) > 0 {
+		var args []string
 		w("Environment variables (values never go in the repository):")
 		w("")
+		for _, v := range envVars {
+			if !envName.MatchString(v.name) {
+				return nil, fmt.Errorf("%q is not an environment variable name (letters, digits and _, not starting with a digit)", v.name)
+			}
+			w("- `%s`: %s", v.name, v.what)
+			args = append(args, fmt.Sprintf(`%s="$%s"`, v.name, v.name))
+		}
+		w("")
+		w("Put each value in your shell first (for example `read -rs %s; export %s`), then:", envVars[0].name, envVars[0].name)
+		w("")
 		w("```sh")
-		w("disco env:set --project %s %s", project, strings.Join(envLines, " "))
+		w("disco env:set --project %s %s", project, strings.Join(args, " "))
 		w("```")
 		w("")
 	}
