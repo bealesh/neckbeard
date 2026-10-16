@@ -16,7 +16,6 @@
 # init gets a domain). Writes nothing outside $WORK.
 # The droplet's ssh host key is generated here and given to it by cloud-init, so the
 # lane's own ssh is pinned (StrictHostKeyChecking=yes), never trust-on-first-use.
-# (`disco init` opens its own ssh connection, which does not check host keys today.)
 set -euo pipefail
 umask 077
 
