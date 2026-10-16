@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # disco lane (prototype, #33): bellwether on a fresh Disco server, timed.
 #
-# Creates a DigitalOcean droplet from the Disco 1-click image, renders bellwether's
+# Creates a plain Ubuntu droplet on DigitalOcean, installs Disco on it with
+# `disco init root@<ip>` (which gets the server a domain by itself), renders bellwether's
 # reviewed app profile with `neckbeard disco`, deploys it, probes HTTPS + database +
 # worker with bellwether/probe.py, checks the cron fires, deploys release 2 (a new
 # version), probes that the release 1 note survived and that release 2's worker
@@ -10,18 +11,21 @@
 #
 #   DIGITALOCEAN_TOKEN=... scripts/disco-lane.sh
 #
-# Needs: curl, jq, ssh, ssh-keygen, python3, go (to build neckbeard). Installs the
-# disco CLI into a temp dir if it isn't on PATH. Writes nothing outside $WORK.
-# The droplet's ssh host key is generated here and given to it by cloud-init, so ssh
-# is pinned (StrictHostKeyChecking=yes), never trust-on-first-use.
+# Needs: curl, jq, ssh, ssh-keygen, openssl, python3, go (to build neckbeard). Installs
+# the disco CLI into a temp dir (the latest release; at least 0.5.72, the first whose
+# init gets a domain). Writes nothing outside $WORK.
+# The droplet's ssh host key is generated here and given to it by cloud-init, so the
+# lane's own ssh is pinned (StrictHostKeyChecking=yes), never trust-on-first-use.
+# (`disco init` opens its own ssh connection, which does not check host keys today.)
 set -euo pipefail
 umask 077
 
 : "${DIGITALOCEAN_TOKEN:?set DIGITALOCEAN_TOKEN}"
 REGION="${DISCO_LANE_REGION:-}" # default: the first region offering both the size and the image (capacity moves)
 SIZE="${DISCO_LANE_SIZE:-s-1vcpu-2gb}"
-IMAGE="${DISCO_LANE_IMAGE:-disco}" # the Disco 1-click on the DigitalOcean marketplace
-DAEMON="${DISCO_LANE_DAEMON:-0.34.0}" # daemon version the lane runs on (first with deploy --dir)
+IMAGE="${DISCO_LANE_IMAGE:-ubuntu-24-04-x64}"
+DAEMON="${DISCO_LANE_DAEMON:-0.34.0}" # daemon version disco init installs (0.34.0: first with deploy --dir)
+CLI_MIN=0.5.72
 PROJECT=bellwether
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d -t disco-lane.XXXXXX)"
@@ -80,10 +84,20 @@ trap cleanup EXIT
 
 # --- tools ---
 (cd "$REPO" && go build -o "$WORK/neckbeard" ./cmd/neckbeard)
-if ! command -v disco >/dev/null; then
-  curl -fsSL https://cli-assets.letsdisco.dev/install.sh | HOME="$WORK" sh >/dev/null
-  PATH="$WORK/.disco/bin:$PATH"
-fi
+# the cli's release tarball, unpacked into $WORK (its install.sh installs system-wide with sudo).
+# XDG_DATA_HOME in $WORK too: the launcher would otherwise hand off to a `disco update`d copy in ~/.local
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) CLI_TARGET=darwin-arm64;; Darwin-x86_64) CLI_TARGET=darwin-x64;;
+  Linux-x86_64) CLI_TARGET=linux-x64;; Linux-aarch64|Linux-arm64) CLI_TARGET=linux-arm64;;
+  *) echo "no disco cli build for $(uname -s)-$(uname -m)"; exit 1;;
+esac
+curl -fsSL -m 120 "https://cli-assets.letsdisco.dev/channels/stable/disco-$CLI_TARGET.tar.gz" | tar xz -C "$WORK"
+export XDG_DATA_HOME="$WORK/xdg-data"
+PATH="$WORK/disco/bin:$PATH"
+[ "$(command -v disco)" = "$WORK/disco/bin/disco" ] || { echo "disco resolves to $(command -v disco), not the lane's copy"; exit 1; }
+CLI=$(jq -r .version "$WORK/disco/package.json")
+[ "$(disco --version | awk '{print $1}')" = "disco/$CLI" ] || { echo "disco --version does not match the unpacked $CLI"; exit 1; }
+[ "$(printf '%s\n%s\n' "$CLI_MIN" "$CLI" | sort -V | head -1)" = "$CLI_MIN" ] || { echo "disco cli $CLI is older than $CLI_MIN"; exit 1; }
 
 # --- region: where both the size and the image are available right now ---
 if [ -z "$REGION" ]; then
@@ -115,34 +129,17 @@ ssh_up() { "${SSH[@]}" true 2>/dev/null; }
 wait_for 300 "ssh on $IP" ssh_up
 mark "ssh up"
 
-# --- wait for the image's first boot (provisions a domain, inits disco) ---
-# (a stopgap: the first api key is read from the image's first-boot log, as the image's own
-#  invite helper does; `disco init` against a plain droplet will replace this)
-first_boot() { "${SSH[@]}" 'test -s /etc/disco-image/disco-host && grep -q "Created API key" /etc/disco-image/init-output.log' 2>/dev/null; }
-wait_for 600 "the image's first boot (domain + disco init)" first_boot
-HOST=$("${SSH[@]}" cat /etc/disco-image/disco-host)
+# --- disco on the box: the cli installs docker + the daemon and gets the server a domain ---
+# (the droplet runs cloud-init's own apt first: wait for it, so apt locks don't fail the install)
+"${SSH[@]}" 'cloud-init status --wait >/dev/null' || true
+SSH_AUTH_SOCK="" disco init "root@$IP" -i "$WORK/id_ed25519" --version "$DAEMON" < /dev/null >"$WORK/init.log" 2>&1 \
+  || { echo "disco init failed"; tail -20 "$WORK/init.log"; exit 1; }
+HOST=$(jq -r '.discos | to_entries | first | .value.host' "$DISCO_CONFIG_PATH")
+grep -qx "Domain: $HOST" "$WORK/init.log" || { echo "init did not report the host it saved ($HOST)"; tail -20 "$WORK/init.log"; exit 1; }
+V=$(disco meta:info --json | jq -r .version)
+[ "$V" = "$DAEMON" ] || { echo "daemon is $V, expected $DAEMON"; exit 1; }
 https_up() { curl -fsS -m 10 "https://$1/${2:-}" >/dev/null 2>&1; }
-wait_for 300 "https://$HOST" https_up "$HOST"
-mark "disco ready (https://$HOST, $("${SSH[@]}" cat /etc/disco-image/daemon-version))"
-
-# a cli invite, minted on the box with the key first boot created
-INVITE=$("${SSH[@]}" 'K=$(grep -o "Created API key: [a-z0-9]\{32\}" /etc/disco-image/init-output.log | head -1 | awk "{print \$4}"); \
-  curl -fsS -X POST "https://$(cat /etc/disco-image/disco-host)/api/api-key-invites" -H "Authorization: Basic $(echo -n "$K:" | base64)" \
-  -H "Content-Type: application/json" -d "{\"name\":\"neckbeard-disco-lane\"}" | jq -r .apiKeyInvite.url')
-disco invite:accept "$INVITE" >/dev/null
-mark "cli connected"
-
-# the 1-click may lag behind (0.32.0 in 2026-10, no folder upload): move to the pinned daemon
-FROM=$(disco meta:info --json | jq -r .version)
-[ -n "$FROM" ] && [ "$FROM" != null ] || { echo "could not read the daemon version"; exit 1; }
-if [ "$FROM" = "$DAEMON" ]; then
-  mark "disco already $DAEMON"
-else
-  disco meta:upgrade --image "letsdiscodev/daemon:$DAEMON" >/dev/null
-  on_daemon() { [ "$(disco meta:info --json 2>/dev/null | jq -r .version)" = "$DAEMON" ]; }
-  wait_for 600 "daemon $FROM -> $DAEMON" on_daemon
-  mark "upgraded disco $FROM -> $DAEMON"
-fi
+mark "disco $V ready (https://$HOST, cli $CLI)"
 
 # --- render + deploy ---
 SRC="$WORK/src"

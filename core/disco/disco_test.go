@@ -43,7 +43,7 @@ func TestRenderBellwether(t *testing.T) {
 		t.Errorf("image = %+v", img)
 	}
 	rb := string(out.Runbook)
-	for _, s := range []string{"disco projects:add --name bellwether", "disco postgres:create --project bellwether\n", "disco deploy --project bellwether --dir ."} {
+	for _, s := range []string{`disco init "root@$SERVER_IP"`, "disco projects:add --name bellwether", "disco postgres:create --project bellwether\n", "disco deploy --project bellwether --dir ."} {
 		if !strings.Contains(rb, s) {
 			t.Errorf("runbook missing %q", s)
 		}
