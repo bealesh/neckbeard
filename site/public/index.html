@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>neckbeard — handles your infra so you don't have to</title>
+<meta name="description" content="A plugin for your coding agent that turns an app into reviewable cloud infrastructure, with the monthly bill attached. It never invents infrastructure.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#070807">
+<link rel="canonical" href="https://neckbeard.sh/">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="neckbeard">
+<meta property="og:description" content="neckbeard handles your infra so you don't have to. Reviewable OpenTofu from a tested catalog, priced before you deploy it.">
+<meta property="og:url" content="https://neckbeard.sh/">
+<meta property="og:image" content="https://neckbeard.sh/neckbeard.png">
+<meta name="twitter:card" content="summary">
+<link rel="preload" href="/fonts/ibm-plex-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <a class="brand" href="/"><img src="/favicon.png" alt="" width="28" height="28">neckbeard</a>
+  <nav aria-label="Site">
+    <a href="https://github.com/bealesh/neckbeard#readme">docs</a>
+    <a href="#status">status</a>
+    <a href="https://github.com/bealesh/neckbeard">github</a>
+  </nav>
+</header>
+
+<main>
+
+  <section id="top">
+    <h1>neckbeard handles your infra so you don't have to.</h1>
+    <p class="quiet">A plugin for your coding agent. It reads your app, writes OpenTofu from a versioned, tested module catalog, and puts a monthly price on it before anything is deployed: low, expected, and high, per environment, with every unpriced resource named instead of hidden. Then it tells you exactly which checks it ran. AWS, GCP, Azure. GitHub Actions or GitLab CI. Serverless containers or Kubernetes.</p>
+    <p class="quiet">It never invents infrastructure. If your app needs something the catalog doesn't do yet, you get a named finding, not a module that looks like it might work.</p>
+<pre><code><span class="p">$</span> /plugin marketplace add bealesh/neckbeard
+<span class="p">$</span> /plugin install neckbeard@neckbeard
+<span class="p">$</span> /neckbeard:analyze<span class="cursor" aria-hidden="true"></span></code></pre>
+    <p class="note">Claude Code, as separate prompts. Codex, Cursor, or anything that reads a <code>SKILL.md</code>: see <a href="https://github.com/bealesh/neckbeard/blob/main/INSTALL.md">INSTALL.md</a>. No agent at all: <code>go install github.com/bealesh/neckbeard/cmd/neckbeard@latest</code>.</p>
+  </section>
+
+  <section id="commands">
+    <h2>Five commands.</h2>
+    <dl class="commands">
+      <dt>/analyze</dt>
+      <dd>Reads the repo the way a careful new hire would and writes an evidence-backed <code>app-profile.yaml</code>. Every fact carries a file and line number. Then it asks you the things it can't know, and planning refuses to run while any question is still open.</dd>
+      <dt>/estimate</dt>
+      <dd>Plans against the catalog and shows the bill before a single resource exists. Low, expected, and high per environment, from Infracost against the plan, idle baseline separated from usage. Unpriced resources are listed next to the total, not rounded away. Run it on every change and the diff is your cost review.</dd>
+      <dt>/sync</dt>
+      <dd>Plan, estimate, scaffold, validate. Three environments with independent state. Pipelines that test, build, scan, and push under OIDC, with no static cloud keys anywhere. Your edits are never silently overwritten. Ends with PASSED, FAILED, or NOT EXERCISED for each check.</dd>
+      <dt>/doctor</dt>
+      <dd>Installs the CLI if it's missing and reports which tools are present and what each one buys you.</dd>
+      <dt>/help</dt>
+      <dd>The short version of this page.</dd>
+    </dl>
+  </section>
+
+  <section id="cost">
+    <h2>What it costs, before you build it.</h2>
+    <p class="quiet">Nobody tells you what infrastructure costs until the invoice arrives, which is a strange way to make an engineering decision. So neckbeard asks Infracost first. The same reference app (an HTTP service, a worker, a cron job, Postgres), smallest tier, all three environments, live prices:</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">runtime</th>
+            <th scope="col" class="n">per month</th>
+            <th scope="col">unpriced</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Cloud Run</td><td class="n total">$77</td><td class="quiet">—</td></tr>
+          <tr><td>Container Apps</td><td class="n">~$98</td><td class="quiet">compute: Infracost can't price it yet</td></tr>
+          <tr><td>ECS Fargate</td><td class="n">$250</td><td class="quiet">—</td></tr>
+          <tr><td>EKS</td><td class="n">$396</td><td class="quiet">—</td></tr>
+          <tr><td>GKE (regional)</td><td class="n">$754</td><td class="quiet">—</td></tr>
+          <tr><td>AKS</td><td class="n">~$801</td><td class="quiet">compute: Infracost can't price it yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The third column is the point. When something can't be priced, the report says so next to the total rather than letting a low number lie. The table is also how the tool argues: when a solo developer asks for Kubernetes, the numbers say "not yet" so nobody else has to. Two controls that are never confused with each other: <code>monthly_budget_alert</code> renders a real cloud budget that notifies people, and <code>monthly_ceiling</code> refuses, before the resources exist.</p>
+  </section>
+
+  <section id="status">
+    <h2>What it will and won't claim.</h2>
+    <p class="quiet">Infrastructure tooling has a long tradition of implying more than it has proven. A passing <code>tofu validate</code> has never once meant a thing deploys. neckbeard reports in three levels and insists on showing you the third:</p>
+<pre><code>V0  <span class="pass">PASSED</span>         tofu validate [prd]
+V0  <span class="pass">PASSED</span>         checkov policy [prd]     <span class="quiet">every skip carries a reason</span>
+V0  <span class="pass">PASSED</span>         kubeconform (clusters/)
+V1  <span class="not">NOT EXERCISED</span>  authenticated plan       <span class="quiet">needs cloud credentials</span>
+V2  <span class="not">NOT EXERCISED</span>  deployment verification  <span class="quiet">needs cloud credentials</span></code></pre>
+    <h2 style="margin-top: 40px;">Where it actually stands.</h2>
+    <p class="quiet">Pre-alpha, and specific about which parts.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">claim</th>
+            <th scope="col">evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>analyze, plan, estimate, scaffold, validate on all 12 cloud × VCS × runtime paths</td>
+            <td><span class="pass">PASSED</span> <span class="quiet">static matrix in CI on every PR; three unrelated fixture apps onboard end to end</span></td>
+          </tr>
+          <tr>
+            <td>live deploy, update, and rollback on serverless containers</td>
+            <td><span class="pass">PASSED</span> <span class="quiet">AWS/GitHub and Azure/GitHub, with real database checks (<a href="https://github.com/bealesh/neckbeard/blob/main/docs/tranche-2.md">evidence</a>)</span></td>
+          </tr>
+          <tr>
+            <td>live deploy on GCP, the GitLab lanes, Kubernetes, promotion, recovery drills</td>
+            <td><span class="not">NOT EXERCISED</span> <span class="quiet">implemented, not yet proven</span></td>
+          </tr>
+          <tr>
+            <td>landing zones: org structure and guardrails</td>
+            <td><span class="not">NOT BUILT</span> <span class="quiet">designed in <a href="https://github.com/bealesh/neckbeard/blob/main/DESIGN.md">DESIGN.md</a></span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">When live runs break, the failures go into the public <a href="https://github.com/bealesh/neckbeard/tree/main/docs/findings">findings ledger</a> and from there into the catalog. The first real deployment produced ten of them; five became module fixes the same afternoon.</p>
+  </section>
+
+  <section id="why">
+    <p class="quiet">If you've run anything in production for long enough, you know the expensive mistakes rarely live in the application code. They live in the account bill and the 3am page. This is a tool for catching them while they're still a diff.</p>
+  </section>
+
+</main>
+
+<footer>
+  <span>pre-alpha · v0.3.0 · apache-2.0 · <a href="https://github.com/bealesh/neckbeard">source</a></span>
+  <span>a <a href="https://beale.sh">beale.sh</a> project</span>
+</footer>
+
+</body>
+</html>

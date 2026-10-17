@@ -1,0 +1,23 @@
+// neckbeard.sh — static site on Cloudflare Workers (assets only, no Worker script).
+//
+//   npx wrangler dev      serve ./public locally
+//   npx wrangler deploy   publish; CI does this on push to main (see .github/workflows/site.yml)
+//
+// The zone for neckbeard.sh must already be on this Cloudflare account; the
+// custom_domain routes below then create the DNS records and certificates on
+// first deploy. www redirects to the apex via public/_redirects.
+{
+  "$schema": "https://unpkg.com/wrangler@latest/config-schema.json",
+  "name": "neckbeard-sh",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "routes": [
+    { "pattern": "neckbeard.sh", "custom_domain": true },
+    { "pattern": "www.neckbeard.sh", "custom_domain": true }
+  ],
+  "observability": { "enabled": false }
+}
