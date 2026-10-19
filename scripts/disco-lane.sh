@@ -11,9 +11,10 @@
 #
 #   DIGITALOCEAN_TOKEN=... scripts/disco-lane.sh
 #
-# Needs: curl, jq, ssh, ssh-keygen, openssl, python3, go (to build neckbeard). Installs
-# the disco CLI into a temp dir (the latest release; at least 0.5.72, the first whose
-# init gets a domain). Writes nothing outside $WORK.
+# Needs: curl, jq, ssh, ssh-keygen, openssl, python3, go (to build neckbeard), timeout
+# (gnu coreutils; on macOS `brew install coreutils`). Installs the disco CLI into a temp
+# dir (the latest release; at least 0.5.72, the first whose init gets a domain). Writes
+# only to $WORK, apart from go's own build cache.
 # The droplet's ssh host key is generated here and given to it by cloud-init, so the
 # lane's own ssh is pinned (StrictHostKeyChecking=yes), never trust-on-first-use.
 set -euo pipefail
@@ -82,7 +83,10 @@ cleanup() {
 trap cleanup EXIT
 
 # --- tools ---
-(cd "$REPO" && go build -o "$WORK/neckbeard" ./cmd/neckbeard)
+for t in curl jq ssh ssh-keygen openssl python3 go timeout; do
+  command -v "$t" >/dev/null || { echo "missing tool: $t"; exit 1; }
+done
+(cd "$REPO" && timeout 600 go build -o "$WORK/neckbeard" ./cmd/neckbeard)
 # the cli's release tarball, unpacked into $WORK (its install.sh installs system-wide with sudo).
 # XDG_DATA_HOME in $WORK too: the launcher would otherwise hand off to a `disco update`d copy in ~/.local
 case "$(uname -s)-$(uname -m)" in
@@ -90,7 +94,7 @@ case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) CLI_TARGET=linux-x64;; Linux-aarch64|Linux-arm64) CLI_TARGET=linux-arm64;;
   *) echo "no disco cli build for $(uname -s)-$(uname -m)"; exit 1;;
 esac
-curl -fsSL -m 120 "https://cli-assets.letsdisco.dev/channels/stable/disco-$CLI_TARGET.tar.gz" | tar xz -C "$WORK"
+curl -fsSL -m 300 "https://cli-assets.letsdisco.dev/channels/stable/disco-$CLI_TARGET.tar.gz" | tar xz -C "$WORK"
 export XDG_DATA_HOME="$WORK/xdg-data"
 PATH="$WORK/disco/bin:$PATH"
 [ "$(command -v disco)" = "$WORK/disco/bin/disco" ] || { echo "disco resolves to $(command -v disco), not the lane's copy"; exit 1; }
@@ -124,18 +128,18 @@ wait_for 300 "droplet $DROPLET_ID active with a public ip" active_ip
 echo "$IP $(cut -d' ' -f1,2 "$WORK/host_ed25519.pub")" > "$WORK/known_hosts"
 SSH=(ssh -i "$WORK/id_ed25519" -o UserKnownHostsFile="$WORK/known_hosts" -o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519 -o BatchMode=yes -o ConnectTimeout=10 "root@$IP")
 mark "droplet active ($IP)"
-ssh_up() { "${SSH[@]}" true 2>/dev/null; }
+ssh_up() { timeout 30 "${SSH[@]}" true 2>/dev/null; }
 wait_for 300 "ssh on $IP" ssh_up
 mark "ssh up"
 
 # --- disco on the box: the cli installs docker + the daemon and gets the server a domain ---
 # (the droplet runs cloud-init's own apt first: wait for it, so apt locks don't fail the install)
-"${SSH[@]}" 'cloud-init status --wait >/dev/null' || true
-SSH_AUTH_SOCK="" disco init "root@$IP" -i "$WORK/id_ed25519" --version "$DAEMON" < /dev/null >"$WORK/init.log" 2>&1 \
+timeout 600 "${SSH[@]}" 'cloud-init status --wait >/dev/null' || true
+SSH_AUTH_SOCK="" timeout 900 disco init "root@$IP" -i "$WORK/id_ed25519" --version "$DAEMON" < /dev/null >"$WORK/init.log" 2>&1 \
   || { echo "disco init failed"; tail -20 "$WORK/init.log"; exit 1; }
 HOST=$(jq -r '.discos | to_entries | first | .value.host' "$DISCO_CONFIG_PATH")
 grep -qx "Domain: $HOST" "$WORK/init.log" || { echo "init did not report the host it saved ($HOST)"; tail -20 "$WORK/init.log"; exit 1; }
-V=$(disco meta:info --json | jq -r .version)
+V=$(timeout 60 disco meta:info --json | jq -r .version)
 [ "$V" = "$DAEMON" ] || { echo "daemon is $V, expected $DAEMON"; exit 1; }
 https_up() { curl -fsS -m 10 "https://$1/${2:-}" >/dev/null 2>&1; }
 mark "disco $V ready (https://$HOST, cli $CLI)"
@@ -148,23 +152,23 @@ mkdir -p "$SRC"
 # the cron runs at 03:00 UTC: for the lane only, every minute, so the schedule can be seen firing
 CRON=$(jq -r '.services | to_entries[] | select(.value.type=="cron") | .key' "$SRC/disco.json" | head -1)
 jq --arg c "$CRON" '.services[$c].schedule = "* * * * *"' "$SRC/disco.json" > "$SRC/disco.json.lane" && mv "$SRC/disco.json.lane" "$SRC/disco.json"
-disco projects:add --name "$PROJECT" >/dev/null
-disco postgres:create --project "$PROJECT" >/dev/null
-disco env:set --project "$PROJECT" APP_ENV=dev >/dev/null # never deployed yet: no redeploy
+timeout 300 disco projects:add --name "$PROJECT" >/dev/null
+timeout 600 disco postgres:create --project "$PROJECT" >/dev/null
+timeout 300 disco env:set --project "$PROJECT" APP_ENV=dev >/dev/null # never deployed yet: no redeploy
 mark "project + postgres created"
 # deploy N: the cli must exit 0 and print its completion line
 deploy() {
   local rc=0
-  (cd "$SRC" && disco deploy --project "$PROJECT" --dir . >"$WORK/deploy-$1.log" 2>&1) || rc=$?
+  (cd "$SRC" && timeout 1800 disco deploy --project "$PROJECT" --dir . >"$WORK/deploy-$1.log" 2>&1) || rc=$?
   [ "$rc" = 0 ] && grep -q "Deployment complete" "$WORK/deploy-$1.log" || { echo "deploy $1: exit $rc"; tail -30 "$WORK/deploy-$1.log"; exit 1; }
 }
 deploy 1
 mark "first deploy complete"
 
-DOMAIN=$(disco domains:list --project "$PROJECT" | head -1)
+DOMAIN=$(timeout 60 disco domains:list --project "$PROJECT" | head -1)
 printf '{"health_url":"https://%s/healthz","environment":"dev","expected_version":"0.1.0"}\n' "$DOMAIN" > "$WORK/release.json"
 wait_for 300 "https://$DOMAIN/healthz" https_up "$DOMAIN" healthz
-python3 "$REPO/bellwether/probe.py" --release "$WORK/release.json" --note "$WORK/note.json" --create
+timeout 300 python3 "$REPO/bellwether/probe.py" --release "$WORK/release.json" --note "$WORK/note.json" --create
 mark "probe 1 passed (https, db, worker)"
 
 # the cron: wait for a tick and look for bellwether's report line in the project logs
@@ -186,8 +190,8 @@ grep -qx 'ARG APP_VERSION=0.2.0' "$SRC/bellwether/Dockerfile" || { echo "could n
 deploy 2
 mark "release 2 (0.2.0) deployed"
 jq '.expected_version = "0.2.0"' "$WORK/release.json" > "$WORK/release-2.json"
-python3 "$REPO/bellwether/probe.py" --release "$WORK/release-2.json" --note "$WORK/note.json"
-python3 "$REPO/bellwether/probe.py" --release "$WORK/release-2.json" --note "$WORK/note-2.json" --create
+timeout 300 python3 "$REPO/bellwether/probe.py" --release "$WORK/release-2.json" --note "$WORK/note.json"
+timeout 300 python3 "$REPO/bellwether/probe.py" --release "$WORK/release-2.json" --note "$WORK/note-2.json" --create
 mark "probe 2 passed (0.2.0 serving, release 1 note intact, release 2 worker processed a new note)"
 
 echo

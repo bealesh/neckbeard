@@ -48,6 +48,17 @@ func TestRenderBellwether(t *testing.T) {
 			t.Errorf("runbook missing %q", s)
 		}
 	}
+	// projects:add --github deploys at once: the repository is linked only after postgres + env exist
+	if strings.Contains(rb, "projects:add --name bellwether --github") {
+		t.Error("runbook adds the project with --github, which deploys before postgres exists")
+	}
+	pg, gh, link := strings.Index(rb, "disco postgres:create"), strings.Index(rb, "disco github:apps:add"), strings.Index(rb, `disco projects:update bellwether --github "$GITHUB_REPO"`)
+	if pg < 0 || gh < pg || link < gh {
+		t.Errorf("runbook order: postgres:create (%d), github:apps:add (%d), projects:update --github (%d)", pg, gh, link)
+	}
+	if !strings.Contains(rb, "It does not call /healthz itself") {
+		t.Error("runbook missing the health path note")
+	}
 	if strings.Contains(rb, "DATABASE_URL=") {
 		t.Error("runbook sets DATABASE_URL by hand; postgres:create sets it")
 	}
