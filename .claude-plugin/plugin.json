@@ -6,7 +6,7 @@
     "name": "bealesh",
     "url": "https://github.com/bealesh"
   },
-  "homepage": "https://github.com/bealesh/neckbeard",
+  "homepage": "https://neckbeard.sh",
   "repository": "https://github.com/bealesh/neckbeard",
   "license": "Apache-2.0",
   "keywords": ["infrastructure", "opentofu", "terraform", "aws", "gcp", "azure", "ci-cd", "cost-estimate"],

@@ -7,6 +7,8 @@
 A plugin for your coding agent that turns an app into cloud infrastructure you
 can actually review, with the monthly bill attached.
 
+[neckbeard.sh](https://neckbeard.sh)
+
 Coding agents are great at application code and weirdly confident about
 infrastructure. Ask one to "deploy this to AWS" and you'll get three hundred
 lines of plausible HCL, a security group open to the world, an IAM policy with
