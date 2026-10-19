@@ -6,6 +6,28 @@ import (
 	"testing"
 )
 
+func TestDiscoRejectsRelativeAndAbsoluteOutputAliases(t *testing.T) {
+	prof, err := filepath.Abs("../../bellwether/app-profile.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	out := filepath.Join(dir, "disco.json")
+	for _, force := range []bool{false, true} {
+		args := []string{"-profile", prof, "-project", "bellwether", "-out", "./disco.json", "-runbook", out}
+		if force {
+			args = append(args, "-force")
+		}
+		if err := runDisco(args); err == nil {
+			t.Fatalf("relative and absolute aliases accepted with force=%v", force)
+		}
+		if _, err := os.Stat(out); !os.IsNotExist(err) {
+			t.Fatal("refused run wrote a file")
+		}
+	}
+}
+
 func TestDiscoOutputs(t *testing.T) {
 	prof, err := filepath.Abs("../../bellwether/app-profile.yaml")
 	if err != nil {

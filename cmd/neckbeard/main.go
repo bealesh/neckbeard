@@ -121,7 +121,13 @@ func runDisco(args []string) error {
 		path string
 		data []byte
 	}{{*out, res.DiscoJSON}, {*runbookOut, res.Runbook}}
-	if filepath.Clean(*out) == filepath.Clean(*runbookOut) {
+	for i := range outputs {
+		outputs[i].path, err = filepath.Abs(outputs[i].path)
+		if err != nil {
+			return err
+		}
+	}
+	if outputs[0].path == outputs[1].path {
 		return fmt.Errorf("-out and -runbook are both %s; they must be different files", *out)
 	}
 	// check everything before writing anything, so a refusal leaves no partial output
