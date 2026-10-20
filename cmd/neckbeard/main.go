@@ -126,14 +126,31 @@ func runDisco(args []string) error {
 		if err != nil {
 			return err
 		}
+		parent, err := discoOutputDirectory(filepath.Dir(outputs[i].path))
+		if err != nil {
+			return err
+		}
+		outputs[i].path = filepath.Join(parent, filepath.Base(outputs[i].path))
 	}
 	if outputs[0].path == outputs[1].path {
 		return fmt.Errorf("-out and -runbook are both %s; they must be different files", *out)
 	}
+	if strings.HasPrefix(outputs[0].path, outputs[1].path+string(filepath.Separator)) || strings.HasPrefix(outputs[1].path, outputs[0].path+string(filepath.Separator)) {
+		return fmt.Errorf("-out and -runbook cannot contain one another")
+	}
 	// check everything before writing anything, so a refusal leaves no partial output
 	for _, o := range outputs {
-		if _, err := os.Stat(o.path); err == nil && !*force {
-			return fmt.Errorf("%s already exists; pass -force to overwrite", o.path)
+		info, err := os.Lstat(o.path)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("%s is not a regular file; refusing to overwrite", o.path)
+			}
+			if !*force {
+				return fmt.Errorf("%s already exists; pass -force to overwrite", o.path)
+			}
 		}
 	}
 	for _, o := range outputs {
@@ -143,6 +160,29 @@ func runDisco(args []string) error {
 		fmt.Println("wrote", o.path)
 	}
 	return nil
+}
+
+// Resolve existing parent symlinks even when output directories do not exist yet.
+func discoOutputDirectory(dir string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(dir)
+	if os.IsNotExist(err) {
+		if _, statErr := os.Lstat(dir); !os.IsNotExist(statErr) {
+			return "", err // an existing dangling symlink is not a missing directory
+		}
+		parent, err := discoOutputDirectory(filepath.Dir(dir))
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(parent, filepath.Base(dir)), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolved)
+	if err == nil && !info.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", dir)
+	}
+	return resolved, err
 }
 
 // writeAtomic writes through a temp file in the same directory and renames it into place.

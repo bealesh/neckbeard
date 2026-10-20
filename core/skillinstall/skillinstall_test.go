@@ -37,6 +37,10 @@ func TestInstallTargets(t *testing.T) {
 		if len(written) == 0 {
 			t.Errorf("%s: no paths reported", target)
 		}
+		ref := filepath.Join(root, filepath.Dir(filepath.FromSlash(want)), "references", "disco.md")
+		if data, err := os.ReadFile(ref); err != nil || !strings.Contains(string(data), "neckbeard disco -project myapp") {
+			t.Errorf("%s: Disco reference missing from installed skill: %v", target, err)
+		}
 	}
 }
 
@@ -58,6 +62,10 @@ func TestCursorGetsCommands(t *testing.T) {
 	}
 	if !strings.Contains(s, "neckbeard analyze") {
 		t.Error("command body lost its content")
+	}
+	data, err = os.ReadFile(filepath.Join(root, ".cursor", "commands", "neckbeard-disco.md"))
+	if err != nil || !strings.Contains(string(data), "neckbeard disco -project") {
+		t.Errorf("Disco command missing from Cursor installation: %v", err)
 	}
 }
 

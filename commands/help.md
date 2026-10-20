@@ -16,6 +16,11 @@ credentials sets up state, OIDC federation, and CI identities per environment)
 `/neckbeard:sync`, `/neckbeard:doctor [plan|estimate|validate|all]` (installs
 the CLI if missing; reports the rest of the toolchain), `/neckbeard:help`.
 
+**Disco (experimental)** — `/neckbeard:disco [project-name]` renders the reviewed
+profile as `disco.json` and `docs/disco.md` for a human to deploy on a VPS.
+It bypasses cloud planning, estimates, and validation; `-force` replaces both
+outputs without scaffold's ownership protection. See the skill's Disco reference.
+
 **What it proves** — V0 (static: fmt, validate, checkov, kubeconform) is what
 the plugin runs; it never claims deployability. V1 (authenticated plan) and V2
 (deployment verification) need cloud credentials and are reported NOT

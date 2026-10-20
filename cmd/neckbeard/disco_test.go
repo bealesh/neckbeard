@@ -73,3 +73,39 @@ func TestDiscoOutputs(t *testing.T) {
 		t.Fatalf("temp files left: %v", left)
 	}
 }
+
+func TestDiscoRejectsUnsafeOutputsBeforeWriting(t *testing.T) {
+	prof, err := filepath.Abs("../../bellwether/app-profile.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"directory", "nested outputs", "symlink alias", "dangling symlink", "dangling parent"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			out, rb := filepath.Join(dir, "disco.json"), filepath.Join(dir, "runbook.md")
+			switch name {
+			case "directory":
+				err = os.Mkdir(rb, 0o755)
+			case "nested outputs":
+				rb = filepath.Join(out, "runbook.md")
+			case "symlink alias":
+				err = os.Symlink(dir, filepath.Join(dir, "alias"))
+				rb = filepath.Join(dir, "alias", "disco.json")
+			case "dangling symlink":
+				err = os.Symlink(filepath.Join(dir, "missing"), rb)
+			case "dangling parent":
+				err = os.Symlink(filepath.Join(dir, "missing"), filepath.Join(dir, "docs"))
+				rb = filepath.Join(dir, "docs", "runbook.md")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := runDisco([]string{"-profile", prof, "-project", "bellwether", "-out", out, "-runbook", rb, "-force"}); err == nil {
+				t.Fatal("unsafe outputs accepted")
+			}
+			if _, err := os.Stat(out); !os.IsNotExist(err) {
+				t.Fatal("refused run wrote disco.json")
+			}
+		})
+	}
+}

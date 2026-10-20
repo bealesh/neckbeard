@@ -82,6 +82,24 @@ gets those.
 | `/neckbeard:doctor [plan\|estimate\|validate\|all]` | Install the CLI if it's missing and report which tools are present. |
 | `/neckbeard:help` | The short version of this page. |
 
+## Disco on a VPS (experimental)
+
+For a self-hosted [Disco](https://disco.cloud) server, run
+`/neckbeard:disco myapp`. It uses the same reviewed app profile and generates
+`disco.json` plus `docs/disco.md`, the human-run setup and deployment guide.
+Without an agent:
+
+```sh
+neckbeard disco -project myapp
+```
+
+One image, one HTTP service, optional workers and cron jobs, and Postgres on
+the server (or connections to existing services). You supply and operate the
+server, including backups. This path has no cost estimate, spending ceiling,
+or cloud validation integration. Existing outputs are refused unless you use
+`-force`, which replaces both files, including edits. See the
+[Disco reference](skills/neckbeard/references/disco.md) for scope and test evidence.
+
 ## The bill
 
 Nobody tells you what infrastructure costs until the invoice arrives, which is
