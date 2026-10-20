@@ -37,6 +37,11 @@ commands, don't install them unasked.
 
 ## The flow
 
+If the user chooses Disco on a VPS, read [the Disco reference](references/disco.md)
+and use `/neckbeard:disco` (or `neckbeard disco -project <name>`). It consumes
+the reviewed profile directly; skip cloud configuration and the cloud loop below.
+Disco is experimental, with separate cost, overwrite, and validation limitations.
+
 ```
 neckbeard analyze  →  you refine app-profile.yaml + write neckbeard.yaml
 neckbeard plan     →  blueprint.yaml (deterministic lockfile) + topology summary

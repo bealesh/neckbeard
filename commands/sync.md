@@ -3,6 +3,9 @@ description: Run the neckbeard loop — plan, estimate, scaffold, validate — a
 argument-hint: "[what changed, or 'skip estimate']"
 ---
 
+If the user chose Disco, follow the skill's `references/disco.md` and
+`/neckbeard:disco` instead. This cloud loop does not operate Disco outputs.
+
 Load the neckbeard skill and run its plan → estimate → scaffold → validate loop
 against the current `neckbeard.yaml` and `app-profile.yaml` (if `neckbeard` is
 not on PATH, install it first as the skill's Prerequisites say):

@@ -21,7 +21,9 @@ repository:
    provision-vs-reference for each datastore) and record my answers under
    `confirmed:` with the matching assumption ids. Resolve unsupported findings
    with an explicit disposition and explanation; preserve their evidence.
-4. Propose `neckbeard.yaml` (cloud, region, runtime, tier, repo, containers)
+4. If I chose Disco, follow the skill's `references/disco.md` instead: propose
+   `/neckbeard:disco` with a confirmed project name, without cloud configuration.
+   Otherwise propose `neckbeard.yaml` (cloud, region, runtime, tier, repo, containers)
    with your reasoning — especially the runtime and tier recommendations — and
    wait for my go-ahead before running `neckbeard plan`. Next step after that:
    `/neckbeard:estimate` (the money, before anything is generated).
