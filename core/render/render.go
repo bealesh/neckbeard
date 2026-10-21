@@ -54,7 +54,7 @@ type rootOutput struct{ name, module, expr, desc string }
 
 var lanes = map[string]lane{
 	"aws/serverless-containers": {
-		emitOrder: []string{"network", "dns-ingress", "runtime-serverless", "postgres", "storage", "secrets", "registry"},
+		emitOrder: []string{"network", "dns-ingress", "runtime-serverless", "postgres", "storage", "secrets", "registry", "budget"},
 		wiring: map[string][]kv{
 			"dns-ingress": {
 				{"certificate_arn", "var.certificate_arn"},
@@ -91,7 +91,7 @@ var lanes = map[string]lane{
 		// No dns-ingress module: kubernetes ingress is in-cluster
 		// (aws-load-balancer-controller via Flux), delivered with the clusters/
 		// layer. This lane renders the platform: cluster, data services, network.
-		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry"},
+		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry", "budget"},
 		wiring: map[string][]kv{
 			"runtime-k8s": {
 				{"vpc_id", "module.network.vpc_id"},
@@ -119,7 +119,7 @@ var lanes = map[string]lane{
 	"gcp/kubernetes": {
 		// GKE's built-in ingress class handles http; external-secrets via Workload
 		// Identity handles the app secret. Both wired in the delivery layer.
-		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry"},
+		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry", "budget"},
 		wiring: map[string][]kv{
 			"runtime-k8s": {
 				{"network_id", "module.network.network_id"},
@@ -143,7 +143,7 @@ var lanes = map[string]lane{
 		delivery: k8sDeliveryGCP,
 	},
 	"gcp/serverless-containers": {
-		emitOrder: []string{"network", "runtime-serverless", "dns-ingress", "postgres", "storage", "secrets", "registry"},
+		emitOrder: []string{"network", "runtime-serverless", "dns-ingress", "postgres", "storage", "secrets", "registry", "budget"},
 		wiring: map[string][]kv{
 			"runtime-serverless": {
 				{"services", "local.services"},
@@ -174,7 +174,7 @@ var lanes = map[string]lane{
 		// AKS app-routing addon handles ingress; external-secrets over workload
 		// identity handles the app secret (client id lands via Flux postBuild
 		// substitution from the bootstrap-published ConfigMap).
-		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry"},
+		emitOrder: []string{"network", "runtime-k8s", "postgres", "storage", "secrets", "registry", "budget"},
 		wiring: map[string][]kv{
 			"network": {
 				{"resource_group_name", "azurerm_resource_group.this.name"},
@@ -212,7 +212,7 @@ var lanes = map[string]lane{
 		// No dns-ingress module: Container Apps provides HTTPS ingress natively —
 		// an honest per-cloud difference (§3.3), declared in the catalog's azure
 		// capability override.
-		emitOrder: []string{"network", "runtime-serverless", "postgres", "storage", "secrets", "registry"},
+		emitOrder: []string{"network", "runtime-serverless", "postgres", "storage", "secrets", "registry", "budget"},
 		wiring: map[string][]kv{
 			"network": {
 				{"resource_group_name", "azurerm_resource_group.this.name"},
@@ -456,6 +456,17 @@ func mainTF(bp *blueprint.Blueprint, env blueprint.Environment, l lane, opts Opt
 		}
 		if name == "runtime-serverless" {
 			lines = append(lines, kv{"image", "var.app_image"}, kv{"environment", strconv.Quote(env.Name)})
+		}
+		if name == "budget" {
+			// Scope comes from the env root, not the blueprint: AWS budgets filter
+			// on the provider's default tags; Azure budgets attach to the root's
+			// resource group; GCP budgets read the project from the provider.
+			switch bp.Cloud {
+			case "aws":
+				lines = append(lines, kv{"app", strconv.Quote(bp.App)}, kv{"environment", strconv.Quote(env.Name)})
+			case "azure":
+				lines = append(lines, kv{"resource_group_id", "azurerm_resource_group.this.id"})
+			}
 		}
 		for _, in := range mod.Inputs {
 			lines = append(lines, kv{in.Key, hclValue(in.Value)})

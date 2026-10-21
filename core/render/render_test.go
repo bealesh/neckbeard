@@ -122,6 +122,7 @@ func TestGCPLaneRenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Cloud, cfg.Region, cfg.Overrides = "gcp", "us-central1", nil
+	cfg.FinOps.BillingAccount = "012345-6789AB-CDEF01" // the fixture sets a budget alert; gcp needs the billing account
 	cfg.Containers = map[string]string{"dev": "p-dev", "stg": "p-stg", "prd": "p-prd"}
 	prof, profDigest, err := profile.Load(filepath.Join(base, "app-profile.yaml"))
 	if err != nil {
@@ -236,7 +237,7 @@ func TestGitCatalogSourcePinsRef(t *testing.T) {
 	}
 	for _, f := range ws {
 		if f.Path == "infra/envs/dev/main.tf" {
-			if !strings.Contains(string(f.Content), `git::https://github.com/bealesh/neckbeard.git//catalog/aws/network?ref=catalog-v0.3.0`) {
+			if !strings.Contains(string(f.Content), `git::https://github.com/bealesh/neckbeard.git//catalog/aws/network?ref=catalog-v`+bp.Pins.Catalog) {
 				t.Error("git module sources must pin ref=catalog-v<version>")
 			}
 		}
@@ -275,5 +276,37 @@ func TestBundledCatalogMustMatchBlueprint(t *testing.T) {
 func TestExplicitCommandStaysLiteral(t *testing.T) {
 	if got := hclValue([]string{"sh", "-c", `echo "${PORT}"; echo '%{literal}'`}); got != `["sh", "-c", "echo \"$${PORT}\"; echo '%%{literal}'"]` {
 		t.Fatalf("command became an HCL expression: %s", got)
+	}
+}
+
+func TestBudgetModuleRendersPerCloud(t *testing.T) {
+	bp := testBlueprint(t) // testdata/basic sets monthly_budget_alert
+	ws, err := WriteSet(bp, testOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var main, runbook string
+	for _, f := range ws {
+		switch f.Path {
+		case "infra/envs/dev/main.tf":
+			main = strings.Join(strings.Fields(string(f.Content)), " ")
+		case "docs/bootstrap.md":
+			runbook = string(f.Content)
+		}
+	}
+	for _, want := range []string{
+		`module "budget" {`,
+		`source = "../../../../catalog-src/catalog/aws/budget"`,
+		`alert_emails = ["budgets@example.com"]`,
+		`app = "bellwether"`,
+		`environment = "dev"`,
+		`monthly_amount = 166.67`,
+	} {
+		if !strings.Contains(main, want) {
+			t.Errorf("dev main.tf missing %q", want)
+		}
+	}
+	if !strings.Contains(runbook, "cost allocation") || !strings.Contains(runbook, "do not cap") {
+		t.Error("AWS runbook must explain cost allocation tag activation and that budgets do not cap")
 	}
 }

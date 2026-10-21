@@ -1,10 +1,10 @@
 version: 1
-blueprint_hash: sha256:7c9833fccae24e1ecdcfa6d7c4acf949a3ee38f0800d25171a510d91ec982b1f
+blueprint_hash: sha256:784d3477c90f854473c4a24c591e4c47f8d2039f40a0c3072a789bfbbc9f247f
 generated_from:
-    neckbeard_yaml: sha256:afd4959a9151ab1a71af789f9804029159bfe8a9873e86ccad193f65a079f4da
+    neckbeard_yaml: sha256:e49cac7a2527034557326dfe9f0e20932eda9e3d6ac1b5900de84e3b57582cee
     app_profile: sha256:9bd3442bf7779ffcb2b2ebd2b542e1438d8ef7418d70868e6643416a521cce8a
 pins:
-    catalog: 0.3.0
+    catalog: 0.4.0
     opentofu: 1.12.6
     planner: test
     providers:
@@ -40,6 +40,26 @@ services:
 environments:
     - name: dev
       modules:
+        - name: budget
+          source: catalog/aws/budget
+          version: 0.1.0
+          inputs:
+            - key: alert_emails
+              value:
+                - budgets@example.com
+              provenance: derived
+            - key: currency
+              value: USD
+              provenance: derived
+            - key: monthly_amount
+              value: 166.67
+              provenance: derived
+            - key: name_prefix
+              value: acme-bellwether-dev
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
         - name: dns-ingress
           source: catalog/aws/dns-ingress
           version: 0.2.0
@@ -157,6 +177,26 @@ environments:
               provenance: preset
     - name: stg
       modules:
+        - name: budget
+          source: catalog/aws/budget
+          version: 0.1.0
+          inputs:
+            - key: alert_emails
+              value:
+                - budgets@example.com
+              provenance: derived
+            - key: currency
+              value: USD
+              provenance: derived
+            - key: monthly_amount
+              value: 166.67
+              provenance: derived
+            - key: name_prefix
+              value: acme-bellwether-stg
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
         - name: dns-ingress
           source: catalog/aws/dns-ingress
           version: 0.2.0
@@ -274,6 +314,26 @@ environments:
               provenance: preset
     - name: prd
       modules:
+        - name: budget
+          source: catalog/aws/budget
+          version: 0.1.0
+          inputs:
+            - key: alert_emails
+              value:
+                - budgets@example.com
+              provenance: derived
+            - key: currency
+              value: USD
+              provenance: derived
+            - key: monthly_amount
+              value: 166.67
+              provenance: derived
+            - key: name_prefix
+              value: acme-bellwether-prd
+              provenance: derived
+            - key: region
+              value: us-east-1
+              provenance: derived
         - name: dns-ingress
           source: catalog/aws/dns-ingress
           version: 0.2.0
@@ -393,3 +453,5 @@ environments:
               value: true
               provenance: preset
 database_secret: DATABASE_URL
+decisions:
+    - 'budget: 500.00/month total split evenly as 166.67 per environment (dev/stg/prd); alerts at 80% and 100% actual and 100% forecasted notify budgets@example.com — they do not cap spend'

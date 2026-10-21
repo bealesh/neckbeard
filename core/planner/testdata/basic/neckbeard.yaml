@@ -11,6 +11,7 @@ repo: bealesh/neckbeard
 finops:
   currency: USD
   monthly_budget_alert: 500
+  alert_emails: [budgets@example.com]
   usage:
     egress_gb: 200
 overrides:

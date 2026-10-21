@@ -30,9 +30,19 @@ type Config struct {
 }
 
 type FinOps struct {
-	Currency           string             `yaml:"currency,omitempty"`
-	MonthlyBudgetAlert float64            `yaml:"monthly_budget_alert,omitempty"`
-	Usage              map[string]float64 `yaml:"usage,omitempty"`
+	Currency string `yaml:"currency,omitempty"`
+	// MonthlyBudgetAlert is the total monthly budget across environments. When
+	// set, every environment renders a real cloud budget for its even share.
+	// Budgets notify; they do not cap (DESIGN §10.2).
+	MonthlyBudgetAlert float64  `yaml:"monthly_budget_alert,omitempty"`
+	AlertEmails        []string `yaml:"alert_emails,omitempty"`
+	// BillingAccount is GCP-only: budgets live on the billing account.
+	BillingAccount string `yaml:"billing_account,omitempty"`
+	// MonthlyCeiling is the hard limit, enforced before anything exists:
+	// estimate exits nonzero and scaffold refuses when the expected total
+	// exceeds it.
+	MonthlyCeiling float64            `yaml:"monthly_ceiling,omitempty"`
+	Usage          map[string]float64 `yaml:"usage,omitempty"`
 }
 
 // EnvironmentOrder is the fixed launch environment set (DESIGN §3.4).

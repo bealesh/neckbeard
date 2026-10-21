@@ -1,12 +1,13 @@
 package skillinstall
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	pluginassets "github.com/bealesh/neckbeard/plugin"
+	pluginassets "github.com/bealesh/neckbeard"
 )
 
 func TestEmbeddedAssetsAreReal(t *testing.T) {
@@ -36,6 +37,10 @@ func TestInstallTargets(t *testing.T) {
 		if len(written) == 0 {
 			t.Errorf("%s: no paths reported", target)
 		}
+		ref := filepath.Join(root, filepath.Dir(filepath.FromSlash(want)), "references", "disco.md")
+		if data, err := os.ReadFile(ref); err != nil || !strings.Contains(string(data), "neckbeard disco -project myapp") {
+			t.Errorf("%s: Disco reference missing from installed skill: %v", target, err)
+		}
 	}
 }
 
@@ -58,10 +63,37 @@ func TestCursorGetsCommands(t *testing.T) {
 	if !strings.Contains(s, "neckbeard analyze") {
 		t.Error("command body lost its content")
 	}
+	data, err = os.ReadFile(filepath.Join(root, ".cursor", "commands", "neckbeard-disco.md"))
+	if err != nil || !strings.Contains(string(data), "neckbeard disco -project") {
+		t.Errorf("Disco command missing from Cursor installation: %v", err)
+	}
 }
 
 func TestUnknownTargetRefused(t *testing.T) {
 	if _, err := Install(t.TempDir(), Target("vscode")); err == nil || !strings.Contains(err.Error(), "plugin marketplace") {
 		t.Errorf("unknown targets need a helpful refusal, got: %v", err)
+	}
+}
+
+func TestEveryCommandHasFrontmatter(t *testing.T) {
+	entries, err := fs.ReadDir(pluginassets.Commands, "commands")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) < 2 {
+		t.Fatalf("expected the plugin commands to be embedded, got %d entries", len(entries))
+	}
+	for _, e := range entries {
+		md, err := pluginassets.Commands.ReadFile("commands/" + e.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(md)
+		if !strings.HasPrefix(s, "---\n") || !strings.Contains(s, "\ndescription:") {
+			t.Errorf("%s: plugin commands need frontmatter with a description", e.Name())
+		}
+		if !strings.Contains(s, "\n---\n") {
+			t.Errorf("%s: unterminated frontmatter", e.Name())
+		}
 	}
 }

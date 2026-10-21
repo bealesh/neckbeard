@@ -21,12 +21,26 @@ Read [the onboarding contract](references/onboarding.md) first. It contains the 
 
 ## Prerequisites
 
-The `neckbeard` binary must be on PATH (`go install github.com/bealesh/neckbeard/cmd/neckbeard@latest`
-or a release binary), plus `tofu` for validation. `infracost` 0.10.x (logged in)
-enables estimates; `checkov`/`kubeconform` enable those V0 checks. Missing tools
-degrade honestly — validate reports them NOT EXERCISED.
+The `neckbeard` binary does the deterministic half. If it is not on PATH, run
+the plugin's installer before anything else:
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/install.sh"` (if that placeholder is
+unfilled, use the plugin root the session-start context reported). It installs
+a sha256-verified release binary into `~/.local/bin`, or falls back to
+`go install github.com/bealesh/neckbeard/cmd/neckbeard@latest` when Go is
+present; it never executes anything it did not verify. Outside Claude Code,
+`go install` is the documented path. Planning and scaffolding need nothing
+else. `tofu` enables validation; `infracost` 0.10.x (logged in) enables
+estimates; `checkov`, `kubeconform`, and `actionlint` enable their V0 gates.
+Missing tools degrade honestly — `neckbeard doctor` lists them and validate
+reports NOT EXERCISED. Those tools are the user's toolchain: give install
+commands, don't install them unasked.
 
 ## The flow
+
+If the user chooses Disco on a VPS, read [the Disco reference](references/disco.md)
+and use `/neckbeard:disco` (or `neckbeard disco -project <name>`). It consumes
+the reviewed profile directly; skip cloud configuration and the cloud loop below.
+Disco is experimental, with separate cost, overwrite, and validation limitations.
 
 ```
 neckbeard analyze  →  you refine app-profile.yaml + write neckbeard.yaml
@@ -79,9 +93,16 @@ GCP/Azure the per-env `containers`. Show the user the choices before running pla
 ## 2. Plan → estimate → scaffold → validate
 
 - `plan` prints the topology per environment; walk the user through it.
-- `estimate` writes `costs/estimate.md`. ALWAYS show the scenario table and the
-  "unpriced/unmodeled" section before scaffolding — consequences before
-  generation is a core promise. Budget alerts notify; they do not cap.
+- `estimate` writes `costs/estimate.md` (and `costs/estimate.json`, which
+  scaffold checks). ALWAYS show the scenario table and the "unpriced/unmodeled"
+  section before scaffolding — consequences before generation is a core promise.
+- Money controls, two kinds, never confused: `finops.monthly_budget_alert`
+  renders a real cloud budget per environment (its even share of the total;
+  needs `finops.alert_emails`, and on GCP `finops.billing_account`) — alerts
+  NOTIFY, they do not cap. `finops.monthly_ceiling` is the cap, enforced where a
+  cap can be enforced: `estimate` exits nonzero and `scaffold` refuses while the
+  expected total exceeds it, or while no estimate exists for the current
+  blueprint. Offer the ceiling when the user names a number they can't exceed.
 - `scaffold` writes files under the ownership contract:
   - `blueprint.yaml` is a hash-verified lockfile: **never edit it** — change
     the profile/config and re-plan.

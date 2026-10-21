@@ -11,3 +11,4 @@ repo: bealesh/neckbeard
 finops:
   currency: USD
   monthly_budget_alert: 100
+  alert_emails: [budgets@example.com]

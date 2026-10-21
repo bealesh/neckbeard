@@ -798,14 +798,16 @@ type procEntry struct {
 	Line    int
 }
 
-// readProcfile returns repository-root Procfile entries. Prefers Procfile over
-// Procfile.dev; blank lines and # comments are ignored.
+// readProcfile falls back to Procfile.dev only when Procfile is absent.
 func readProcfile(root string) []procEntry {
 	for _, name := range []string{"Procfile", "Procfile.dev"} {
 		path := filepath.Join(root, name)
 		data, err := os.ReadFile(path)
-		if err != nil {
+		if os.IsNotExist(err) {
 			continue
+		}
+		if err != nil {
+			return nil
 		}
 		var out []procEntry
 		for i, line := range strings.Split(string(data), "\n") {
@@ -824,9 +826,7 @@ func readProcfile(root string) []procEntry {
 			}
 			out = append(out, procEntry{Name: procName, Command: cmd, File: name, Line: i + 1})
 		}
-		if len(out) > 0 {
-			return out
-		}
+		return out
 	}
 	return nil
 }

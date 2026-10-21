@@ -24,6 +24,7 @@ func TestManagedDatabaseConnectionIsPlanned(t *testing.T) {
 			in := loadInputs(t, filepath.Join("testdata", "basic"))
 			in.Config.Cloud, in.Config.Overrides = cloud, nil
 			in.Config.Containers = map[string]string{"dev": "test-dev", "stg": "test-stg", "prd": "test-prd"}
+			in.Config.FinOps.BillingAccount = "012345-6789AB-CDEF01" // the fixture sets a budget alert; gcp needs the billing account
 			in.Profile.Secrets = nil
 			in.Profile.Needs = []profile.Need{{Capability: "postgres", Mode: "provision", SecretName: binding}}
 			bp, err := Plan(in)
@@ -245,6 +246,7 @@ func TestNonAWSCloudsRequireContainers(t *testing.T) {
 		t.Errorf("gcp without containers should be refused with guidance, got: %v", err)
 	}
 	in.Config.Containers = map[string]string{"dev": "p-dev", "stg": "p-stg", "prd": "p-prd"}
+	in.Config.FinOps.BillingAccount = "012345-6789AB-CDEF01" // the fixture sets a budget alert; gcp needs the billing account
 	bp, err := Plan(in)
 	if err != nil {
 		t.Fatal(err)
@@ -323,4 +325,77 @@ func TestAWSZoneMinimumIsPlanned(t *testing.T) {
 	if _, err := Plan(in); err == nil {
 		t.Fatal("accepted incompatible explicit zone override")
 	}
+}
+
+func TestBudgetModuleIsConfigDriven(t *testing.T) {
+	in := loadInputs(t, filepath.Join("testdata", "basic"))
+	in.Config.FinOps.MonthlyBudgetAlert = 0
+	bp, err := Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range bp.Environments[0].Modules {
+		if m.Name == "budget" {
+			t.Fatal("no monthly_budget_alert → no budget module")
+		}
+	}
+
+	in = loadInputs(t, filepath.Join("testdata", "basic"))
+	in.Config.FinOps.MonthlyBudgetAlert, in.Config.FinOps.AlertEmails = 300, []string{"ops@example.com"}
+	bp, err = Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, m := range bp.Environments[0].Modules {
+		if m.Name != "budget" {
+			continue
+		}
+		found = true
+		got := map[string]any{}
+		for _, in := range m.Inputs {
+			got[in.Key] = in.Value
+		}
+		if fmt.Sprint(got["monthly_amount"]) != "100" {
+			t.Errorf("300 across three environments should be 100 each, got %v", got["monthly_amount"])
+		}
+		if fmt.Sprint(got["alert_emails"]) != "[ops@example.com]" || got["currency"] != "USD" {
+			t.Errorf("budget inputs = %v", got)
+		}
+	}
+	if !found {
+		t.Fatal("monthly_budget_alert set → budget module expected")
+	}
+	if !strings.Contains(strings.Join(bp.Decisions, "\n"), "do not cap") {
+		t.Error("the plan must say budgets do not cap spend")
+	}
+}
+
+func TestBudgetAlertNeedsRecipientsAndGCPBillingAccount(t *testing.T) {
+	in := loadInputs(t, filepath.Join("testdata", "basic"))
+	in.Config.FinOps.AlertEmails = nil
+	if _, err := Plan(in); err == nil || !strings.Contains(err.Error(), "alert_emails") {
+		t.Errorf("alert without recipients must be refused, got %v", err)
+	}
+	in = loadInputs(t, filepath.Join("testdata", "basic"))
+	in.Config.Cloud, in.Config.Overrides = "gcp", nil
+	in.Config.Containers = map[string]string{"dev": "p-dev", "stg": "p-stg", "prd": "p-prd"}
+	if _, err := Plan(in); err == nil || !strings.Contains(err.Error(), "billing_account") {
+		t.Errorf("gcp budget without billing account must be refused, got %v", err)
+	}
+	in.Config.FinOps.BillingAccount = "012345-6789AB-CDEF01"
+	bp, err := Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range bp.Environments[0].Modules {
+		if m.Name == "budget" {
+			for _, input := range m.Inputs {
+				if input.Key == "billing_account" && input.Value == "012345-6789AB-CDEF01" {
+					return
+				}
+			}
+		}
+	}
+	t.Fatal("gcp budget module should carry billing_account")
 }

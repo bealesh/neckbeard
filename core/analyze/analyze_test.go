@@ -820,3 +820,30 @@ func TestProcfileIgnoresReleaseAndMigrate(t *testing.T) {
 		t.Fatalf("expected only web+worker, got %+v", res.Profile.Services)
 	}
 }
+
+func TestProductionProcfileTakesPrecedence(t *testing.T) {
+	for _, production := range []string{"", "# no production roles\n", "web: sh -c 'run app'\n", "release: rake db:migrate\n"} {
+		t.Run(production, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
+			writeFile(t, dir, "Procfile", production)
+			writeFile(t, dir, "Procfile.dev", "web: npm start\nwatcher: npm run watch\n")
+			res, err := Dir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, s := range res.Profile.Services {
+				if s.Name == "watcher" || len(s.Command) != 0 {
+					t.Fatalf("development role or command leaked into draft: %+v", s)
+				}
+			}
+			for _, fact := range res.Profile.Facts {
+				for _, ev := range fact.Evidence {
+					if ev.File == "Procfile.dev" {
+						t.Fatalf("production Procfile present, but used development evidence: %+v", fact)
+					}
+				}
+			}
+		})
+	}
+}

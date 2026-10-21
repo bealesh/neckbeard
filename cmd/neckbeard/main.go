@@ -14,6 +14,7 @@ import (
 	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/catalog"
 	"github.com/bealesh/neckbeard/core/config"
+	"github.com/bealesh/neckbeard/core/disco"
 	"github.com/bealesh/neckbeard/core/estimate"
 	"github.com/bealesh/neckbeard/core/ownership"
 	"github.com/bealesh/neckbeard/core/planner"
@@ -63,6 +64,8 @@ func main() {
 		err = runValidate(os.Args[2:])
 	case "estimate":
 		err = runEstimate(os.Args[2:])
+	case "disco":
+		err = runDisco(os.Args[2:])
 	case "skill":
 		err = runSkill(os.Args[2:])
 	default:
@@ -88,8 +91,122 @@ commands:
   estimate  cost report from the blueprint (rendered to scratch; no cloud creds)
   scaffold  render the blueprint into the repo under the ownership contract
   validate  V0 static checks over the rendered env roots (fmt, init, validate)
+  disco     render app-profile.yaml for Disco (disco.json + docs/disco.md); prototype, issue #33
   skill     install the neckbeard agent skill (Codex CLI, Cursor, any SKILL.md tool)
   version   print version`)
+}
+
+func runDisco(args []string) error {
+	fs := flag.NewFlagSet("disco", flag.ExitOnError)
+	prof := fs.String("profile", "app-profile.yaml", "reviewed app profile")
+	project := fs.String("project", "", "Disco project name (required)")
+	out := fs.String("out", "disco.json", "disco.json output path")
+	runbookOut := fs.String("runbook", "docs/disco.md", "runbook output path")
+	force := fs.Bool("force", false, "overwrite existing outputs")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *project == "" {
+		return fmt.Errorf("usage: neckbeard disco -project <name> [-profile app-profile.yaml] [-out disco.json] [-runbook docs/disco.md]")
+	}
+	p, _, err := profile.Load(*prof)
+	if err != nil {
+		return err
+	}
+	res, err := disco.Render(p, *project)
+	if err != nil {
+		return err
+	}
+	outputs := []struct {
+		path string
+		data []byte
+	}{{*out, res.DiscoJSON}, {*runbookOut, res.Runbook}}
+	for i := range outputs {
+		outputs[i].path, err = filepath.Abs(outputs[i].path)
+		if err != nil {
+			return err
+		}
+		parent, err := discoOutputDirectory(filepath.Dir(outputs[i].path))
+		if err != nil {
+			return err
+		}
+		outputs[i].path = filepath.Join(parent, filepath.Base(outputs[i].path))
+	}
+	if outputs[0].path == outputs[1].path {
+		return fmt.Errorf("-out and -runbook are both %s; they must be different files", *out)
+	}
+	if strings.HasPrefix(outputs[0].path, outputs[1].path+string(filepath.Separator)) || strings.HasPrefix(outputs[1].path, outputs[0].path+string(filepath.Separator)) {
+		return fmt.Errorf("-out and -runbook cannot contain one another")
+	}
+	// check everything before writing anything, so a refusal leaves no partial output
+	for _, o := range outputs {
+		info, err := os.Lstat(o.path)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("%s is not a regular file; refusing to overwrite", o.path)
+			}
+			if !*force {
+				return fmt.Errorf("%s already exists; pass -force to overwrite", o.path)
+			}
+		}
+	}
+	for _, o := range outputs {
+		if err := writeAtomic(o.path, o.data); err != nil {
+			return err
+		}
+		fmt.Println("wrote", o.path)
+	}
+	return nil
+}
+
+// Resolve existing parent symlinks even when output directories do not exist yet.
+func discoOutputDirectory(dir string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(dir)
+	if os.IsNotExist(err) {
+		if _, statErr := os.Lstat(dir); !os.IsNotExist(statErr) {
+			return "", err // an existing dangling symlink is not a missing directory
+		}
+		parent, err := discoOutputDirectory(filepath.Dir(dir))
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(parent, filepath.Base(dir)), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolved)
+	if err == nil && !info.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", dir)
+	}
+	return resolved, err
+}
+
+// writeAtomic writes through a temp file in the same directory and renames it into place.
+func writeAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".disco-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Chmod(0o644); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
 func runAnalyze(args []string) error {
@@ -192,12 +309,16 @@ func runScaffold(args []string) error {
 	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
 	root := fs.String("root", ".", "repository root to scaffold into")
 	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "bundled (default), or an explicit git/local catalog source")
+	configPath := fs.String("config", "", "path to neckbeard.yaml (default: <root>/neckbeard.yaml when present); needed to enforce finops.monthly_ceiling")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	bp, err := blueprint.Load(*blueprintPath)
 	if err != nil {
+		return err
+	}
+	if err := enforceCeiling(*root, *configPath, bp); err != nil {
 		return err
 	}
 	ws, err := render.WriteSet(bp, render.Options{CatalogSource: *catalogSource})
@@ -278,6 +399,19 @@ func runEstimate(args []string) error {
 	}
 	fmt.Printf("\nexpected total: %.2f %s/mo (%.2f/yr) — full report: %s\n", total, res.Currency, total*12, *outPath)
 	fmt.Println("estimates ride on section 2's usage assumptions; budget alerts notify, they don't cap")
+
+	// The sidecar is what scaffold checks a ceiling against: same blueprint, or
+	// no deal. Written even without a ceiling so adding one later just works.
+	summaryPath := estimate.SummaryPath(*outPath)
+	if err := estimate.WriteSummary(summaryPath, estimate.Summarize(res, bp.Hash, time.Now())); err != nil {
+		return err
+	}
+	if cfg.FinOps.MonthlyCeiling > 0 {
+		if err := estimate.CheckCeiling(summaryPath, bp.Hash, cfg.FinOps.MonthlyCeiling); err != nil {
+			return err
+		}
+		fmt.Printf("ceiling: %.2f %s/mo — expected total is under it\n", cfg.FinOps.MonthlyCeiling, res.Currency)
+	}
 	return nil
 }
 
@@ -382,4 +516,25 @@ func printSummary(bp *blueprint.Blueprint, outPath string) {
 	}
 	fmt.Printf("\nblueprint: %s (%s)\n", outPath, bp.Hash)
 	fmt.Println("next: `neckbeard estimate` to see cost consequences before scaffolding")
+}
+
+// enforceCeiling is scaffold's half of finops.monthly_ceiling: the only point
+// where a spending limit can actually be enforced is before the resources
+// exist. The config must be the one the blueprint was planned from, and the
+// estimate sidecar must be for this exact blueprint; otherwise refuse.
+func enforceCeiling(root, configPath string, bp *blueprint.Blueprint) error {
+	if configPath == "" {
+		configPath = filepath.Join(root, "neckbeard.yaml")
+		if _, err := os.Stat(configPath); err != nil {
+			return nil // no config alongside the blueprint: nothing to enforce (plan already read it)
+		}
+	}
+	cfg, digest, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("loading %s: %w", configPath, err)
+	}
+	if digest != bp.GeneratedFrom.NeckbeardYAML {
+		return fmt.Errorf("blueprint was planned from a different neckbeard.yaml (recorded %s, %s is %s): re-run `neckbeard plan`", bp.GeneratedFrom.NeckbeardYAML, configPath, digest)
+	}
+	return estimate.CheckCeiling(filepath.Join(root, "costs", "estimate.json"), bp.Hash, cfg.FinOps.MonthlyCeiling)
 }

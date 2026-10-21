@@ -45,6 +45,36 @@ jobs:
           done
           exit "$fail"
 
+  # The plugin files are the product's front door; keep them well-formed and
+  # keep the bootstrap script working from a machine that has only Go.
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Manifests, hook, and commands are well-formed
+        run: |
+          set -eu
+          jq -e . .claude-plugin/plugin.json .claude-plugin/marketplace.json hooks/hooks.json >/dev/null
+          test "$(jq -r '.plugins[0].source' .claude-plugin/marketplace.json)" = "./"
+          test "$(jq -r .version .claude-plugin/plugin.json)" != "null"
+          for f in commands/*.md; do
+            head -n1 "$f" | grep -qx -- '---' || { echo "::error file=$f::command needs frontmatter"; exit 1; }
+            grep -q '^description:' "$f" || { echo "::error file=$f::command frontmatter needs a description"; exit 1; }
+          done
+          grep -q '^name: neckbeard$' skills/neckbeard/SKILL.md
+          bash -n hooks/session-start.sh scripts/install.sh
+          CLAUDE_PLUGIN_ROOT="$PWD" bash hooks/session-start.sh \
+            | jq -e '.hookSpecificOutput.hookEventName == "SessionStart" and (.hookSpecificOutput.additionalContext | test("neckbeard"))' >/dev/null
+      - name: Installer bootstraps the CLI (release binary when one exists, else go install)
+        run: |
+          set -eu
+          bash scripts/install.sh -d "$RUNNER_TEMP/nbbin"
+          "$RUNNER_TEMP/nbbin/neckbeard" version
+          PATH="$RUNNER_TEMP/nbbin:$PATH" bash scripts/install.sh | grep -q 'already installed'
+
   go:
     runs-on: ubuntu-latest
     steps:
@@ -111,6 +141,7 @@ jobs:
               cp bellwether/neckbeard.yaml "$LANE/" ;;
             gcp)
               sed -e 's/^cloud: aws/cloud: gcp/' -e 's/^region: us-east-1/region: us-central1/' \
+                  -e 's/^  monthly_budget_alert: 100$/  monthly_budget_alert: 100\n  billing_account: "012345-6789AB-CDEF01"/' \
                 bellwether/neckbeard.yaml > "$LANE/neckbeard.yaml"
               printf 'containers:\n  dev: ci-dev\n  stg: ci-stg\n  prd: ci-prd\n' >> "$LANE/neckbeard.yaml" ;;
             azure)

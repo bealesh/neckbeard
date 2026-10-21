@@ -116,6 +116,9 @@ tier: smallteam
 entry_path: adopt
 finops:
   currency: USD
+  monthly_budget_alert: 150        # total; each env gets a cloud budget for its share — notifies, never caps
+  alert_emails: [ops@example.com]  # required with monthly_budget_alert; gcp also needs billing_account
+  monthly_ceiling: 200             # the cap: estimate fails and scaffold refuses above this
 ```
 
 Replace the example identifiers with the user's choices. For GCP or Azure also
@@ -153,7 +156,8 @@ preparation, image pinning, releases, promotion, rollback) is covered by
 Current deployment limitations: AWS and Azure GitHub/serverless have passed
 live deploy, update, and rollback with real database checks; promotion, GitLab
 lanes, and Kubernetes are implemented but not lifecycle-proven. Serverless release automation,
-full promotion/rollback, cloud budget alerts, and automated recovery are subsequent
-work. The generated bootstrap runbook is the next operator step, not a guarantee
+full promotion/rollback and automated recovery are subsequent work. Budget alerts
+render as real cloud budgets when `finops.monthly_budget_alert` is set (they
+notify; `finops.monthly_ceiling` is the one that refuses). The generated bootstrap runbook is the next operator step, not a guarantee
 that the application has been deployed. Known live findings:
 https://github.com/bealesh/neckbeard/tree/main/docs/findings
