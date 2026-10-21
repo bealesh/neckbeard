@@ -7,13 +7,18 @@
 #   3. Otherwise: print what to do. Never curl|bash anything else.
 #
 # Usage: install.sh [-v vX.Y.Z|latest] [-d BIN_DIR] [-f]
-#   -v  release tag (default: latest release; falls back to go install @latest)
+#   -v  release tag (default: plugin manifest version, else latest stable)
 #   -d  install directory (default: $NECKBEARD_BIN_DIR or ~/.local/bin; no sudo)
 #   -f  reinstall even if `neckbeard` is already on PATH
 set -euo pipefail
 
 REPO="bealesh/neckbeard"
 version="latest"
+manifest="$(dirname "$0")/../.claude-plugin/plugin.json"
+if [ -f "$manifest" ]; then
+  plugin_version="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest" | head -n1)"
+  if [ -n "$plugin_version" ]; then version="v${plugin_version#v}"; fi
+fi
 dir="${NECKBEARD_BIN_DIR:-$HOME/.local/bin}"
 force=0
 
@@ -28,10 +33,6 @@ while getopts "v:d:fh" opt; do
   esac
 done
 
-if [ "$force" = 0 ] && existing="$(command -v neckbeard 2>/dev/null)"; then
-  echo "already installed: $("$existing" version) at $existing (pass -f to reinstall)"
-  exit 0
-fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -41,7 +42,7 @@ case "$arch" in
 esac
 case "$os" in
   linux | darwin) ;;
-  *) echo "no release binaries for $os; use: go install github.com/$REPO/cmd/neckbeard@latest" >&2; exit 1 ;;
+  *) echo "no release binaries for $os; use: go install github.com/$REPO/cmd/neckbeard@$version" >&2; exit 1 ;;
 esac
 
 sha256() {
@@ -57,17 +58,26 @@ path_hint() {
 }
 
 # --- 1. release binary -------------------------------------------------------
-tag=""
-if command -v curl >/dev/null 2>&1; then
-  if [ "$version" = "latest" ]; then
+tag="$version"
+if [ "$version" = "latest" ]; then
+  tag=""
+  if command -v curl >/dev/null 2>&1; then
     tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
       | sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
-  else
-    tag="$version"
   fi
 fi
 
-if [ -n "$tag" ]; then
+if [ "$force" = 0 ] && existing="$(command -v neckbeard 2>/dev/null)"; then
+  installed="$("$existing" version)"
+  if [ -z "$tag" ] || [ "$installed" != "neckbeard ${tag#v}" ]; then
+    echo "installed $installed at $existing does not match requested ${tag:-latest (unresolved)}; rerun with -f to install it" >&2
+    exit 1
+  fi
+  echo "already installed: $installed at $existing (pass -f to reinstall)"
+  exit 0
+fi
+
+if [ -n "$tag" ] && command -v curl >/dev/null 2>&1; then
   asset="neckbeard_${tag#v}_${os}_${arch}.tar.gz"
   base="https://github.com/$REPO/releases/download/$tag"
   tmp="$(mktemp -d)"

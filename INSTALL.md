@@ -21,21 +21,11 @@ present); `/neckbeard:doctor` reports the rest of the toolchain.
 ## Running alongside ponytail
 
 The intended pairing is [ponytail](https://github.com/DietrichGebert/ponytail)
-for the application code and neckbeard for what it runs on. Both plugins
-installed into one Claude Code config (2.1.296) load cleanly: ponytail adds
-SessionStart, SubagentStart and UserPromptSubmit hooks and about 430 always-on
-tokens, neckbeard adds one SessionStart hook and about 280; the two hooks
-don't collide, and both emit their context on the same session start. Nothing
-in ponytail's ruleset argues against using an installed tool (its rung four is
-"an installed dependency? use it"), and neckbeard's skill is explicit that the
-agent never hand-writes infrastructure.
-
-What has not been checked is behaviour: a full onboarding run with both plugins
-active, watching whether ponytail's "smallest change that works" ever talks the
-agent out of running the CLI. That is tracked in
-[#27](https://github.com/bealesh/neckbeard/issues/27). If you run the pair and
-it misbehaves, open an issue with the transcript; the fix goes in the skill,
-not the docs.
+for application code and neckbeard for infrastructure; a local onboarding trial
+with both plugins passed on 2026-10-21. See the
+[pairing findings](docs/findings/2026-10-21-ponytail-pairing.md) for the exact
+versions, hooks, token-cost context, and limits; file an issue with a transcript
+if the pair misbehaves.
 
 ## Codex CLI
 
@@ -57,7 +47,10 @@ neckbeard skill install -target cursor    # .cursor/skills/ + .cursor/commands/
 
 Cursor loads the skill on demand and gets the plugin's commands as
 `/neckbeard-analyze`, `/neckbeard-estimate`, `/neckbeard-sync`,
-`/neckbeard-doctor`, `/neckbeard-help`.
+`/neckbeard-doctor`, `/neckbeard-help`. The experimental `/neckbeard-disco`
+command requires v0.4.0-beta.1 or later; stable v0.3.0 has five commands.
+See the [beta candidate installation instructions](docs/beta-release.md#beta-installation-after-publication)
+for an explicit version once the beta is published.
 
 ## Any other SKILL.md-speaking agent
 
@@ -104,6 +97,14 @@ Doctor checks tool availability only — not cloud permissions, quotas, or
 deployability.
 
 ## Release binaries
+
+`scripts/install.sh` defaults to the version in its checkout's
+`.claude-plugin/plugin.json`, or the latest stable release when no manifest
+version is available. `-v` overrides that choice (including `-v latest`);
+`-f` replaces an existing CLI. Without `-f`, an installed CLI must match the
+resolved target version; a mismatch fails with both versions and upgrade
+instructions. A requested version that is not published fails
+rather than installing a different version.
 
 `scripts/install.sh` downloads `neckbeard_<version>_<os>_<arch>.tar.gz` from the
 [GitHub Release](https://github.com/bealesh/neckbeard/releases) for the tag and

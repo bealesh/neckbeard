@@ -147,7 +147,9 @@ cleanup leaves an actionable inventory and blocks a passing release verdict.
 ## Gate 5 — Independent users and release candidate
 
 This is tranche four. Documentation can improve throughout; the final trial must
-use the artifacts intended for release.
+use the artifacts intended for release. The current
+[v0.4.0-beta.1 preparation record](beta-release.md) tracks packaging and
+installation details; this gate remains the release acceptance checklist.
 
 - [ ] Test at least three people who did not implement neckbeard, using their own
   supported apps and the shipped guidance. Cover both VCSs and both runtimes
