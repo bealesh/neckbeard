@@ -86,6 +86,7 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test ./...
+      - run: python3 scripts/test-release-workflow.py
   tofu:
     runs-on: ubuntu-latest
     steps:

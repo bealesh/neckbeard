@@ -21,21 +21,19 @@ present); `/neckbeard:doctor` reports the rest of the toolchain.
 ## Running alongside ponytail
 
 The intended pairing is [ponytail](https://github.com/DietrichGebert/ponytail)
-for the application code and neckbeard for what it runs on. Both plugins
-installed into one Claude Code config (2.1.296) load cleanly: ponytail adds
-SessionStart, SubagentStart and UserPromptSubmit hooks and about 430 always-on
-tokens, neckbeard adds one SessionStart hook and about 280; the two hooks
-don't collide, and both emit their context on the same session start. Nothing
-in ponytail's ruleset argues against using an installed tool (its rung four is
-"an installed dependency? use it"), and neckbeard's skill is explicit that the
-agent never hand-writes infrastructure.
+for application code and neckbeard for infrastructure. On 2026-10-21, Claude
+Code 2.1.286 loaded both plugins into a clean configuration (ponytail 5.3.2,
+neckbeard's Procfile candidate `a47a6f2`). Both session-start hooks and
+ponytail's prompt hook completed successfully.
 
-What has not been checked is behaviour: a full onboarding run with both plugins
-active, watching whether ponytail's "smallest change that works" ever talks the
-agent out of running the CLI. That is tracked in
-[#27](https://github.com/bealesh/neckbeard/issues/27). If you run the pair and
-it misbehaves, open an issue with the transcript; the fix goes in the skill,
-not the docs.
+A live agent onboarded a Python fixture through analyze, plan, an Infracost
+estimate, scaffold, and V0 validation. It edited only the profile and config;
+all infrastructure and pipelines came from the CLI. No conflict between the
+two plugins was observed. This was a local fixture test with confirmed choices
+supplied up front, not an independent-user trial or a cloud deployment. See the
+[pairing findings](docs/findings/2026-10-21-ponytail-pairing.md) for the checks,
+tool restrictions, and background-validation friction. Other versions and
+workloads remain unverified.
 
 ## Codex CLI
 
@@ -57,7 +55,7 @@ neckbeard skill install -target cursor    # .cursor/skills/ + .cursor/commands/
 
 Cursor loads the skill on demand and gets the plugin's commands as
 `/neckbeard-analyze`, `/neckbeard-estimate`, `/neckbeard-sync`,
-`/neckbeard-doctor`, `/neckbeard-help`.
+`/neckbeard-doctor`, `/neckbeard-help`, `/neckbeard-disco`.
 
 ## Any other SKILL.md-speaking agent
 
