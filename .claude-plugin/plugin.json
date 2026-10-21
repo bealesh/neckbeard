@@ -1,6 +1,6 @@
 {
   "name": "neckbeard",
-  "version": "0.4.0-beta.1",
+  "version": "0.3.0",
   "description": "Turn an app into reviewable cloud infrastructure and a cost estimate. The agent analyzes and explains; planning, rendering, and validation are deterministic from a tested OpenTofu module catalog — the agent never invents infrastructure.",
   "author": {
     "name": "bealesh",

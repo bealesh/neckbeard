@@ -19,25 +19,19 @@ features and the separate Disco target remain experimental.
 - Beta/RC tags are published as GitHub prereleases, keeping stable releases
   separate. A credential-free test checks the actual publishing command.
 
-## Candidate checks
+## Release gate
 
-Before publishing, record the exact candidate commit, package checksums, and
-results for:
-
-- The normal Go, plugin, security-invariant, and cloud static CI checks.
-- Linux and macOS archives on amd64 and arm64; run native-platform archives and
-  state explicitly which cross-built binaries were not executed.
-- Fresh installation, explicit upgrade from v0.3.0, checksum rejection, and the
-  embedded Codex/Cursor skills, references, and commands.
-- Preservation of user edits when regenerating after an upgrade.
-
-After the source is accepted, tag that exact commit and verify the downloaded
-artifacts, not just local builds. Do not mark this release as stable.
+[Gate 5 of the launch plan](launch-plan.md#gate-5--independent-users-and-release-candidate)
+is the source of truth for release acceptance. Keep candidate commit, package
+checksums, and verification results tied together. The manifest stays at the
+published stable version in this PR; bump it to `0.4.0-beta.1` in the tagging
+commit, then build and test that exact tagged source before publishing.
 
 ## Beta installation after publication
 
-The default installer and `go install ...@latest` continue to select a stable
-release. Beta testers must choose this version explicitly:
+`go install ...@latest` selects the stable release. The plugin installer
+defaults to its checkout's manifest version; before the tagging commit that
+is still v0.3.0. Beta testers can choose this version explicitly after publication:
 
 ```sh
 bash scripts/install.sh -v v0.4.0-beta.1 -f
@@ -56,12 +50,9 @@ revision and the beta CLI; updating one does not update the other.
 
 ## Independent-user trial
 
-Three independent users still need to complete onboarding on their own supported
-applications. Agent-driven fixture checks do not count as independent users.
-Each trial should record the installed version, app/stack, steps completed,
-confusing questions, manual repairs, refusals, and validation results. Findings
-belong in issue #28; unsupported needs should remain explicit rather than expand
-the beta workload contract.
+The three independent-user trials in Gate 5 are still outstanding and tracked
+in [issue #28](https://github.com/bealesh/neckbeard/issues/28). Agent-driven
+fixture checks do not count toward that gate.
 
 ## Draft release notes
 

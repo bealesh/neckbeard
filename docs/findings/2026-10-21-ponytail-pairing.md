@@ -2,11 +2,15 @@
 
 ## Setup
 
-Claude Code 2.1.286 ran with an initially empty `CLAUDE_CONFIG_DIR`, no user
-settings or MCP servers, and both plugins loaded via `--plugin-dir`: neckbeard
-at Procfile candidate `a47a6f2e20130d05ba76d51c870d6fe21db1c9b6` and ponytail
-5.3.2. The existing Claude login authenticated the test through an in-memory
-environment variable; credentials were not written into the fixture or evidence.
+The standalone Claude Code CLI at `~/.local/bin/claude` reported 2.1.286;
+this was not the VS Code bundled binary. It ran with an initially empty
+`CLAUDE_CONFIG_DIR`, no user settings or MCP servers, and both plugins loaded
+via `--plugin-dir`: the Procfile candidate and ponytail 5.3.2. The tested
+product tree is identical to the squash merge on main,
+[`0bbe0c4`](https://github.com/bealesh/neckbeard/commit/0bbe0c4570ad99fa32d722895620c6fe491b9c91).
+The earlier October 15 installation record used 2.1.296; this later run used
+the older standalone installation. The existing Claude login authenticated
+the test through an in-memory environment variable; credentials were not written into the fixture or evidence.
 The fixture was the shipped Python onboarding app in a disposable directory.
 Cloud credential environment variables were excluded.
 
@@ -55,3 +59,16 @@ This verifies one fixture, configuration, CLI version, and pair of plugin
 versions. Decisions were supplied up front and the test was run by the
 maintainer's automation. It does not count as an independent-user trial for
 issue #28, nor establish compatibility with every ponytail skill or cloud lane.
+
+## Hook and cost context
+
+The earlier installation record estimated about 430 always-on tokens for
+ponytail and 280 for neckbeard, and listed ponytail's SessionStart,
+SubagentStart, and UserPromptSubmit hooks alongside neckbeard's SessionStart
+hook. Those estimates were not remeasured in this trial, and SubagentStart
+was not exercised because delegation was disabled. The recorded CLI result
+reported $0.34 for this fixture run; this is a single observed run, not
+a cost forecast for other apps or agent configurations.
+
+If the pair misbehaves, file an issue with a transcript after removing secrets
+and private app data, including both plugin versions and the CLI version.

@@ -36,7 +36,7 @@ The permanent invariant: **pull requests never touch a cloud account.**
 ## Before you open a PR
 
 ```sh
-make build test
+make build test   # includes installer version selection and release publishing tests
 tofu fmt -check -recursive catalog
 ```
 

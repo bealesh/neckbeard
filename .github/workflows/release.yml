@@ -54,10 +54,4 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -eu
-          set -- "$GITHUB_REF_NAME" "$DIST"/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
-          case "$GITHUB_REF_NAME" in
-            *-*) set -- "$@" --prerelease ;;
-          esac
-          gh release create "$@"
+        run: bash scripts/publish-release.sh
