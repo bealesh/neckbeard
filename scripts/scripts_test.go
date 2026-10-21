@@ -131,3 +131,46 @@ func TestInstallerVersionWithoutCurl(t *testing.T) {
 		})
 	}
 }
+
+func TestInstallerExistingVersion(t *testing.T) {
+	source, err := os.ReadFile("install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, installed string
+		mismatch        bool
+	}{
+		{"matching beta", "0.4.0-beta.1", false},
+		{"stable needs beta", "0.3.0", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			scripts := filepath.Join(root, "scripts")
+			manifest := filepath.Join(root, ".claude-plugin")
+			for _, dir := range []string{scripts, manifest} {
+				if err := os.Mkdir(dir, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			writeFile(t, filepath.Join(scripts, "install.sh"), string(source))
+			writeFile(t, filepath.Join(manifest, "plugin.json"), "{\n  \"version\": \"0.4.0-beta.1\"\n}\n")
+			writeFile(t, filepath.Join(root, "neckbeard"), "#!/bin/bash\necho neckbeard "+tc.installed+"\n")
+			cmd := exec.Command("bash", filepath.Join(scripts, "install.sh"))
+			cmd.Env = append(os.Environ(), "PATH="+root+string(os.PathListSeparator)+os.Getenv("PATH"))
+			out, err := cmd.CombinedOutput()
+			if (err != nil) != tc.mismatch {
+				t.Fatalf("err=%v, output=%s", err, out)
+			}
+			if tc.mismatch {
+				for _, expected := range []string{"0.3.0", "v0.4.0-beta.1", "-f"} {
+					if !strings.Contains(string(out), expected) {
+						t.Fatalf("missing %q in %s", expected, out)
+					}
+				}
+			} else if !strings.Contains(string(out), "already installed:") {
+				t.Fatalf("unexpected output: %s", out)
+			}
+		})
+	}
+}

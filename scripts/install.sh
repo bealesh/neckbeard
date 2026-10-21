@@ -33,10 +33,6 @@ while getopts "v:d:fh" opt; do
   esac
 done
 
-if [ "$force" = 0 ] && existing="$(command -v neckbeard 2>/dev/null)"; then
-  echo "already installed: $("$existing" version) at $existing (pass -f to reinstall)"
-  exit 0
-fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -69,6 +65,16 @@ if [ "$version" = "latest" ]; then
     tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
       | sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
   fi
+fi
+
+if [ "$force" = 0 ] && existing="$(command -v neckbeard 2>/dev/null)"; then
+  installed="$("$existing" version)"
+  if [ -z "$tag" ] || [ "$installed" != "neckbeard ${tag#v}" ]; then
+    echo "installed $installed at $existing does not match requested ${tag:-latest (unresolved)}; rerun with -f to install it" >&2
+    exit 1
+  fi
+  echo "already installed: $installed at $existing (pass -f to reinstall)"
+  exit 0
 fi
 
 if [ -n "$tag" ] && command -v curl >/dev/null 2>&1; then

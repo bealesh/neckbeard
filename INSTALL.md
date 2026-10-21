@@ -101,7 +101,9 @@ deployability.
 `scripts/install.sh` defaults to the version in its checkout's
 `.claude-plugin/plugin.json`, or the latest stable release when no manifest
 version is available. `-v` overrides that choice (including `-v latest`);
-`-f` replaces an existing CLI. A requested version that is not published fails
+`-f` replaces an existing CLI. Without `-f`, an installed CLI must match the
+resolved target version; a mismatch fails with both versions and upgrade
+instructions. A requested version that is not published fails
 rather than installing a different version.
 
 `scripts/install.sh` downloads `neckbeard_<version>_<os>_<arch>.tar.gz` from the
