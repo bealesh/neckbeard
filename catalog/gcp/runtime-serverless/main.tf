@@ -94,6 +94,10 @@ resource "google_cloud_run_v2_service" "http" {
       }
 
       startup_probe {
+        # Migrations and a cold application route need more than three 1s probes.
+        failure_threshold = 24
+        period_seconds    = 10
+        timeout_seconds   = 5
         http_get {
           path = each.value.health_path
           port = each.value.port

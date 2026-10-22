@@ -37,3 +37,19 @@ func TestGCPHTTPIngressWorksWithDomainRestrictedSharing(t *testing.T) {
 		t.Error("scheduler must retain authenticated job invocation")
 	}
 }
+
+func TestGCPStartupProbeAllowsColdStarts(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "catalog", "gcp", "runtime-serverless", "main.tf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := regexp.MustCompile(`(?s)startup_probe \{(.*?)http_get \{`).FindStringSubmatch(string(data))
+	if len(probe) != 2 {
+		t.Fatal("HTTP startup probe not found")
+	}
+	for _, setting := range []string{`failure_threshold\s*=\s*24`, `period_seconds\s*=\s*10`, `timeout_seconds\s*=\s*5`} {
+		if !regexp.MustCompile(setting).MatchString(probe[1]) {
+			t.Errorf("startup probe needs a four-minute allowance with five-second attempts: missing %s", setting)
+		}
+	}
+}
