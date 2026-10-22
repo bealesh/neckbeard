@@ -48,7 +48,7 @@
         "allOf": [{
           "if": { "properties": { "mode": { "const": "provision" } } },
           "then": { "properties": {
-            "capability": { "enum": ["postgres", "object-storage", "secrets"] }
+            "capability": { "enum": ["postgres", "redis", "object-storage", "secrets"] }
           } }
         }]
       }

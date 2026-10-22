@@ -193,3 +193,46 @@ func TestShellJoin(t *testing.T) {
 		}
 	}
 }
+
+func TestProvisionRedis(t *testing.T) {
+	p := bellwether(t)
+	p.Needs = append(p.Needs, profile.Need{Capability: "redis", Mode: "provision"})
+	p.Secrets = append(p.Secrets, profile.SecretRef{Name: "REDIS_URL"})
+	out, err := Render(p, "bellwether")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out.DiscoJSON), "redis") {
+		t.Fatal("Redis must not share the app's blue/green lifecycle")
+	}
+	rb := string(out.Runbook)
+	for _, want := range []string{redisImage, "--network disco-main --network-alias bellwether-redis", "appendonly yes", "appendfsync everysec", "maxmemory-policy noeviction", "--memory 512m", "requirepass %s", `REDIS_URL="redis://:$REDIS_PASSWORD@bellwether-redis:6379/0"`, "root-only", "docker stop neckbeard-bellwether-redis"} {
+		if !strings.Contains(rb, want) {
+			t.Errorf("runbook missing %q", want)
+		}
+	}
+	for _, bad := range []string{"--publish", "-p 6379", `REDIS_URL="$REDIS_URL"`} {
+		if strings.Contains(rb, bad) {
+			t.Errorf("runbook contains %q", bad)
+		}
+	}
+	p.Needs[len(p.Needs)-1].SecretName = "CACHE_URL"
+	out, err = Render(p, "bellwether")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out.Runbook), `CACHE_URL="redis://:`) {
+		t.Fatal("custom connection binding not rendered")
+	}
+	for _, bad := range []string{"bad name", "$(id)", "DATABASE_URL"} {
+		p.Needs[len(p.Needs)-1].SecretName = bad
+		if _, err := Render(p, "bellwether"); err == nil {
+			t.Errorf("accepted Redis binding %q", bad)
+		}
+	}
+	p.Needs[len(p.Needs)-1].SecretName = "REDIS_URL"
+	p.Needs = append(p.Needs, profile.Need{Capability: "redis", Mode: "provision"})
+	if _, err := Render(p, "bellwether"); err == nil {
+		t.Fatal("accepted two Redis servers")
+	}
+}

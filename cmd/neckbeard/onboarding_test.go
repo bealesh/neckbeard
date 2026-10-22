@@ -113,14 +113,27 @@ func TestInstalledOnboarding(t *testing.T) {
 			}
 			saveProfile()
 			if fixture == "unsupported" {
-				if out := run(false, "plan"); !strings.Contains(out, "unsupported redis") {
-					t.Fatalf("unsupported requirement disappeared: %s", out)
+				if out := run(false, "plan"); !strings.Contains(out, "redis: choose mode") {
+					t.Fatalf("Redis mode was not gated: %s", out)
 				}
-				p.Unsupported[0].Disposition = "external"
-				p.Unsupported[0].Resolution = "Fixture Redis is operated externally"
-				p.Unsupported[0].SecretName = "REDIS_URL"
+				for i := range p.Needs {
+					if p.Needs[i].Capability == "redis" {
+						p.Needs[i].Mode = "provision"
+					}
+				}
+				saveProfile()
+				if out := run(false, "plan"); !strings.Contains(out, "force-fit") {
+					t.Fatalf("cloud Redis provisioning was not refused: %s", out)
+				}
+				for i := range p.Needs {
+					if p.Needs[i].Capability == "redis" {
+						p.Needs[i].Mode = "reference"
+						p.Needs[i].SecretName = "REDIS_URL"
+					}
+				}
 				saveProfile()
 			}
+
 			for _, cloud := range []string{"aws", "gcp", "azure"} {
 				for _, vcs := range []string{"github", "gitlab"} {
 					for _, runtime := range []string{"serverless-containers", "kubernetes"} {
