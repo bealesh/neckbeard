@@ -75,6 +75,7 @@ type envClass int
 const (
 	classIgnore envClass = iota
 	classPostgres
+	classRedis
 	classObjectStorage
 	classSecret
 	classUnsupported
@@ -99,8 +100,10 @@ func classifyEnv(name string) (envClass, unsupportedHit) {
 		return classIgnore, unsupportedHit{}
 	case n == "DATABASE_URL" || strings.HasPrefix(n, "POSTGRES") || strings.HasPrefix(n, "PG") && strings.Contains(n, "HOST"):
 		return classPostgres, unsupportedHit{}
-	case strings.Contains(n, "REDIS") || strings.Contains(n, "MEMCACHE"):
-		return classUnsupported, unsupportedHit{"redis", name}
+	case strings.Contains(n, "REDIS"):
+		return classRedis, unsupportedHit{}
+	case strings.Contains(n, "MEMCACHE"):
+		return classUnsupported, unsupportedHit{"memcached", name}
 	case strings.Contains(n, "KAFKA") || strings.Contains(n, "AMQP") || strings.Contains(n, "RABBIT") || strings.Contains(n, "SQS_") || strings.Contains(n, "NATS"):
 		return classUnsupported, unsupportedHit{"queues", name}
 	case strings.Contains(n, "ELASTIC") || strings.HasPrefix(n, "ES_") || strings.Contains(n, "OPENSEARCH"):
@@ -375,6 +378,13 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 				seenNeed["postgres"] = true
 			}
 			p.Secrets = append(p.Secrets, profile.SecretRef{Name: name})
+		case classRedis:
+			if !seenNeed["redis"] {
+				p.Needs = append(p.Needs, profile.Need{Capability: "redis", Mode: "undecided", Evidence: ev})
+				p.Assumptions = append(p.Assumptions, profile.Assumption{ID: "redis-mode", Statement: "Confirm Redis usage and provision on Disco or reference an existing service; cloud Redis provisioning is not implemented. Review persistence, memory, eviction and recovery requirements."})
+				seenNeed["redis"] = true
+			}
+			p.Secrets = append(p.Secrets, profile.SecretRef{Name: name})
 		case classObjectStorage:
 			if !seenNeed["object-storage"] {
 				p.Needs = append(p.Needs, profile.Need{Capability: "object-storage", Mode: "undecided", Evidence: ev})
@@ -384,8 +394,7 @@ func synthesize(root string, dockerfiles []string, exposePorts map[string]int, l
 		case classSecret:
 			p.Secrets = append(p.Secrets, profile.SecretRef{Name: name})
 		case classUnsupported:
-			// One finding per capability: five REDIS_* variables are one redis
-			// dependency, with every variable named and evidence merged.
+			// One finding per capability, with every variable named and evidence merged.
 			u := unsupportedByCap[hit.capability]
 			if u == nil {
 				u = &pendingUnsupported{}
@@ -706,7 +715,7 @@ func classifyComposeImage(image string) (capability string, asNeed bool, ok bool
 	case "postgres", "postgis":
 		return "postgres", true, true
 	case "redis", "valkey":
-		return "redis", false, true
+		return "redis", true, true
 	case "rabbitmq":
 		return "queues", false, true
 	case "minio":
@@ -771,6 +780,8 @@ func applyComposeCapabilities(p *profile.AppProfile, hits []composeCapability, s
 					ID:        "postgres-mode",
 					Statement: "Database environment variable detected: verify the engine and choose provision or reference; a client does not establish a need for a new database",
 				})
+			case "redis":
+				p.Assumptions = append(p.Assumptions, profile.Assumption{ID: "redis-mode", Statement: "Confirm Redis usage and provision on Disco or reference an existing service; cloud Redis provisioning is not implemented. Review persistence, memory, eviction and recovery requirements."})
 			case "object-storage":
 				p.Assumptions = append(p.Assumptions, profile.Assumption{ID: "object-storage-mode", Statement: "Choose provision or reference for the detected object storage"})
 			}

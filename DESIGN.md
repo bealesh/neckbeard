@@ -110,7 +110,10 @@ What an application may need for neckbeard to fully support it:
 
 ### 3.2 Explicitly unsupported at launch
 
-Each produces a named explanation (§8), not a nearest-fit: other database engines
+The separate experimental Disco target can provision Redis as a single-server
+companion; this does not add a managed Redis module to the cloud catalog.
+
+Each unsupported cloud capability produces a named explanation (§8), not a nearest-fit: other database engines
 (MySQL, MongoDB, etc.), caches (Redis/Memcached), queues and streams (SQS, Pub/Sub,
 Service Bus, Kafka), functions-as-a-service, VMs, GPU/ML serving, stateful workloads on
 Kubernetes (operators, StatefulSets beyond the optional o11y bundle), service mesh,

@@ -146,8 +146,31 @@ func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byt
 	set := map[string]bool{}
 	type envVar struct{ name, what string }
 	var envVars []envVar
+	redisProvisioned := false
 	for _, n := range p.Needs {
 		switch {
+		case n.Capability == "redis" && n.Mode == "provision":
+			if redisProvisioned {
+				return nil, fmt.Errorf("only one provisioned Redis is supported per Disco project")
+			}
+			for _, u := range p.Unsupported {
+				if u.Capability == "redis" {
+					return nil, fmt.Errorf("Redis is listed in both needs and unsupported; move its reviewed resolution into the Redis need")
+				}
+			}
+			redisProvisioned = true
+			env := n.SecretName
+			if env == "" {
+				env = "REDIS_URL"
+			}
+			if !envName.MatchString(env) {
+				return nil, fmt.Errorf("redis secret_name %q is not an environment variable name", env)
+			}
+			if set[env] {
+				return nil, fmt.Errorf("redis connection variable %q is already bound", env)
+			}
+			w("%s", redisRunbook(project, env))
+			set[env] = true
 		case n.Capability == "postgres" && n.Mode == "provision":
 			env := n.SecretName
 			if env == "" {
@@ -155,6 +178,9 @@ func runbook(p *profile.AppProfile, project string, web *profile.Service) ([]byt
 			}
 			if !envName.MatchString(env) {
 				return nil, fmt.Errorf("postgres secret_name %q is not an environment variable name", env)
+			}
+			if set[env] {
+				return nil, fmt.Errorf("postgres connection variable %q is already bound", env)
 			}
 			w("Postgres on the Disco server (the Postgres addon; data on this server's disk, back it up):")
 			w("")

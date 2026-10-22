@@ -24,9 +24,9 @@ needs, asks you the questions code can't answer, and maps the answers onto
 catalog inputs. Everything in between is deterministic Go. The planner writes a
 hash-verified `blueprint.yaml`, the renderer is a pure function of it, and
 regeneration refuses to overwrite a file you've touched. The agent never
-invents infrastructure. If your app needs Redis, you get a named finding that
-says the catalog doesn't do Redis yet, rather than a module that looks like it
-might.
+invents infrastructure. Redis can be provisioned alongside the app on Disco
+or referenced as an existing service. The cloud catalog still refuses Redis
+provisioning explicitly rather than inventing a module.
 
 It covers AWS, GCP, and Azure, with GitHub Actions or GitLab CI, as serverless
 containers (Cloud Run, ECS Fargate, Container Apps) or Kubernetes (EKS, GKE,
@@ -95,8 +95,10 @@ Without an agent:
 neckbeard disco -project myapp
 ```
 
-One image, one HTTP service, optional workers and cron jobs, and Postgres on
-the server (or connections to existing services). You supply and operate the
+One app image, one HTTP service, optional workers and cron jobs, Postgres, and
+an optional authenticated Redis companion on the server (or connections to
+existing services). Redis has its own persistent volume and survives app
+redeploys; it is operated outside Disco's app deployment lifecycle. You supply and operate the
 server, including backups. This path has no cost estimate, spending ceiling,
 or cloud validation integration. Existing outputs are refused unless you use
 `-force`, which replaces both files, including edits. See the
