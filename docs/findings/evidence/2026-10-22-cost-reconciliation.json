@@ -1,0 +1,272 @@
+{
+  "date": "2026-10-22",
+  "adapter": "infracost 0.10.45",
+  "currency": "USD",
+  "cases": [
+    {
+      "case": "http-baseline",
+      "monthly_usd": "23.965",
+      "database_monthly_usd": "9.365",
+      "database_subresources": [],
+      "ip_monthly_usd": "7.3",
+      "ip_classification": "IP address (unused)",
+      "forwarding_rules": [
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+          "monthly_usd": "7.3"
+        }
+      ],
+      "cloud_run_monthly_usd": "0",
+      "cloud_run_components": [
+        {
+          "name": "CPU allocation Time",
+          "quantity": null,
+          "price": "0.000018",
+          "monthly_usd": null
+        },
+        {
+          "name": "Memory allocation time",
+          "quantity": null,
+          "price": "0.000002",
+          "monthly_usd": null
+        },
+        {
+          "name": "Number of requests",
+          "quantity": "0",
+          "price": "0.0000004",
+          "monthly_usd": "0"
+        }
+      ]
+    },
+    {
+      "case": "http-expected",
+      "monthly_usd": "25.565",
+      "database_monthly_usd": "10.165",
+      "database_subresources": [],
+      "ip_monthly_usd": "7.3",
+      "ip_classification": "IP address (unused)",
+      "forwarding_rules": [
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+          "monthly_usd": "7.3"
+        }
+      ],
+      "cloud_run_monthly_usd": "0.8",
+      "cloud_run_components": [
+        {
+          "name": "CPU allocation Time",
+          "quantity": null,
+          "price": "0.000018",
+          "monthly_usd": null
+        },
+        {
+          "name": "Memory allocation time",
+          "quantity": null,
+          "price": "0.000002",
+          "monthly_usd": null
+        },
+        {
+          "name": "Number of requests",
+          "quantity": "2000000",
+          "price": "0.0000004",
+          "monthly_usd": "0.8"
+        }
+      ]
+    },
+    {
+      "case": "https-baseline",
+      "monthly_usd": "31.265",
+      "database_monthly_usd": "9.365",
+      "database_subresources": [],
+      "ip_monthly_usd": "7.3",
+      "ip_classification": "IP address (unused)",
+      "forwarding_rules": [
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+          "monthly_usd": "7.3"
+        },
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.https[0]",
+          "monthly_usd": "7.3"
+        }
+      ],
+      "cloud_run_monthly_usd": "0",
+      "cloud_run_components": [
+        {
+          "name": "CPU allocation Time",
+          "quantity": null,
+          "price": "0.000018",
+          "monthly_usd": null
+        },
+        {
+          "name": "Memory allocation time",
+          "quantity": null,
+          "price": "0.000002",
+          "monthly_usd": null
+        },
+        {
+          "name": "Number of requests",
+          "quantity": "0",
+          "price": "0.0000004",
+          "monthly_usd": "0"
+        }
+      ]
+    },
+    {
+      "case": "https-expected",
+      "monthly_usd": "32.865",
+      "database_monthly_usd": "10.165",
+      "database_subresources": [],
+      "ip_monthly_usd": "7.3",
+      "ip_classification": "IP address (unused)",
+      "forwarding_rules": [
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+          "monthly_usd": "7.3"
+        },
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.https[0]",
+          "monthly_usd": "7.3"
+        }
+      ],
+      "cloud_run_monthly_usd": "0.8",
+      "cloud_run_components": [
+        {
+          "name": "CPU allocation Time",
+          "quantity": null,
+          "price": "0.000018",
+          "monthly_usd": null
+        },
+        {
+          "name": "Memory allocation time",
+          "quantity": null,
+          "price": "0.000002",
+          "monthly_usd": null
+        },
+        {
+          "name": "Number of requests",
+          "quantity": "2000000",
+          "price": "0.0000004",
+          "monthly_usd": "0.8"
+        }
+      ]
+    },
+    {
+      "case": "plan-baseline",
+      "monthly_usd": "40.63",
+      "database_monthly_usd": "18.73",
+      "database_subresources": [
+        {
+          "name": "Replica",
+          "monthly_usd": "9.365"
+        }
+      ],
+      "ip_monthly_usd": "7.3",
+      "ip_classification": "IP address (unused)",
+      "forwarding_rules": [
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+          "monthly_usd": "7.3"
+        },
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.https[0]",
+          "monthly_usd": "7.3"
+        }
+      ],
+      "cloud_run_monthly_usd": "0",
+      "cloud_run_components": [
+        {
+          "name": "CPU allocation Time",
+          "quantity": "0",
+          "price": "0.000018",
+          "monthly_usd": "0"
+        },
+        {
+          "name": "Memory allocation time",
+          "quantity": "0",
+          "price": "0.000002",
+          "monthly_usd": "0"
+        }
+      ]
+    },
+    {
+      "case": "plan-expected",
+      "monthly_usd": "41.43",
+      "database_monthly_usd": "19.53",
+      "database_subresources": [
+        {
+          "name": "Replica",
+          "monthly_usd": "9.365"
+        }
+      ],
+      "ip_monthly_usd": "7.3",
+      "ip_classification": "IP address (unused)",
+      "forwarding_rules": [
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+          "monthly_usd": "7.3"
+        },
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.https[0]",
+          "monthly_usd": "7.3"
+        }
+      ],
+      "cloud_run_monthly_usd": "0",
+      "cloud_run_components": [
+        {
+          "name": "CPU allocation Time",
+          "quantity": "0",
+          "price": "0.000018",
+          "monthly_usd": "0"
+        },
+        {
+          "name": "Memory allocation time",
+          "quantity": "0",
+          "price": "0.000002",
+          "monthly_usd": "0"
+        }
+      ]
+    },
+    {
+      "case": "plan-no-phantom-replica",
+      "monthly_usd": "31.265",
+      "database_monthly_usd": "9.365",
+      "database_subresources": [],
+      "ip_monthly_usd": "7.3",
+      "ip_classification": "IP address (unused)",
+      "forwarding_rules": [
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+          "monthly_usd": "7.3"
+        },
+        {
+          "address": "module.dns_ingress.google_compute_global_forwarding_rule.https[0]",
+          "monthly_usd": "7.3"
+        }
+      ],
+      "cloud_run_monthly_usd": "0",
+      "cloud_run_components": [
+        {
+          "name": "CPU allocation Time",
+          "quantity": "0",
+          "price": "0.000018",
+          "monthly_usd": "0"
+        },
+        {
+          "name": "Memory allocation time",
+          "quantity": "0",
+          "price": "0.000002",
+          "monthly_usd": "0"
+        }
+      ]
+    }
+  ],
+  "status": "Diagnostic reproduction, not certified forecast or observed bill",
+  "notes": [
+    "Three decimals preserve reproduction arithmetic; not forecast precision.",
+    "Baseline: zero backup/request usage. Expected: 10 GB backup and 2000000 requests.",
+    "The adapter outputs contain other null-quantity components; totals are incomplete.",
+    "Diagnostic empty-array removal changes only an isolated plan copy, not infrastructure.",
+    "Original full diagnostic outputs remain local; no plan/state/credentials published."
+  ]
+}
