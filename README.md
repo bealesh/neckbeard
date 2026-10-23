@@ -104,23 +104,27 @@ or cloud validation integration. Existing outputs are refused unless you use
 
 ## The bill
 
-Nobody tells you what infrastructure costs until the invoice arrives, which is
-a strange way to make an engineering decision. So neckbeard asks Infracost
-first. Same reference app (an HTTP service, a worker, a cron job, Postgres),
-smallest tier, all three environments, historical estimator output:
+neckbeard prices the infrastructure before scaffolding, with editable usage
+assumptions and a breakdown of idle, expected, and higher-usage scenarios.
 
-| | Cloud Run | Container Apps | ECS Fargate | EKS | GKE (regional) | AKS |
-|---|---|---|---|---|---|---|
-| monthly | **$77†** | ~$98\* | $250 | $396 | $754† | ~$801\* |
+The GCP Umami trial now produces the same estimate from its effective Terraform
+and its saved authenticated plan:
 
-† **The GCP figures are not reliable forecasts.** The [cost estimator postmortem](docs/findings/2026-10-22-cost-estimator-postmortem.md)
-found incorrect component pricing and missing active compute costs. Other lanes
-also need numerical validation; this table must not be used as a deployment budget.
+| One development environment, USD/month | Idle baseline | Low | Expected | High |
+|---|---|---|---|---|
+| Umami on Cloud Run + private Postgres + HTTPS | $28.79 | $58.02 | $87.24 | $93.13 |
 
-The asterisks mark snapshots with unpriced Container Apps compute. Reports separate
-modeled baseline and usage assumptions, but those sections do not establish that
-all charges are covered. The postmortem records the missing coverage checks and
-proposed fixes.
+Expected assumes **730 active instance-hours**, 20 GiB internet transfer,
+2 GiB inbound load-balancer traffic, 5 GiB logs, 10 GiB registry storage,
+10 GiB backups, and the configured secrets. The single-instance maximum bounds
+compute in the high scenario. Free allowances, discounts and taxes are excluded;
+this is a conservative usage scenario, not a measured bill.
+
+The [cost model reference](skills/neckbeard/references/cost-model.md) explains the calculations,
+regression tests, and remaining validation scope. The
+[postmortem](docs/findings/2026-10-22-cost-estimator-postmortem.md) records the
+original defects and withdrawn figures. Historical cross-cloud totals have been
+removed until the same numerical reconciliation is complete for each lane.
 
 ## What it will and won't claim
 

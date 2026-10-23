@@ -99,10 +99,12 @@ GCP/Azure the per-env `containers`. Show the user the choices before running pla
 - Money controls, two kinds, never confused: `finops.monthly_budget_alert`
   renders a real cloud budget per environment (its even share of the total;
   needs `finops.alert_emails`, and on GCP `finops.billing_account`) — alerts
-  NOTIFY, they do not cap. `finops.monthly_ceiling` is the cap, enforced where a
-  cap can be enforced: `estimate` exits nonzero and `scaffold` refuses while the
-  expected total exceeds it, or while no estimate exists for the current
-  blueprint. Offer the ceiling when the user names a number they can't exceed.
+  NOTIFY, they do not cap. `finops.monthly_ceiling` checks the estimate before
+  scaffolding; it is not a cloud spending limit. It refuses estimates above the
+  threshold, partial reports, old cost models, a single-environment report, or
+  a changed blueprint/Terraform input fingerprint. Re-estimate after changing
+  user-owned Terraform or auto tfvars. Explain active instance-hours and job
+  execution assumptions explicitly; see [the cost model](references/cost-model.md).
 - `scaffold` writes files under the ownership contract:
   - `blueprint.yaml` is a hash-verified lockfile: **never edit it** — change
     the profile/config and re-plan.
