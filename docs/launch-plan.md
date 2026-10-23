@@ -16,6 +16,11 @@ Azure × GitHub and GitLab × serverless containers and Kubernetes: 12 paths**.
 Implementation checkpoint: `aa127b7` on `feat/tranche-2-deployment`. The checkpoints
 below describe completion criteria; recording this plan does not mark them done.
 
+**Cost reliability investigation, 2026-10-22:** the GCP Umami trial exposed
+unreliable early and plan-based estimates. The static lane matrix does not prove
+pricing correctness. See the [cost estimator postmortem](findings/2026-10-22-cost-estimator-postmortem.md)
+for reproductions and proposed beta acceptance criteria; those fixes are not complete.
+
 ## Starting point
 
 | Work | Evidence today | Still required |
