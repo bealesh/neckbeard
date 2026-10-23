@@ -19,7 +19,7 @@ func TestCeilingFailsClosed(t *testing.T) {
 		t.Fatalf("missing estimate under a ceiling must refuse, got %v", err)
 	}
 
-	res := &Result{Currency: "USD", InfracostVersion: "0.10.45", Envs: []EnvEstimate{
+	res := &Result{Scope: "blueprint", Currency: "USD", InfracostVersion: "0.10.45", Envs: []EnvEstimate{
 		{Env: "dev", Costs: map[string]float64{"expected": 40}},
 		{Env: "prd", Costs: map[string]float64{"expected": 90.5}},
 	}}

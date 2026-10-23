@@ -14,6 +14,10 @@ import (
 // the one hard limit neckbeard offers: before anything exists. Budgets in the
 // cloud notify; this refuses.
 type Summary struct {
+	ModelVersion     int                `json:"model_version"`
+	InputDigest      string             `json:"input_digest"`
+	Scope            string             `json:"scope"`
+	Complete         bool               `json:"complete"`
 	BlueprintHash    string             `json:"blueprint_hash"`
 	Currency         string             `json:"currency"`
 	ExpectedTotal    float64            `json:"expected_total_monthly"`
@@ -29,6 +33,7 @@ func SummaryPath(reportPath string) string {
 
 func Summarize(res *Result, blueprintHash string, now time.Time) Summary {
 	s := Summary{
+		ModelVersion: 2, InputDigest: res.InputDigest, Scope: res.Scope, Complete: res.Complete(),
 		BlueprintHash: blueprintHash, Currency: res.Currency,
 		ExpectedByEnv: map[string]float64{}, GeneratedAt: now.UTC().Format(time.RFC3339),
 		InfracostVersion: res.InfracostVersion,
@@ -77,7 +82,7 @@ func (e *CeilingError) Error() string {
 // CheckCeiling enforces the ceiling against the sidecar written for exactly
 // this blueprint. A ceiling with no matching estimate is unenforceable, so
 // that is an error too: fail closed, never "probably fine".
-func CheckCeiling(summaryPath, blueprintHash string, ceiling float64) error {
+func CheckCeiling(summaryPath, blueprintHash string, ceiling float64, roots ...string) error {
 	if ceiling <= 0 {
 		return nil
 	}
@@ -90,6 +95,21 @@ func CheckCeiling(summaryPath, blueprintHash string, ceiling float64) error {
 	}
 	if s.BlueprintHash != blueprintHash {
 		return fmt.Errorf("%s was produced for blueprint %s, current blueprint is %s: re-run `neckbeard estimate` before scaffolding under a ceiling", summaryPath, s.BlueprintHash, blueprintHash)
+	}
+	if s.ModelVersion != 2 || !s.Complete || s.Scope != "blueprint" {
+		return fmt.Errorf("%s is not a complete, current-model estimate for all environments: re-run `neckbeard estimate` before scaffolding under a ceiling", summaryPath)
+	}
+	if _, err := number(fmt.Sprint(s.ExpectedTotal), "expected total"); err != nil {
+		return err
+	}
+	if len(roots) > 0 {
+		files, err := deploymentInputs(roots[0])
+		if err != nil {
+			return err
+		}
+		if s.InputDigest != inputDigest(blueprintHash, files) {
+			return fmt.Errorf("Terraform cost inputs changed: re-run `neckbeard estimate` before scaffolding under a ceiling")
+		}
 	}
 	if s.ExpectedTotal > ceiling {
 		return &CeilingError{Expected: s.ExpectedTotal, Ceiling: ceiling, Currency: s.Currency}

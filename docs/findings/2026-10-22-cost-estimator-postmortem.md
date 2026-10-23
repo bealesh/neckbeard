@@ -1,5 +1,13 @@
 # Cost estimator and GCP trial postmortem — 2026-10-22
 
+October 23 follow-up: [cost model v2](../../skills/neckbeard/references/cost-model.md)
+implements GCP component corrections, effective Terraform inputs, strict numeric
+and component coverage checks, and input-bound pre-scaffold approvals. The Umami
+HCL/plan reconciliation now agrees at $87.24/month under the documented explicit
+usage assumptions. The original withdrawn figures below remain incident evidence;
+this is not a measured monthly bill or numerical validation of the other clouds.
+
+
 Status: investigation and proposed remediation; estimator behavior is unchanged.
 Scope: the Umami trial, the shared estimator/report/ceiling implementation,
 all-cloud coverage risks, and the deployment process that let us report an
