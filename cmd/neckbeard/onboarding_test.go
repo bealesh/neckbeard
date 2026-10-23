@@ -189,7 +189,7 @@ if [ "$1" = --version ]; then echo 'Infracost v0.10.45'; exit 0; fi
 [ "$1" = breakdown ] && [ "$2" = --path ] || exit 2
 set -- "$3"/../../../.neckbeard/catalog/*/catalog/azure/runtime-k8s/main.tf
 [ -f "$1" ] || { echo 'bundled catalog missing from estimate scratch' >&2; exit 3; }
-echo '{"currency":"USD","totalMonthlyCost":"42","projects":[],"summary":{}}'
+echo '{"currency":"USD","totalMonthlyCost":"42","projects":[{"breakdown":{"resources":[{"name":"fixture","resourceType":"aws_db_instance","monthlyCost":"42","costComponents":[{"name":"compute","price":"42","monthlyQuantity":"1","monthlyCost":"42"}]}]}}],"summary":{}}'
 `))
 			if err := os.Chmod(fake, 0755); err != nil {
 				t.Fatal(err)

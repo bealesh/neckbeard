@@ -12,11 +12,15 @@ Load the neckbeard skill. Using the current `neckbeard.yaml` and
 2. `neckbeard doctor -for estimate`. If Infracost 0.10.x is missing or not
    logged in, say so plainly and give me the install/login commands; a missing
    estimator is NOT a zero-cost result, and you must not guess prices.
-3. `neckbeard estimate` — then show me, verbatim from `costs/estimate.md`: the
+3. `neckbeard estimate -root .` — then show me, verbatim from `costs/estimate.md`: the
    scenario table (low / expected / high per environment and total), the usage
    assumptions the tier implies, and the "unpriced / unmodeled" section. Say in
    one sentence which line items dominate and which tier or runtime lever would
-   move them.
+   move them. Explain active instance-hours, job execution count and duration rather
+   than inferring them from request count. Reports marked PARTIAL are subtotals,
+   cannot approve a ceiling, and must never be presented as a full monthly bill.
+   For an existing deployment, compare using `neckbeard estimate -plan <plan.json>
+   -env <environment>`; keep the authenticated plan local.
 4. If I asked for a comparison, run the alternative WITHOUT touching my files:
    copy `neckbeard.yaml` to a scratch path with the one changed field, then
    `neckbeard plan -config <scratch.yaml> -out <scratch-blueprint.yaml>` and

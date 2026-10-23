@@ -132,3 +132,41 @@ func TestReportNamesUnmappedAssumptions(t *testing.T) {
 		t.Error("report must state that budget alerts do not cap spending")
 	}
 }
+
+func TestFixedStockAndJobDurationDoNotScaleWithTraffic(t *testing.T) {
+	usage := map[string]float64{"registry_storage_gb": 10, "secret_versions": 2, "job_executions_per_month": 30, "job_duration_minutes": 0.1}
+	for _, mult := range []float64{0, 0.5, 1, 2} {
+		data, err := BuildUsageFile(usage, mult)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatal(err)
+		}
+		d := doc["resource_type_default_usage"].(map[string]any)
+		if toF(d["google_artifact_registry_repository"].(map[string]any)["storage_gb"]) != 10 {
+			t.Fatal("resident images disappeared at idle")
+		}
+		if toF(d["google_secret_manager_secret"].(map[string]any)["active_secret_versions"]) != 2 {
+			t.Fatal("secret versions scaled with traffic")
+		}
+		job := d["google_cloud_run_v2_job"].(map[string]any)
+		if toF(job["average_task_execution_mins"]) != 1 {
+			t.Fatal("job duration must honor one-minute minimum, independently of traffic")
+		}
+		if toF(job["monthly_job_executions"]) != 30*mult {
+			t.Fatal("job execution count must scale once")
+		}
+	}
+}
+
+func TestSingleEnvironmentReportKeepsActualBudgetShare(t *testing.T) {
+	res := &Result{Scope: "dev", Currency: "USD", Envs: []EnvEstimate{{Env: "dev", Costs: map[string]float64{"expected": 1}}}}
+	cfg := &config.Config{FinOps: config.FinOps{MonthlyBudgetAlert: 90}}
+	bp := &blueprint.Blueprint{Environments: []blueprint.Environment{{Name: "dev"}, {Name: "stg"}, {Name: "prd"}}}
+	report := string(Report(res, cfg, bp, time.Now()))
+	if !strings.Contains(report, "real cloud budget of 30.00 USD per") {
+		t.Fatal("filtered report changed the per-environment budget allocation")
+	}
+}

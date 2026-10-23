@@ -1,0 +1,476 @@
+{
+  "totalMonthlyCost": "41.43",
+  "summary": {
+    "totalDetectedResources": 27,
+    "totalSupportedResources": 12,
+    "totalUnsupportedResources": 0,
+    "totalUsageBasedResources": 11,
+    "totalNoPriceResources": 15,
+    "unsupportedResourceCounts": {},
+    "noPriceResourceCounts": {
+      "google_compute_backend_service": 1,
+      "google_compute_firewall": 1,
+      "google_compute_global_address": 1,
+      "google_compute_managed_ssl_certificate": 1,
+      "google_compute_network": 1,
+      "google_compute_region_network_endpoint_group": 1,
+      "google_compute_subnetwork": 1,
+      "google_compute_url_map": 2,
+      "google_secret_manager_secret_iam_member": 3,
+      "google_service_account": 1,
+      "google_sql_database": 1,
+      "google_sql_user": 1
+    }
+  },
+  "projects": [
+    {
+      "breakdown": {
+        "resources": [
+          {
+            "name": "module.postgres.google_sql_database_instance.this",
+            "resourceType": "google_sql_database_instance",
+            "monthlyCost": "19.53",
+            "costComponents": [
+              {
+                "name": "SQL instance (db-f1-micro, zonal)",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.0105",
+                "hourlyCost": "0.0105",
+                "monthlyCost": "7.665",
+                "priceNotFound": false
+              },
+              {
+                "name": "Storage (SSD, zonal)",
+                "unit": "GB",
+                "hourlyQuantity": "0.0136986301369863",
+                "monthlyQuantity": "10",
+                "price": "0.17",
+                "hourlyCost": "0.002328767123287671",
+                "monthlyCost": "1.7",
+                "priceNotFound": false
+              },
+              {
+                "name": "Backups",
+                "unit": "GB",
+                "hourlyQuantity": "0.0136986301369863",
+                "monthlyQuantity": "10",
+                "price": "0.08",
+                "hourlyCost": "0.001095890410958904",
+                "monthlyCost": "0.8",
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ],
+            "subresources": [
+              {
+                "name": "Replica",
+                "metadata": {},
+                "hourlyCost": "0.012828767123287671",
+                "monthlyCost": "9.365",
+                "costComponents": [
+                  {
+                    "name": "SQL instance (db-f1-micro, zonal)",
+                    "unit": "hours",
+                    "hourlyQuantity": "1",
+                    "monthlyQuantity": "730",
+                    "price": "0.0105",
+                    "hourlyCost": "0.0105",
+                    "monthlyCost": "7.665",
+                    "priceNotFound": false
+                  },
+                  {
+                    "name": "Storage (SSD, zonal)",
+                    "unit": "GB",
+                    "hourlyQuantity": "0.0136986301369863",
+                    "monthlyQuantity": "10",
+                    "price": "0.17",
+                    "hourlyCost": "0.002328767123287671",
+                    "monthlyCost": "1.7",
+                    "priceNotFound": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "module.dns_ingress.google_compute_global_address.this",
+            "resourceType": "google_compute_global_address",
+            "monthlyCost": "7.3",
+            "costComponents": [
+              {
+                "name": "IP address (unused)",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.01",
+                "hourlyCost": "0.01",
+                "monthlyCost": "7.3",
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.dns_ingress.google_compute_global_forwarding_rule.http",
+            "resourceType": "google_compute_global_forwarding_rule",
+            "monthlyCost": "7.3",
+            "costComponents": [
+              {
+                "name": "Forwarding rules",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.01",
+                "hourlyCost": "0.01",
+                "monthlyCost": "7.3",
+                "priceNotFound": false
+              },
+              {
+                "name": "Ingress data",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.008",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.dns_ingress.google_compute_global_forwarding_rule.https[0]",
+            "resourceType": "google_compute_global_forwarding_rule",
+            "monthlyCost": "7.3",
+            "costComponents": [
+              {
+                "name": "Forwarding rules",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.01",
+                "hourlyCost": "0.01",
+                "monthlyCost": "7.3",
+                "priceNotFound": false
+              },
+              {
+                "name": "Ingress data",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.008",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.runtime_serverless.google_cloud_run_v2_service.http[\"web\"]",
+            "resourceType": "google_cloud_run_v2_service",
+            "monthlyCost": "0",
+            "costComponents": [
+              {
+                "name": "CPU allocation Time",
+                "unit": "vCPU-seconds",
+                "hourlyQuantity": "0",
+                "monthlyQuantity": "0",
+                "price": "0.000018",
+                "hourlyCost": "0",
+                "monthlyCost": "0",
+                "priceNotFound": false
+              },
+              {
+                "name": "Memory allocation time",
+                "unit": "GiB-seconds",
+                "hourlyQuantity": "0",
+                "monthlyQuantity": "0",
+                "price": "0.000002",
+                "hourlyCost": "0",
+                "monthlyCost": "0",
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.dns_ingress.google_compute_target_http_proxy.this",
+            "resourceType": "google_compute_target_http_proxy",
+            "costComponents": [
+              {
+                "name": "Proxy instance",
+                "unit": "hours",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.025",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Data processed",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.008",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.dns_ingress.google_compute_target_https_proxy.this[0]",
+            "resourceType": "google_compute_target_https_proxy",
+            "costComponents": [
+              {
+                "name": "Proxy instance",
+                "unit": "hours",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.025",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Data processed",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.008",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.network.google_service_networking_connection.psa",
+            "resourceType": "google_service_networking_connection",
+            "subresources": [
+              {
+                "name": "Network egress",
+                "metadata": {},
+                "costComponents": [
+                  {
+                    "name": "Traffic within the same region",
+                    "unit": "GB",
+                    "hourlyQuantity": null,
+                    "monthlyQuantity": null,
+                    "price": "0.02",
+                    "hourlyCost": null,
+                    "monthlyCost": null,
+                    "priceNotFound": false
+                  },
+                  {
+                    "name": "Traffic within the US or Canada",
+                    "unit": "GB",
+                    "hourlyQuantity": null,
+                    "monthlyQuantity": null,
+                    "price": "0.02",
+                    "hourlyCost": null,
+                    "monthlyCost": null,
+                    "priceNotFound": false
+                  },
+                  {
+                    "name": "Traffic within Europe",
+                    "unit": "GB",
+                    "hourlyQuantity": null,
+                    "monthlyQuantity": null,
+                    "price": "0.02",
+                    "hourlyCost": null,
+                    "monthlyCost": null,
+                    "priceNotFound": false
+                  },
+                  {
+                    "name": "Traffic within Asia",
+                    "unit": "GB",
+                    "hourlyQuantity": null,
+                    "monthlyQuantity": null,
+                    "price": "0.08",
+                    "hourlyCost": null,
+                    "monthlyCost": null,
+                    "priceNotFound": false
+                  },
+                  {
+                    "name": "Traffic within South America",
+                    "unit": "GB",
+                    "hourlyQuantity": null,
+                    "monthlyQuantity": null,
+                    "price": "0.14",
+                    "hourlyCost": null,
+                    "monthlyCost": null,
+                    "priceNotFound": false
+                  },
+                  {
+                    "name": "Traffic to/from Indonesia and Oceania",
+                    "unit": "GB",
+                    "hourlyQuantity": null,
+                    "monthlyQuantity": null,
+                    "price": "0.1",
+                    "hourlyCost": null,
+                    "monthlyCost": null,
+                    "priceNotFound": false
+                  },
+                  {
+                    "name": "Traffic between continents (excludes Oceania)",
+                    "unit": "GB",
+                    "hourlyQuantity": null,
+                    "monthlyQuantity": null,
+                    "price": "0.08",
+                    "hourlyCost": null,
+                    "monthlyCost": null,
+                    "priceNotFound": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "module.registry.google_artifact_registry_repository.this",
+            "resourceType": "google_artifact_registry_repository",
+            "costComponents": [
+              {
+                "name": "Storage",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.1",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.secrets.google_secret_manager_secret.this[\"APP_SECRET\"]",
+            "resourceType": "google_secret_manager_secret",
+            "costComponents": [
+              {
+                "name": "Active secret versions",
+                "unit": "versions",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.06",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Access operations",
+                "unit": "10K requests",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.03",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Rotation notifications",
+                "unit": "rotations",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.05",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.secrets.google_secret_manager_secret.this[\"DATABASE_URL\"]",
+            "resourceType": "google_secret_manager_secret",
+            "costComponents": [
+              {
+                "name": "Active secret versions",
+                "unit": "versions",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.06",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Access operations",
+                "unit": "10K requests",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.03",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Rotation notifications",
+                "unit": "rotations",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.05",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          },
+          {
+            "name": "module.secrets.google_secret_manager_secret.this[\"TWO_FACTOR_ENCRYPTION_KEY\"]",
+            "resourceType": "google_secret_manager_secret",
+            "costComponents": [
+              {
+                "name": "Active secret versions",
+                "unit": "versions",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.06",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Access operations",
+                "unit": "10K requests",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.03",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              },
+              {
+                "name": "Rotation notifications",
+                "unit": "rotations",
+                "hourlyQuantity": null,
+                "monthlyQuantity": null,
+                "price": "0.05",
+                "hourlyCost": null,
+                "monthlyCost": null,
+                "usageBased": true,
+                "priceNotFound": false
+              }
+            ]
+          }
+        ],
+        "totalHourlyCost": "0.056753424657534246",
+        "totalMonthlyCost": "41.43",
+        "totalMonthlyUsageCost": "0.8"
+      }
+    }
+  ]
+}
