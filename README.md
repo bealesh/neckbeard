@@ -109,20 +109,20 @@ or cloud validation integration. Existing outputs are refused unless you use
 Nobody tells you what infrastructure costs until the invoice arrives, which is
 a strange way to make an engineering decision. So neckbeard asks Infracost
 first. Same reference app (an HTTP service, a worker, a cron job, Postgres),
-smallest tier, all three environments, live prices:
+smallest tier, all three environments, historical estimator output:
 
 | | Cloud Run | Container Apps | ECS Fargate | EKS | GKE (regional) | AKS |
 |---|---|---|---|---|---|---|
-| monthly | **$77** | ~$98\* | $250 | $396 | $754 | ~$801\* |
+| monthly | **$77†** | ~$98\* | $250 | $396 | $754† | ~$801\* |
 
-The asterisk matters. Infracost can't price Container Apps compute yet, and
-the honest move is to say so rather than let a low number lie, so the report
-lists every resource it couldn't price right next to the total. The rest is
-what you'd want from anyone who has read a cloud bill with their name on it:
-the idle baseline separated from usage, the usage assumptions written down
-where you can edit them, low, expected, and high scenarios, and a footer saying
-where the numbers came from. The table is also how the tool argues. When a solo
-developer asks for Kubernetes, the numbers say "not yet" so nobody else has to.
+† **The GCP figures are not reliable forecasts.** The [cost estimator postmortem](docs/findings/2026-10-22-cost-estimator-postmortem.md)
+found incorrect component pricing and missing active compute costs. Other lanes
+also need numerical validation; this table must not be used as a deployment budget.
+
+The asterisks mark snapshots with unpriced Container Apps compute. Reports separate
+modeled baseline and usage assumptions, but those sections do not establish that
+all charges are covered. The postmortem records the missing coverage checks and
+proposed fixes.
 
 ## What it will and won't claim
 

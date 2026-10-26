@@ -39,6 +39,9 @@ resource "google_cloud_run_v2_service" "http" {
   name     = "${var.name_prefix}-${each.key}"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  # The load balancer supplies no identity token; avoid allUsers IAM bindings,
+  # which domain restricted sharing policies prohibit. Ingress stays restricted.
+  invoker_iam_disabled = true
 
   template {
     service_account = google_service_account.run.email
@@ -91,6 +94,10 @@ resource "google_cloud_run_v2_service" "http" {
       }
 
       startup_probe {
+        # Migrations and a cold application route need more than three 1s probes.
+        failure_threshold = 24
+        period_seconds    = 10
+        timeout_seconds   = 5
         http_get {
           path = each.value.health_path
           port = each.value.port
@@ -248,14 +255,4 @@ resource "google_cloud_scheduler_job" "cron" {
       service_account_email = google_service_account.run.email
     }
   }
-}
-
-# The load balancer does not supply a Cloud Run identity token. IAM permits
-# invocation while ingress remains restricted to internal/load-balancer traffic.
-resource "google_cloud_run_v2_service_iam_member" "ingress" {
-  for_each = local.http_services
-  name     = google_cloud_run_v2_service.http[each.key].name
-  location = var.region
-  role     = "roles/run.invoker"
-  member   = "allUsers"
 }

@@ -4,7 +4,7 @@
 # migration path.
 # Pre-1.0: minor releases may change planner defaults with explicit migration
 # notes accompany each revision; schema/address guarantees above still apply.
-version: "0.4.0"
+version: "0.4.1"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.
 opentofu: "1.12.6"
@@ -79,7 +79,7 @@ clouds:
         source: catalog/gcp/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # Cloud Run
-        version: "0.3.0"
+        version: "0.3.1"
         source: catalog/gcp/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # GKE
