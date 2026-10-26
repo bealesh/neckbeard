@@ -101,11 +101,11 @@ func correctServerless(d *breakdown, bp *blueprint.Blueprint, env blueprint.Envi
 			if bp.Cloud == "aws" {
 				duration = math.Max(60, duration)
 			}
-			seconds := usage["job_executions_per_month"] * mult * duration
+			billedTime := usage["job_executions_per_month"] * mult * duration
 			if bp.Cloud == "aws" {
-				seconds /= 3600
+				billedTime /= 3600
 			}
-			r.CostComponents = []*costComponent{component("Scheduled CPU", "CPU time", cpuRate, seconds*cpu), component("Scheduled memory", "GiB time", memoryRate, seconds*memory)}
+			r.CostComponents = []*costComponent{component("Scheduled CPU", "CPU time", cpuRate, billedTime*cpu), component("Scheduled memory", "GiB time", memoryRate, billedTime*memory)}
 		} else {
 			minimum := floor
 			if bp.Cloud == "aws" || svc.Kind == "worker" {
@@ -326,7 +326,11 @@ func correctNodes(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environme
 	if pools != 1 || clusters != 1 {
 		return nil, fmt.Errorf("expected one catalog cluster and one autoscaled pool; found %d clusters and %d pools", clusters, pools)
 	}
-	return []string{"Kubernetes control planes and minimum nodes bill at idle. Additional node-hours apply per autoscaled pool, bounded by total minimum/maximum nodes; AKS Spot mode retains its separate on-demand system node. Spot prices are snapshots, not a future rate guarantee."}, nil
+	notes := []string{}
+	if bp.Cloud == "gcp" {
+		notes = append(notes, "GKE free-tier credit is excluded: Google offers USD 74.40/month per billing account for zonal Standard or Autopilot cluster management only. The catalog uses regional Standard, which is ineligible; its control-plane fee remains included. See https://cloud.google.com/kubernetes-engine/pricing.")
+	}
+	return append(notes, "Kubernetes control planes and minimum nodes bill at idle. Additional node-hours apply per autoscaled pool, bounded by total minimum/maximum nodes; AKS Spot mode retains its separate on-demand system node. Spot prices are snapshots, not a future rate guarantee."), nil
 }
 
 func correctCloud(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environment, usage map[string]float64, mult float64, lookup productLookup) ([]string, error) {

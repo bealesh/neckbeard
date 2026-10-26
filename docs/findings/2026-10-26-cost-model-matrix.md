@@ -87,7 +87,9 @@ The folder must be empty or contain prior generated reference lanes. The test
 renders local fixtures with synthetic cloud identifiers and calls the pricing
 API; it does not authenticate to cloud providers or deploy. To refresh the
 checked-in snapshots, additionally set `NECKBEARD_WRITE_COST_FIXTURES=1` and
-review all changed quotes and totals. Credentials and Terraform metadata are
+review all changed quotes and totals. If a refresh changes a total, include the
+before/after totals and their cause in the PR body so reviewers can assess the
+change without searching the JSON snapshots. Credentials and Terraform metadata are
 excluded from recorded fixtures.
 
 This is component and pricing reconciliation, not independent invoice matching.

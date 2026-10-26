@@ -97,6 +97,10 @@ replicas. This is pricing evidence, not deployment or invoice evidence.
   and HTTP requests (the request SKU is per million). Workers remain active.
   Jobs use execution seconds, with a one-second minimum. Managed load balancer
   and public-IP charges for the catalog's external VNet environment are included.
+- GKE includes the regional Standard control-plane fee. Google's
+  [USD 74.40/month billing-account credit](https://cloud.google.com/kubernetes-engine/pricing)
+  applies only to zonal Standard or Autopilot cluster management; the catalog's
+  regional Standard cluster is ineligible. Credits are not subtracted.
 - Kubernetes retains minimum nodes and the control plane at idle.
   `additional_node_hours` means aggregate node-hours above the total minimum,
   bounded by the configured maximum; it is not multiplied by the node count.

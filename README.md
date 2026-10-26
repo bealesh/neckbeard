@@ -109,7 +109,12 @@ or cloud validation integration. Existing outputs are refused unless you use
 neckbeard prices the infrastructure before scaffolding, with editable usage
 assumptions and a breakdown of idle, expected, and higher-usage scenarios.
 
-The reference application now has live-price checks across all six lanes:
+The reference application now has live-price checks across all six lanes.
+Unlike the withdrawn table, these totals include the always-on worker, explicit
+HTTP active hours and previously missed charges; the AWS baseline also includes
+VPC endpoints and $15/month of Container Insights metrics. The
+[postmortem](docs/findings/2026-10-22-cost-estimator-postmortem.md) explains the
+old undercounts and changed workload assumptions:
 
 | One development environment, USD/month | Idle baseline | Expected | High |
 |---|---|---|---|

@@ -48,6 +48,7 @@ func correctNetwork(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environ
 			return nil, err
 		}
 		traffic.CostComponents = append(traffic.CostComponents, component("Internet transfer (highest list tier)", "GB", rate, usage["egress_gb"]*mult))
+		// The AWS catalog has no other cross-zone usage mapping; keep this the sole charge when adding new resource mappings.
 		if usage["cross_zone_gb"] > 0 {
 			rate, err = lookup(priceQuery{Vendor: "aws", Service: "AWSDataTransfer", Family: "Data Transfer", PurchaseOption: "on_demand", Unit: "GB", Attributes: []priceAttribute{{Key: "fromRegionCode", Value: bp.Region}, {Key: "transferType", Value: "IntraRegion"}, {Key: "usagetype", Regex: "/DataTransfer-Regional-Bytes$/"}}})
 			if err != nil {
@@ -70,6 +71,7 @@ func correctNetwork(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environ
 			}
 			count := 1
 			if bp.Runtime == "kubernetes" {
+				// Rendered ingresses have no IngressGroup annotation: one ALB per HTTP service.
 				count = http
 			}
 			zones, err := inputNumber(moduleInputs(env, "network"), "zones")
