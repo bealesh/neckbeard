@@ -106,7 +106,7 @@ For unsupported findings retain the evidence and choose one disposition:
 unsupported:
   - capability: redis
     detected: reads REDIS_URL
-    explanation: Redis provisioning is outside the catalog.
+    explanation: Redis provisioning is available only on Disco; the cloud catalog does not provision it.
     disposition: external
     secret_name: REDIS_URL
     resolution: Existing Redis is operated separately; its endpoint is reachable from the app.

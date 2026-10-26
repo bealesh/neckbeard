@@ -90,7 +90,7 @@ func TestDraftValidatesAgainstSchema(t *testing.T) {
 func TestClassifyEnv(t *testing.T) {
 	cases := map[string]envClass{
 		"DATABASE_URL":    classPostgres,
-		"REDIS_URL":       classUnsupported,
+		"REDIS_URL":       classRedis,
 		"KAFKA_BROKERS":   classUnsupported,
 		"MYSQL_HOST":      classUnsupported,
 		"S3_BUCKET":       classObjectStorage,
@@ -111,16 +111,16 @@ func TestClassifyEnv(t *testing.T) {
 func TestUnsupportedIsNamedNotForced(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
-	writeFile(t, dir, "app.js", `const r = process.env.REDIS_URL; const s = process.env.SESSION_SECRET;`)
+	writeFile(t, dir, "app.js", `const r = process.env.MEMCACHE_URL; const s = process.env.SESSION_SECRET;`)
 	res, err := Dir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Profile.Unsupported) != 1 || res.Profile.Unsupported[0].Capability != "redis" {
-		t.Fatalf("redis must land in unsupported, got %+v", res.Profile.Unsupported)
+	if len(res.Profile.Unsupported) != 1 || res.Profile.Unsupported[0].Capability != "memcached" {
+		t.Fatalf("memcached must land in unsupported, got %+v", res.Profile.Unsupported)
 	}
 	for _, n := range res.Profile.Needs {
-		if n.Capability == "redis" {
+		if n.Capability == "memcached" {
 			t.Error("unsupported capabilities must never become needs")
 		}
 	}
@@ -212,7 +212,7 @@ func TestTypedEnvWrapperAndTemplateDetection(t *testing.T) {
 		t.Fatal(err)
 	}
 	foundRedis, foundStorage := false, false
-	for _, u := range res.Profile.Unsupported {
+	for _, u := range res.Profile.Needs {
 		if u.Capability == "redis" {
 			foundRedis = true
 		}
@@ -223,7 +223,7 @@ func TestTypedEnvWrapperAndTemplateDetection(t *testing.T) {
 		}
 	}
 	if !foundRedis {
-		t.Error("env.REDIS_URL through a typed wrapper must surface as unsupported redis")
+		t.Error("env.REDIS_URL through a typed wrapper must surface as an undecided redis need")
 	}
 	if !foundStorage {
 		t.Error("a bucket variable declared in .env.sample must surface as object storage")
@@ -536,6 +536,9 @@ func TestComposeImagesBecomeInferencesAndUnsupported(t *testing.T) {
 			}
 		}
 	}
+	if !needCaps["redis"] {
+		t.Error("redis compose image must create an undecided redis need")
+	}
 	if !needCaps["postgres"] {
 		t.Error("postgres compose image must create an undecided postgres need")
 	}
@@ -561,7 +564,7 @@ func TestComposeImagesBecomeInferencesAndUnsupported(t *testing.T) {
 			t.Errorf("%s unsupported evidence want compose file, got %+v", u.Capability, u.Evidence)
 		}
 	}
-	for _, cap := range []string{"redis", "queues", "non-postgres-database"} {
+	for _, cap := range []string{"queues", "non-postgres-database"} {
 		if !unsup[cap] {
 			t.Errorf("compose image should surface unsupported %s", cap)
 		}
@@ -678,25 +681,26 @@ func TestComposeDedupesWithQuotedDatabaseURLLiteral(t *testing.T) {
 	}
 }
 
-func TestUnsupportedMixedEnvAndComposeDetected(t *testing.T) {
+func TestRedisEnvAndComposeCreateOneNeed(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8080\n")
 	writeFile(t, dir, "app.js", `const r = process.env.REDIS_URL;`)
-	writeFile(t, dir, "docker-compose.yml", `services:
-  cache:
-    image: redis:7
-`)
+	writeFile(t, dir, "docker-compose.yml", "services:\n  cache:\n    image: redis:7\n")
 	res, err := Dir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Profile.Unsupported) != 1 || res.Profile.Unsupported[0].Capability != "redis" {
-		t.Fatalf("want one redis unsupported, got %+v", res.Profile.Unsupported)
+	count := 0
+	for _, n := range res.Profile.Needs {
+		if n.Capability == "redis" {
+			count++
+			if n.Mode != "undecided" || len(n.Evidence) == 0 {
+				t.Fatalf("bad Redis need: %+v", n)
+			}
+		}
 	}
-	got := res.Profile.Unsupported[0].Detected
-	want := "environment variables REDIS_URL; compose service cache(redis:7)"
-	if got != want {
-		t.Fatalf("Detected=%q want %q", got, want)
+	if count != 1 || len(res.Profile.Unsupported) != 0 {
+		t.Fatalf("needs=%+v unsupported=%+v", res.Profile.Needs, res.Profile.Unsupported)
 	}
 }
 
