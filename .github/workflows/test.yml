@@ -71,9 +71,11 @@ jobs:
       - name: Installer bootstraps the CLI (release binary when one exists, else go install)
         run: |
           set -eu
-          bash scripts/install.sh -d "$RUNNER_TEMP/nbbin"
+          # Candidate manifest versions may not be published yet; version selection
+          # is covered offline by the Go installer tests. Smoke-test stable assets.
+          bash scripts/install.sh -v latest -d "$RUNNER_TEMP/nbbin"
           "$RUNNER_TEMP/nbbin/neckbeard" version
-          PATH="$RUNNER_TEMP/nbbin:$PATH" bash scripts/install.sh | grep -q 'already installed'
+          PATH="$RUNNER_TEMP/nbbin:$PATH" bash scripts/install.sh -v latest | grep -q 'already installed'
 
   go:
     runs-on: ubuntu-latest

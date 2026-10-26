@@ -23,15 +23,16 @@ features and the separate Disco target remain experimental.
 
 [Gate 5 of the launch plan](launch-plan.md#gate-5--independent-users-and-release-candidate)
 is the source of truth for release acceptance. Keep candidate commit, package
-checksums, and verification results tied together. The manifest stays at the
-published stable version in this PR; bump it to `0.4.0-beta.1` in the tagging
-commit, then build and test that exact tagged source before publishing.
+checksums, and verification results tied together. The release packaging commit sets the manifest to `0.4.0-beta.1`. Tag that
+reviewed commit and build/test the exact tagged source before publishing.
+The [release notes](releases/v0.4.0-beta.1.md) describe the delivered scope
+and outstanding validation.
 
 ## Beta installation after publication
 
 `go install ...@latest` selects the stable release. The plugin installer
-defaults to its checkout's manifest version; before the tagging commit that
-is still v0.3.0. Beta testers can choose this version explicitly after publication:
+defaults to its checkout's manifest version; the beta checkout selects v0.4.0-beta.1. Beta testers can also choose this
+version explicitly after publication:
 
 ```sh
 bash scripts/install.sh -v v0.4.0-beta.1 -f
