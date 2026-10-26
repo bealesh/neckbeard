@@ -1,0 +1,659 @@
+{
+  "Currency": "USD",
+  "Blueprint": {
+    "Version": 0,
+    "Hash": "",
+    "GeneratedFrom": {
+      "NeckbeardYAML": "",
+      "AppProfile": "",
+      "EnvironmentManifest": ""
+    },
+    "Pins": {
+      "CatalogDigest": "",
+      "Catalog": "",
+      "OpenTofu": "",
+      "Planner": "",
+      "Providers": null
+    },
+    "App": "",
+    "Org": "",
+    "Cloud": "azure",
+    "Region": "eastus",
+    "Runtime": "serverless-containers",
+    "VCS": "",
+    "Repo": "",
+    "Tier": "",
+    "Services": [
+      {
+        "Name": "nightly-report",
+        "Kind": "cron",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "0 3 * * *",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "report"
+        ]
+      },
+      {
+        "Name": "web",
+        "Kind": "http",
+        "Port": 4000,
+        "HealthPath": "/healthz",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "serve"
+        ]
+      },
+      {
+        "Name": "worker",
+        "Kind": "worker",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "work"
+        ]
+      }
+    ],
+    "Environments": null,
+    "References": null,
+    "DatabaseSecret": "",
+    "Decisions": null,
+    "Warnings": null
+  },
+  "Environment": {
+    "Name": "dev",
+    "Container": "",
+    "Modules": [
+      {
+        "Name": "budget",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "network",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "zones",
+            "Value": 1,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "postgres",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "multi_zone",
+            "Value": false,
+            "Provenance": ""
+          },
+          {
+            "Key": "read_replicas",
+            "Value": 0,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "registry",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "runtime-serverless",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "cpu",
+            "Value": "0.5",
+            "Provenance": ""
+          },
+          {
+            "Key": "max_instances",
+            "Value": 2,
+            "Provenance": ""
+          },
+          {
+            "Key": "memory_gb",
+            "Value": 1,
+            "Provenance": ""
+          },
+          {
+            "Key": "min_instances",
+            "Value": 0,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "secrets",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "storage",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      }
+    ]
+  },
+  "Usage": {
+    "active_instance_hours": 730,
+    "additional_node_hours": 0,
+    "backup_gb": 10,
+    "cross_zone_gb": 0,
+    "custom_metrics": 50,
+    "egress_gb": 20,
+    "existing_global_forwarding_rules": 0,
+    "ingress_gb": 2,
+    "job_duration_minutes": 1,
+    "job_executions_per_month": 30,
+    "log_ingest_gb": 5,
+    "log_query_gb": 0,
+    "nat_processed_gb": 10,
+    "object_read_requests": 10000,
+    "object_write_requests": 1000,
+    "registry_storage_gb": 10,
+    "requests_per_month": 2000000,
+    "secret_access_operations": 1000,
+    "secret_versions": 1,
+    "storage_growth_gb_month": 2
+  },
+  "Native": {
+    "totalMonthlyCost": "30.8662",
+    "projects": [
+      {
+        "breakdown": {
+          "resources": [
+            {
+              "name": "module.postgres.azurerm_postgresql_flexible_server.this",
+              "resourceType": "azurerm_postgresql_flexible_server",
+              "monthlyCost": "13.36",
+              "costComponents": [
+                {
+                  "name": "Compute (B_Standard_B1ms)",
+                  "unit": "hours",
+                  "price": "0.017",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "12.41",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Storage",
+                  "unit": "GB",
+                  "price": "0",
+                  "monthlyQuantity": "32",
+                  "monthlyCost": "0",
+                  "usageBased": false,
+                  "priceNotFound": true
+                },
+                {
+                  "name": "Additional backup storage",
+                  "unit": "GB",
+                  "price": "0.095",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.95",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.runtime_serverless.azurerm_log_analytics_workspace.this",
+              "resourceType": "azurerm_log_analytics_workspace",
+              "monthlyCost": "11.5",
+              "costComponents": [
+                {
+                  "name": "Log data ingestion",
+                  "unit": "GB",
+                  "price": "2.3",
+                  "monthlyQuantity": "5",
+                  "monthlyCost": "11.5",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Log data export",
+                  "unit": "GB",
+                  "price": "0.1",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Basic log data ingestion",
+                  "unit": "GB",
+                  "price": "0.5",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Basic log search queries",
+                  "unit": "GB searched",
+                  "price": "0.005",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Archive data",
+                  "unit": "GB",
+                  "price": "0.02",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Archive data restored",
+                  "unit": "GB",
+                  "price": "0.1",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Archive data searched",
+                  "unit": "GB",
+                  "price": "0.005",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.registry.azurerm_container_registry.this",
+              "resourceType": "azurerm_container_registry",
+              "monthlyCost": "4.998",
+              "costComponents": [
+                {
+                  "name": "Registry usage (Basic)",
+                  "unit": "days",
+                  "price": "0.1666",
+                  "monthlyQuantity": "30",
+                  "monthlyCost": "4.998",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Build vCPU",
+                  "unit": "seconds",
+                  "price": "0.0001",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.storage.azurerm_storage_account.data",
+              "resourceType": "azurerm_storage_account",
+              "monthlyCost": "0.5082",
+              "costComponents": [
+                {
+                  "name": "Capacity (first 50TB)",
+                  "unit": "GB",
+                  "price": "0.0208",
+                  "monthlyQuantity": "24",
+                  "monthlyCost": "0.4992",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Write operations",
+                  "unit": "10k operations",
+                  "price": "0.05",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.005",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "List and create container operations",
+                  "unit": "10k operations",
+                  "price": "0.05",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Read operations",
+                  "unit": "10k operations",
+                  "price": "0.004",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.004",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "All other operations",
+                  "unit": "10k operations",
+                  "price": "0.004",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Blob index",
+                  "unit": "10k tags",
+                  "price": "0.03",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.network.azurerm_private_dns_zone.postgres",
+              "resourceType": "azurerm_private_dns_zone",
+              "monthlyCost": "0.5",
+              "costComponents": [
+                {
+                  "name": "Hosted zone",
+                  "unit": "months",
+                  "price": "0.5",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.5",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            }
+          ]
+        }
+      }
+    ],
+    "summary": {
+      "unsupportedResourceCounts": {
+        "azurerm_container_app": 2,
+        "azurerm_container_app_environment": 1,
+        "azurerm_container_app_job": 1
+      },
+      "noPriceResourceCounts": {
+        "azurerm_consumption_budget_resource_group": 1,
+        "azurerm_key_vault": 1,
+        "azurerm_postgresql_flexible_server_database": 1,
+        "azurerm_private_dns_zone_virtual_network_link": 1,
+        "azurerm_resource_group": 1,
+        "azurerm_role_assignment": 5,
+        "azurerm_storage_container": 1,
+        "azurerm_subnet": 2,
+        "azurerm_user_assigned_identity": 4,
+        "azurerm_virtual_network": 1
+      }
+    }
+  },
+  "Prices": [
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "Global",
+        "Service": "Load Balancer",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GB",
+        "Attributes": [
+          {
+            "Key": "meterName",
+            "Value": "Standard Data Processed",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.005
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "Global",
+        "Service": "Load Balancer",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 Hour",
+        "Attributes": [
+          {
+            "Key": "meterName",
+            "Value": "Standard Included LB Rules and Outbound Rules",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.025
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Azure Container Apps",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GiB Second",
+        "Attributes": [
+          {
+            "Key": "skuName",
+            "Value": "Standard",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard Memory Active Usage",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.000003
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Azure Container Apps",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GiB Second",
+        "Attributes": [
+          {
+            "Key": "skuName",
+            "Value": "Standard",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard Memory Idle Usage",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.000003
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Azure Container Apps",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 Second",
+        "Attributes": [
+          {
+            "Key": "skuName",
+            "Value": "Standard",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard vCPU Active Usage",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.000024
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Azure Container Apps",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 Second",
+        "Attributes": [
+          {
+            "Key": "skuName",
+            "Value": "Standard",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard vCPU Idle Usage",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.000003
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Azure Container Apps",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1M",
+        "Attributes": [
+          {
+            "Key": "skuName",
+            "Value": "Standard",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard Requests",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.4
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Azure Database for PostgreSQL",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GB/Month",
+        "Attributes": [
+          {
+            "Key": "productName",
+            "Value": "Azure Database for PostgreSQL Flex Server Storage",
+            "Regex": ""
+          },
+          {
+            "Key": "skuName",
+            "Value": "Storage",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Storage Data Stored",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.115
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Bandwidth",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GB",
+        "Attributes": [
+          {
+            "Key": "productName",
+            "Value": "Bandwidth - Routing Preference: Microsoft Global network",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard Data Transfer Out",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": true
+      },
+      "Rate": 0.0875
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Virtual Network",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 Hour",
+        "Attributes": [
+          {
+            "Key": "productName",
+            "Value": "IP Addresses",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard IPv4 Static Public IP",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.005
+    }
+  ],
+  "Totals": {
+    "baseline": 82.908,
+    "expected": 137.9732,
+    "high": 193.0384,
+    "low": 110.4406
+  }
+}

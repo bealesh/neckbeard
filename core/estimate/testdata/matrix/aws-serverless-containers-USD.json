@@ -1,0 +1,796 @@
+{
+  "Currency": "USD",
+  "Blueprint": {
+    "Version": 0,
+    "Hash": "",
+    "GeneratedFrom": {
+      "NeckbeardYAML": "",
+      "AppProfile": "",
+      "EnvironmentManifest": ""
+    },
+    "Pins": {
+      "CatalogDigest": "",
+      "Catalog": "",
+      "OpenTofu": "",
+      "Planner": "",
+      "Providers": null
+    },
+    "App": "",
+    "Org": "",
+    "Cloud": "aws",
+    "Region": "us-east-1",
+    "Runtime": "serverless-containers",
+    "VCS": "",
+    "Repo": "",
+    "Tier": "",
+    "Services": [
+      {
+        "Name": "nightly-report",
+        "Kind": "cron",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "0 3 * * *",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "report"
+        ]
+      },
+      {
+        "Name": "web",
+        "Kind": "http",
+        "Port": 4000,
+        "HealthPath": "/healthz",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "serve"
+        ]
+      },
+      {
+        "Name": "worker",
+        "Kind": "worker",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "work"
+        ]
+      }
+    ],
+    "Environments": null,
+    "References": null,
+    "DatabaseSecret": "",
+    "Decisions": null,
+    "Warnings": null
+  },
+  "Environment": {
+    "Name": "dev",
+    "Container": "",
+    "Modules": [
+      {
+        "Name": "budget",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "dns-ingress",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "network",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "zones",
+            "Value": 2,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "postgres",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "multi_zone",
+            "Value": false,
+            "Provenance": ""
+          },
+          {
+            "Key": "read_replicas",
+            "Value": 0,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "registry",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "runtime-serverless",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "cpu",
+            "Value": "0.5",
+            "Provenance": ""
+          },
+          {
+            "Key": "max_instances",
+            "Value": 2,
+            "Provenance": ""
+          },
+          {
+            "Key": "memory_gb",
+            "Value": 1,
+            "Provenance": ""
+          },
+          {
+            "Key": "min_instances",
+            "Value": 0,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "secrets",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "storage",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      }
+    ]
+  },
+  "Usage": {
+    "active_instance_hours": 730,
+    "additional_node_hours": 0,
+    "backup_gb": 10,
+    "cross_zone_gb": 0,
+    "custom_metrics": 50,
+    "egress_gb": 20,
+    "existing_global_forwarding_rules": 0,
+    "ingress_gb": 2,
+    "job_duration_minutes": 1,
+    "job_executions_per_month": 30,
+    "log_ingest_gb": 5,
+    "log_query_gb": 0,
+    "nat_processed_gb": 10,
+    "object_read_requests": 10000,
+    "object_write_requests": 1000,
+    "registry_storage_gb": 10,
+    "requests_per_month": 2000000,
+    "secret_access_operations": 1000,
+    "secret_versions": 1,
+    "storage_growth_gb_month": 2
+  },
+  "Native": {
+    "totalMonthlyCost": "131.7811",
+    "projects": [
+      {
+        "breakdown": {
+          "resources": [
+            {
+              "name": "module.runtime_serverless.aws_ecs_service.this[\"web\"]",
+              "resourceType": "aws_ecs_service",
+              "monthlyCost": "18.02005",
+              "costComponents": [
+                {
+                  "name": "Per GB per hour",
+                  "unit": "GB",
+                  "price": "3.24485",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "3.24485",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Per vCPU per hour",
+                  "unit": "CPU",
+                  "price": "29.5504",
+                  "monthlyQuantity": "0.5",
+                  "monthlyCost": "14.7752",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.runtime_serverless.aws_ecs_service.this[\"worker\"]",
+              "resourceType": "aws_ecs_service",
+              "monthlyCost": "18.02005",
+              "costComponents": [
+                {
+                  "name": "Per GB per hour",
+                  "unit": "GB",
+                  "price": "3.24485",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "3.24485",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Per vCPU per hour",
+                  "unit": "CPU",
+                  "price": "29.5504",
+                  "monthlyQuantity": "0.5",
+                  "monthlyCost": "14.7752",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.dns_ingress.aws_lb.this",
+              "resourceType": "aws_lb",
+              "monthlyCost": "16.585",
+              "costComponents": [
+                {
+                  "name": "Application load balancer",
+                  "unit": "hours",
+                  "price": "0.0225",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "16.425",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Load balancer capacity units",
+                  "unit": "LCU",
+                  "price": "5.84",
+                  "monthlyQuantity": "0.0273972602739726",
+                  "monthlyCost": "0.16",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.postgres.aws_db_instance.this",
+              "resourceType": "aws_db_instance",
+              "monthlyCost": "14.93",
+              "costComponents": [
+                {
+                  "name": "Database instance (on-demand, Single-AZ, db.t4g.micro)",
+                  "unit": "hours",
+                  "price": "0.016",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "11.68",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Storage (general purpose SSD, gp2)",
+                  "unit": "GB",
+                  "price": "0.115",
+                  "monthlyQuantity": "20",
+                  "monthlyCost": "2.3",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Additional backup storage",
+                  "unit": "GB",
+                  "price": "0.095",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.95",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.network.aws_vpc_endpoint.interface[\"ecr.api\"]",
+              "resourceType": "aws_vpc_endpoint",
+              "monthlyCost": "14.7",
+              "costComponents": [
+                {
+                  "name": "Data processed (first 1PB)",
+                  "unit": "GB",
+                  "price": "0.01",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.1",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Endpoint (Interface)",
+                  "unit": "hours",
+                  "price": "0.01",
+                  "monthlyQuantity": "1460",
+                  "monthlyCost": "14.6",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.network.aws_vpc_endpoint.interface[\"ecr.dkr\"]",
+              "resourceType": "aws_vpc_endpoint",
+              "monthlyCost": "14.7",
+              "costComponents": [
+                {
+                  "name": "Data processed (first 1PB)",
+                  "unit": "GB",
+                  "price": "0.01",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.1",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Endpoint (Interface)",
+                  "unit": "hours",
+                  "price": "0.01",
+                  "monthlyQuantity": "1460",
+                  "monthlyCost": "14.6",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.network.aws_vpc_endpoint.interface[\"logs\"]",
+              "resourceType": "aws_vpc_endpoint",
+              "monthlyCost": "14.7",
+              "costComponents": [
+                {
+                  "name": "Data processed (first 1PB)",
+                  "unit": "GB",
+                  "price": "0.01",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.1",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Endpoint (Interface)",
+                  "unit": "hours",
+                  "price": "0.01",
+                  "monthlyQuantity": "1460",
+                  "monthlyCost": "14.6",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.network.aws_vpc_endpoint.interface[\"secretsmanager\"]",
+              "resourceType": "aws_vpc_endpoint",
+              "monthlyCost": "14.7",
+              "costComponents": [
+                {
+                  "name": "Data processed (first 1PB)",
+                  "unit": "GB",
+                  "price": "0.01",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.1",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Endpoint (Interface)",
+                  "unit": "hours",
+                  "price": "0.01",
+                  "monthlyQuantity": "1460",
+                  "monthlyCost": "14.6",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.runtime_serverless.aws_cloudwatch_log_group.this",
+              "resourceType": "aws_cloudwatch_log_group",
+              "monthlyCost": "2.65",
+              "costComponents": [
+                {
+                  "name": "Data ingested",
+                  "unit": "GB",
+                  "price": "0.5",
+                  "monthlyQuantity": "5",
+                  "monthlyCost": "2.5",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Archival Storage",
+                  "unit": "GB",
+                  "price": "0.03",
+                  "monthlyQuantity": "5",
+                  "monthlyCost": "0.15",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Insights queries data scanned",
+                  "unit": "GB",
+                  "price": "0.005",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.registry.aws_ecr_repository.this",
+              "resourceType": "aws_ecr_repository",
+              "monthlyCost": "1",
+              "costComponents": [
+                {
+                  "name": "Storage",
+                  "unit": "GB",
+                  "price": "0.1",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "1",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.storage.aws_s3_bucket.data",
+              "resourceType": "aws_s3_bucket",
+              "monthlyCost": "0.561",
+              "costComponents": null,
+              "subresources": [
+                {
+                  "name": "Standard",
+                  "resourceType": "",
+                  "monthlyCost": "0.561",
+                  "costComponents": [
+                    {
+                      "name": "Storage",
+                      "unit": "GB",
+                      "price": "0.023",
+                      "monthlyQuantity": "24",
+                      "monthlyCost": "0.552",
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "PUT, COPY, POST, LIST requests",
+                      "unit": "1k requests",
+                      "price": "0.005",
+                      "monthlyQuantity": "1",
+                      "monthlyCost": "0.005",
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "GET, SELECT, and all other requests",
+                      "unit": "1k requests",
+                      "price": "0.0004",
+                      "monthlyQuantity": "10",
+                      "monthlyCost": "0.004",
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Select data scanned",
+                      "unit": "GB",
+                      "price": "0.002",
+                      "monthlyQuantity": "0",
+                      "monthlyCost": "0",
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Select data returned",
+                      "unit": "GB",
+                      "price": "0.0007",
+                      "monthlyQuantity": "0",
+                      "monthlyCost": "0",
+                      "usageBased": true,
+                      "priceNotFound": false
+                    }
+                  ],
+                  "subresources": null
+                }
+              ]
+            },
+            {
+              "name": "module.secrets.aws_secretsmanager_secret.this[\"DATABASE_URL\"]",
+              "resourceType": "aws_secretsmanager_secret",
+              "monthlyCost": "0.405",
+              "costComponents": [
+                {
+                  "name": "Secret",
+                  "unit": "months",
+                  "price": "0.4",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.4",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "API requests",
+                  "unit": "10k requests",
+                  "price": "0.05",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.005",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.secrets.aws_secretsmanager_secret.this[\"SECRET_KEY_BASE\"]",
+              "resourceType": "aws_secretsmanager_secret",
+              "monthlyCost": "0.405",
+              "costComponents": [
+                {
+                  "name": "Secret",
+                  "unit": "months",
+                  "price": "0.4",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.4",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "API requests",
+                  "unit": "10k requests",
+                  "price": "0.05",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.005",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.secrets.aws_secretsmanager_secret.this[\"SMTP_PASSWORD\"]",
+              "resourceType": "aws_secretsmanager_secret",
+              "monthlyCost": "0.405",
+              "costComponents": [
+                {
+                  "name": "Secret",
+                  "unit": "months",
+                  "price": "0.4",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.4",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "API requests",
+                  "unit": "10k requests",
+                  "price": "0.05",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.005",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.runtime_serverless.aws_appautoscaling_target.service[\"web\"]",
+              "resourceType": "aws_appautoscaling_target",
+              "monthlyCost": null,
+              "costComponents": null,
+              "subresources": null
+            }
+          ]
+        }
+      }
+    ],
+    "summary": {
+      "unsupportedResourceCounts": {},
+      "noPriceResourceCounts": {
+        "aws_appautoscaling_policy": 1,
+        "aws_budgets_budget": 1,
+        "aws_cloudwatch_event_rule": 1,
+        "aws_cloudwatch_event_target": 1,
+        "aws_db_subnet_group": 1,
+        "aws_default_security_group": 1,
+        "aws_ecr_lifecycle_policy": 1,
+        "aws_ecs_cluster": 1,
+        "aws_ecs_task_definition": 3,
+        "aws_iam_role": 3,
+        "aws_iam_role_policy": 2,
+        "aws_iam_role_policy_attachment": 1,
+        "aws_internet_gateway": 1,
+        "aws_lb_listener": 1,
+        "aws_lb_target_group": 1,
+        "aws_route": 1,
+        "aws_route_table": 3,
+        "aws_route_table_association": 4,
+        "aws_s3_bucket_lifecycle_configuration": 1,
+        "aws_s3_bucket_public_access_block": 1,
+        "aws_s3_bucket_server_side_encryption_configuration": 1,
+        "aws_s3_bucket_versioning": 1,
+        "aws_security_group": 4,
+        "aws_subnet": 4,
+        "aws_vpc": 1,
+        "aws_vpc_endpoint": 1,
+        "aws_vpc_security_group_egress_rule": 2,
+        "aws_vpc_security_group_ingress_rule": 4
+      }
+    }
+  },
+  "Prices": [
+    {
+      "Query": {
+        "Vendor": "aws",
+        "Region": "",
+        "Service": "AWSDataTransfer",
+        "Family": "Data Transfer",
+        "PurchaseOption": "on_demand",
+        "Unit": "GB",
+        "Attributes": [
+          {
+            "Key": "fromRegionCode",
+            "Value": "us-east-1",
+            "Regex": ""
+          },
+          {
+            "Key": "transferType",
+            "Value": "AWS Outbound",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": true
+      },
+      "Rate": 0.09
+    },
+    {
+      "Query": {
+        "Vendor": "aws",
+        "Region": "us-east-1",
+        "Service": "AWSELB",
+        "Family": "",
+        "PurchaseOption": "on_demand",
+        "Unit": "Hrs",
+        "Attributes": [
+          {
+            "Key": "operation",
+            "Value": "LoadBalancing:Application",
+            "Regex": ""
+          },
+          {
+            "Key": "usagetype",
+            "Value": "",
+            "Regex": "/^(?!TS-|Outposts-)(?:[A-Z0-9]+-)?LoadBalancerUsage$/"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.0225
+    },
+    {
+      "Query": {
+        "Vendor": "aws",
+        "Region": "us-east-1",
+        "Service": "AWSELB",
+        "Family": "",
+        "PurchaseOption": "on_demand",
+        "Unit": "LCU-Hrs",
+        "Attributes": [
+          {
+            "Key": "operation",
+            "Value": "LoadBalancing:Application",
+            "Regex": ""
+          },
+          {
+            "Key": "usagetype",
+            "Value": "",
+            "Regex": "/^(?!Outposts-)(?:[A-Z0-9]+-)?LCUUsage$/"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.008
+    },
+    {
+      "Query": {
+        "Vendor": "aws",
+        "Region": "us-east-1",
+        "Service": "AmazonCloudWatch",
+        "Family": "",
+        "PurchaseOption": "on_demand",
+        "Unit": "Metrics",
+        "Attributes": [
+          {
+            "Key": "usagetype",
+            "Value": "",
+            "Regex": "/(^|-)CW:MetricMonitorUsage$/"
+          }
+        ],
+        "HighestTier": true
+      },
+      "Rate": 0.3
+    },
+    {
+      "Query": {
+        "Vendor": "aws",
+        "Region": "us-east-1",
+        "Service": "AmazonECS",
+        "Family": "",
+        "PurchaseOption": "on_demand",
+        "Unit": "hours",
+        "Attributes": [
+          {
+            "Key": "usagetype",
+            "Value": "",
+            "Regex": "/Fargate-GB-Hours$/"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.004445
+    },
+    {
+      "Query": {
+        "Vendor": "aws",
+        "Region": "us-east-1",
+        "Service": "AmazonECS",
+        "Family": "",
+        "PurchaseOption": "on_demand",
+        "Unit": "hours",
+        "Attributes": [
+          {
+            "Key": "usagetype",
+            "Value": "",
+            "Regex": "/Fargate-vCPU-Hours:perCPU$/"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.04048
+    },
+    {
+      "Query": {
+        "Vendor": "aws",
+        "Region": "us-east-1",
+        "Service": "AmazonVPC",
+        "Family": "",
+        "PurchaseOption": "on_demand",
+        "Unit": "Hrs",
+        "Attributes": [
+          {
+            "Key": "usagetype",
+            "Value": "",
+            "Regex": "/PublicIPv4:InUseAddress$/"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.005
+    }
+  ],
+  "Totals": {
+    "baseline": 149.3451,
+    "expected": 155.9112202777778,
+    "high": 180.49739055555554,
+    "low": 152.62816013888892
+  }
+}

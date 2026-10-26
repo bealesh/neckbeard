@@ -33,7 +33,7 @@ func SummaryPath(reportPath string) string {
 
 func Summarize(res *Result, blueprintHash string, now time.Time) Summary {
 	s := Summary{
-		ModelVersion: 2, InputDigest: res.InputDigest, Scope: res.Scope, Complete: res.Complete(),
+		ModelVersion: 3, InputDigest: res.InputDigest, Scope: res.Scope, Complete: res.Complete(),
 		BlueprintHash: blueprintHash, Currency: res.Currency,
 		ExpectedByEnv: map[string]float64{}, GeneratedAt: now.UTC().Format(time.RFC3339),
 		InfracostVersion: res.InfracostVersion,
@@ -96,7 +96,7 @@ func CheckCeiling(summaryPath, blueprintHash string, ceiling float64, roots ...s
 	if s.BlueprintHash != blueprintHash {
 		return fmt.Errorf("%s was produced for blueprint %s, current blueprint is %s: re-run `neckbeard estimate` before scaffolding under a ceiling", summaryPath, s.BlueprintHash, blueprintHash)
 	}
-	if s.ModelVersion != 2 || !s.Complete || s.Scope != "blueprint" {
+	if s.ModelVersion != 3 || !s.Complete || s.Scope != "blueprint" {
 		return fmt.Errorf("%s is not a complete, current-model estimate for all environments: re-run `neckbeard estimate` before scaffolding under a ceiling", summaryPath)
 	}
 	if _, err := number(fmt.Sprint(s.ExpectedTotal), "expected total"); err != nil {

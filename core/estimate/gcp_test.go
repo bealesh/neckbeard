@@ -89,7 +89,7 @@ func TestGCPWorkerPoolBillsWhileIdle(t *testing.T) {
 	d := testDocument()
 	d.Summary.UnsupportedResourceCounts = map[string]int{"google_cloud_run_v2_worker_pool": 1}
 	env := blueprint.Environment{Modules: []blueprint.ModuleUsage{{Name: "runtime-serverless", Inputs: []blueprint.Input{{Key: "cpu", Value: 1}, {Key: "memory_gb", Value: 1}, {Key: "min_instances", Value: 0}}}}}
-	_, err := correctGCP(d, &blueprint.Blueprint{Region: "us-central1"}, env, map[string]float64{}, 0, testRates)
+	_, err := correctGCP(d, &blueprint.Blueprint{Region: "us-central1", Services: []blueprint.Service{{Name: "worker", Kind: "worker"}}}, env, map[string]float64{}, 0, testRates)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,5 +128,18 @@ func TestUmamiPlanRegression(t *testing.T) {
 		if r.ResourceType == "google_compute_global_address" && cost != 0 {
 			t.Fatal("attached IP charge survived")
 		}
+	}
+}
+
+func TestPricingCatalogWorkerDoesNotHideCustomWorker(t *testing.T) {
+	d := testDocument()
+	d.Summary.UnsupportedResourceCounts = map[string]int{"google_cloud_run_v2_worker_pool": 2}
+	env := blueprint.Environment{Modules: []blueprint.ModuleUsage{{Name: "runtime-serverless", Inputs: []blueprint.Input{{Key: "cpu", Value: 1}, {Key: "memory_gb", Value: 1}, {Key: "min_instances", Value: 0}}}}}
+	bp := &blueprint.Blueprint{Region: "us-central1", Services: []blueprint.Service{{Name: "worker", Kind: "worker"}}}
+	if _, err := correctGCP(d, bp, env, map[string]float64{}, 1, testRates); err != nil {
+		t.Fatal(err)
+	}
+	if d.Summary.UnsupportedResourceCounts["google_cloud_run_v2_worker_pool"] != 1 {
+		t.Fatal("unsupported custom worker disappeared")
 	}
 }

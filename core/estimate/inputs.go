@@ -85,7 +85,7 @@ func inputDigest(blueprintHash string, files map[string][]byte) string {
 	}
 	sort.Strings(names)
 	h := sha256.New()
-	fmt.Fprintln(h, "neckbeard-cost-model-v2", blueprintHash)
+	fmt.Fprintln(h, "neckbeard-cost-model-v3", blueprintHash)
 	for _, name := range names {
 		fmt.Fprintf(h, "%s\x00%x\n", name, sha256.Sum256(files[name]))
 	}

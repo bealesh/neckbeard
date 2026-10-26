@@ -125,7 +125,7 @@ func TestReportNamesUnmappedAssumptions(t *testing.T) {
 		Currency:      "USD",
 	}
 	report := string(reportForTest(t, res))
-	if !strings.Contains(report, "egress_gb` has no priceable IaC resource") {
+	if !strings.Contains(report, "egress_gb` is not used by this cloud/runtime") {
 		t.Error("report must name unmapped usage assumptions")
 	}
 	if !strings.Contains(report, "not cap") {

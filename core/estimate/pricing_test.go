@@ -1,6 +1,7 @@
 package estimate
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,7 @@ func TestRateLookupCurrencyCacheAndCredentialHandling(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if !strings.Contains(string(body), "prices{EUR}") || strings.Contains(string(body), "private-key") {
+		if !strings.Contains(string(body), "prices{EUR unit}") || strings.Contains(string(body), "private-key") {
 			t.Error("query must request EUR without embedding credentials")
 		}
 		if r.Header.Get("X-Api-Key") != "private-key" {
@@ -59,5 +60,28 @@ func TestConservativeTierLookupExcludesFreeAllowances(t *testing.T) {
 	price, err := newRateLookup(server.Client(), server.URL, "private-key", "USD")("us-central1", "Compute Engine", "/^Network Internet Data Transfer Out from Americas to Americas$/i")
 	if err != nil || price != .12 {
 		t.Fatalf("expected conservative first paid tier, got %v, %v", price, err)
+	}
+}
+
+func TestProductLookupBindsVendorCurrencyAndBillingUnit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if !strings.Contains(body["query"], `vendorName:"azure"`) || !strings.Contains(body["query"], `purchaseOption:"Consumption"`) || !strings.Contains(body["query"], "EUR unit") {
+			t.Error("query lost vendor, currency or purchase option")
+		}
+		_, _ = w.Write([]byte(`{"data":{"products":[{"prices":[{"EUR":"0.35736","unit":"1M"}]}]}}`))
+	}))
+	defer server.Close()
+	lookup := newProductLookup(server.Client(), server.URL, "fixture-key", "EUR")
+	q := priceQuery{Vendor: "azure", Service: "Azure Container Apps", Region: "eastus", PurchaseOption: "Consumption", Unit: "1M"}
+	if rate, err := lookup(q); err != nil || rate != .35736 {
+		t.Fatalf("%v %v", rate, err)
+	}
+	q.Unit = "1 Second"
+	if _, err := lookup(q); err == nil {
+		t.Fatal("unit mismatch reused a cached price")
 	}
 }

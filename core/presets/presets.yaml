@@ -11,6 +11,11 @@ tiers:
       rto_hours: 8
       ops_capacity: "no on-call"
     usage:
+      custom_metrics: 50
+      additional_node_hours: 0
+      object_write_requests: 1000
+      object_read_requests: 10000
+      log_query_gb: 0
       active_instance_hours: 730
       registry_storage_gb: 10
       secret_access_operations: 1000
@@ -41,6 +46,11 @@ tiers:
       rto_hours: 4
       ops_capacity: "business-hours attention"
     usage:
+      custom_metrics: 50
+      additional_node_hours: 0
+      object_write_requests: 1000
+      object_read_requests: 10000
+      log_query_gb: 0
       active_instance_hours: 730
       registry_storage_gb: 10
       secret_access_operations: 1000
@@ -71,6 +81,11 @@ tiers:
       rto_hours: 1
       ops_capacity: "on-call rotation"
     usage:
+      custom_metrics: 50
+      additional_node_hours: 0
+      object_write_requests: 1000
+      object_read_requests: 10000
+      log_query_gb: 0
       active_instance_hours: 730
       registry_storage_gb: 10
       secret_access_operations: 1000
@@ -101,6 +116,11 @@ tiers:
       rto_hours: 1
       ops_capacity: "on-call rotation + compliance owner"
     usage:
+      custom_metrics: 50
+      additional_node_hours: 0
+      object_write_requests: 1000
+      object_read_requests: 10000
+      log_query_gb: 0
       active_instance_hours: 730
       registry_storage_gb: 10
       secret_access_operations: 1000

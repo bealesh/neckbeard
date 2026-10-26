@@ -1,5 +1,12 @@
 # Cost estimator and GCP trial postmortem — 2026-10-22
 
+October 26 follow-up: [model v3 and the six-lane pricing matrix](2026-10-26-cost-model-matrix.md)
+extend the component corrections to AWS, Azure, EKS, AKS and GKE, with live
+USD/EUR price snapshots and offline regression tests. This addresses numerical
+interpretation and workload modeling; it does not replace deployment or invoice
+validation. The incident record below retains the findings as observed.
+
+
 October 23 follow-up: [cost model v2](../../skills/neckbeard/references/cost-model.md)
 implements GCP component corrections, effective Terraform inputs, strict numeric
 and component coverage checks, and input-bound pre-scaffold approvals. The Umami

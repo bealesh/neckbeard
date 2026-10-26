@@ -124,7 +124,7 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 		}
 	}
 	for _, k := range res.UnmappedUsage {
-		w("- usage assumption `%s` has no priceable IaC resource in this lane (e.g. request-path egress); it is not covered by the high scenario", k)
+		w("- preset input `%s` is not used by this cloud/runtime; it does not add a charge here", k)
 	}
 	if len(seen) == 0 && len(res.UnmappedUsage) == 0 {
 		w("- none detected")
@@ -135,7 +135,7 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 	w("")
 	w("Provenance: infracost %s (Cloud Pricing API) · catalog %s · planner %s ·", res.InfracostVersion, bp.Pins.Catalog, bp.Pins.Planner)
 	w("blueprint `%s` · generated %s.", bp.Hash, now.UTC().Format("2006-01-02 15:04 UTC"))
-	w("Effective-input digest: `%s` (cost model v2).", res.InputDigest)
+	w("Effective-input digest: `%s` (cost model v3).", res.InputDigest)
 	for _, e := range res.Envs {
 		for _, a := range e.Adjustments {
 			w("- %s: %s", e.Env, a)
