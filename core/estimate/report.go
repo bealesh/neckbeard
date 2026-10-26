@@ -19,8 +19,11 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 
 	w("# Cost estimate — %s", bp.App)
 	w("")
-	w("Lane %s / %s / tier %s, region %s. Estimated from rendered HCL (no cloud", bp.Cloud, bp.Runtime, bp.Tier, bp.Region)
-	w("credentials); an authenticated plan (V1) improves resolution but was not used.")
+	w("Lane %s / %s / tier %s, region %s. Estimated from %s (no cloud", bp.Cloud, bp.Runtime, bp.Tier, bp.Region, res.Source)
+	w("credentials). Scope: %s. User-owned Terraform extensions and variable files are included.", res.Scope)
+	if !res.Complete() {
+		w("\n**PARTIAL subtotal: billable components below are missing prices or usage. This report cannot approve a spending ceiling.**")
+	}
 	w("")
 
 	w("## 1. Baseline provisioned (bills while idle)")
@@ -66,13 +69,15 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 		if mid > alert {
 			rel = "OVER"
 		}
-		w("Budget alert threshold: %s total, rendered as a real cloud budget of %s per", money(alert), money(alert/float64(len(res.Envs))))
+		w("Budget alert threshold: %s total, rendered as a real cloud budget of %s per", money(alert), money(alert/float64(environmentCount(bp, res))))
 		w("environment notifying %s at 80%% and 100%% actual and 100%% forecasted. The expected", strings.Join(cfg.FinOps.AlertEmails, ", "))
 		w("total is **%s** it. Budget alerts notify; they do not cap spending.", rel)
 		w("")
 	}
 	if ceiling := cfg.FinOps.MonthlyCeiling; ceiling > 0 {
-		if mid > ceiling {
+		if !res.Complete() || res.Scope != "blueprint" {
+			w("Ceiling approval requires a complete estimate for all blueprint environments.")
+		} else if mid > ceiling {
 			w("**Ceiling: %s. The expected total is OVER it by %s; `scaffold` will refuse until the**", money(ceiling), money(mid-ceiling))
 			w("**plan changes or the ceiling does.**")
 		} else {
@@ -81,18 +86,16 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 		w("")
 	}
 
-	w("### Largest expected line items")
+	w("### Expected line items")
 	w("")
 	for _, e := range res.Envs {
 		w("**%s**", e.Env)
 		w("")
-		n := 0
 		for _, r := range e.Resources {
-			if r.Monthly <= 0 || n >= 5 {
+			if r.Monthly <= 0 {
 				continue
 			}
 			w("- %s — %s", r.Address, money(r.Monthly))
-			n++
 		}
 		w("")
 	}
@@ -121,7 +124,7 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 		}
 	}
 	for _, k := range res.UnmappedUsage {
-		w("- usage assumption `%s` has no priceable IaC resource in this lane (e.g. request-path egress); treat the high scenario as its buffer", k)
+		w("- usage assumption `%s` has no priceable IaC resource in this lane (e.g. request-path egress); it is not covered by the high scenario", k)
 	}
 	if len(seen) == 0 && len(res.UnmappedUsage) == 0 {
 		w("- none detected")
@@ -132,7 +135,13 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 	w("")
 	w("Provenance: infracost %s (Cloud Pricing API) · catalog %s · planner %s ·", res.InfracostVersion, bp.Pins.Catalog, bp.Pins.Planner)
 	w("blueprint `%s` · generated %s.", bp.Hash, now.UTC().Format("2006-01-02 15:04 UTC"))
-	w("Estimates are estimates: provisioned prices are firm at snapshot time; every")
+	w("Effective-input digest: `%s` (cost model v2).", res.InputDigest)
+	for _, e := range res.Envs {
+		for _, a := range e.Adjustments {
+			w("- %s: %s", e.Env, a)
+		}
+	}
+	w("Prices are a snapshot; free tiers, discounts and taxes are excluded. Every")
 	w("usage-driven line is only as good as section 2's assumptions.")
 	return []byte(b.String())
 }
@@ -144,4 +153,11 @@ func sortedKeys(m map[string]float64) []string {
 	}
 	sortStrings(keys)
 	return keys
+}
+
+func environmentCount(bp *blueprint.Blueprint, res *Result) int {
+	if len(bp.Environments) > 0 {
+		return len(bp.Environments)
+	}
+	return len(res.Envs)
 }

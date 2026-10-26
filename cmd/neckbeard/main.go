@@ -360,6 +360,9 @@ func runEstimate(args []string) error {
 	blueprintPath := fs.String("blueprint", "blueprint.yaml", "path to blueprint.yaml")
 	catalogSource := fs.String("catalog-source", render.DefaultCatalogSource, "bundled (default), or an explicit git/local catalog source")
 	infracostBin := fs.String("infracost-bin", "", "infracost 0.10.x binary (default: infracost-0.10, then infracost, from PATH)")
+	root := fs.String("root", ".", "application root containing user-owned Terraform extensions")
+	planPath := fs.String("plan", "", "optional authenticated Terraform/OpenTofu plan JSON (requires -env)")
+	environment := fs.String("env", "", "estimate only this environment")
 	outPath := fs.String("out", "costs/estimate.md", "report output path")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -375,7 +378,7 @@ func runEstimate(args []string) error {
 	}
 
 	res, err := estimate.Run(estimate.Options{
-		Config: cfg, ConfigDigest: cfgDigest, Blueprint: bp,
+		Config: cfg, ConfigDigest: cfgDigest, Blueprint: bp, Root: *root, PlanPath: *planPath, Environment: *environment,
 		CatalogSource: *catalogSource, InfracostBin: *infracostBin,
 	})
 	if err != nil {
@@ -397,7 +400,11 @@ func runEstimate(args []string) error {
 	for _, e := range res.Envs {
 		total += e.Costs["expected"]
 	}
-	fmt.Printf("\nexpected total: %.2f %s/mo (%.2f/yr) — full report: %s\n", total, res.Currency, total*12, *outPath)
+	label := "expected modeled total"
+	if !res.Complete() {
+		label = "PARTIAL subtotal (missing billable components)"
+	}
+	fmt.Printf("\n%s: %.2f %s/mo (%.2f/yr) — full report: %s\n", label, total, res.Currency, total*12, *outPath)
 	fmt.Println("estimates ride on section 2's usage assumptions; budget alerts notify, they don't cap")
 
 	// The sidecar is what scaffold checks a ceiling against: same blueprint, or
@@ -407,7 +414,7 @@ func runEstimate(args []string) error {
 		return err
 	}
 	if cfg.FinOps.MonthlyCeiling > 0 {
-		if err := estimate.CheckCeiling(summaryPath, bp.Hash, cfg.FinOps.MonthlyCeiling); err != nil {
+		if err := estimate.CheckCeiling(summaryPath, bp.Hash, cfg.FinOps.MonthlyCeiling, *root); err != nil {
 			return err
 		}
 		fmt.Printf("ceiling: %.2f %s/mo — expected total is under it\n", cfg.FinOps.MonthlyCeiling, res.Currency)
@@ -536,5 +543,5 @@ func enforceCeiling(root, configPath string, bp *blueprint.Blueprint) error {
 	if digest != bp.GeneratedFrom.NeckbeardYAML {
 		return fmt.Errorf("blueprint was planned from a different neckbeard.yaml (recorded %s, %s is %s): re-run `neckbeard plan`", bp.GeneratedFrom.NeckbeardYAML, configPath, digest)
 	}
-	return estimate.CheckCeiling(filepath.Join(root, "costs", "estimate.json"), bp.Hash, cfg.FinOps.MonthlyCeiling)
+	return estimate.CheckCeiling(filepath.Join(root, "costs", "estimate.json"), bp.Hash, cfg.FinOps.MonthlyCeiling, root)
 }

@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/bealesh/neckbeard/core/blueprint"
@@ -25,6 +24,9 @@ import (
 )
 
 type Options struct {
+	Root          string // application root for user-owned Terraform cost inputs
+	PlanPath      string // optional authenticated plan JSON, local only
+	Environment   string // restrict a plan or report to one environment
 	Config        *config.Config
 	ConfigDigest  string
 	Blueprint     *blueprint.Blueprint
@@ -45,10 +47,13 @@ var scenarios = []struct {
 }
 
 type EnvEstimate struct {
-	Env       string
-	Costs     map[string]float64 // scenario name → monthly cost
-	Resources []ResourceCost     // expected scenario, sorted desc
-	Unpriced  []string           // resource types infracost could not price
+	forwardingRules int
+	Env             string
+	Costs           map[string]float64 // scenario name → monthly cost
+	Resources       []ResourceCost     // expected scenario, sorted desc
+	Unpriced        []string           // resource types/components not separately priced
+	Unknown         []string           // billable components missing a price or quantity
+	Adjustments     []string           // service-level corrections to the upstream adapter
 }
 
 type ResourceCost struct {
@@ -63,6 +68,9 @@ type Result struct {
 	UnmappedUsage    []string           // assumptions with no IaC resource to attach to
 	InfracostVersion string
 	Currency         string
+	InputDigest      string
+	Scope            string
+	Source           string
 }
 
 func Run(opts Options) (*Result, error) {
@@ -110,18 +118,114 @@ func Run(opts Options) (*Result, error) {
 		return nil, err
 	}
 
-	res := &Result{Usage: usage, UsageSource: usageSource, InfracostVersion: version, Currency: currencyOr(opts.Config)}
+	inputs, err := deploymentInputs(opts.Root)
+	if err != nil {
+		return nil, err
+	}
+	generated := map[string]bool{}
+	for _, file := range ws {
+		if file.Owner == ownership.OwnerGenerated {
+			generated[file.Path] = true
+		}
+	}
+	for path, data := range inputs {
+		if generated[path] {
+			return nil, fmt.Errorf("local Terraform input %s collides with generated output; resolve ownership before estimating", path)
+		}
+		full := filepath.Join(scratch, filepath.FromSlash(path))
+		if err = os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			return nil, err
+		}
+		if err = os.WriteFile(full, data, 0o600); err != nil {
+			return nil, err
+		}
+	}
+	res := &Result{Usage: usage, UsageSource: usageSource, InfracostVersion: version, Currency: currencyOr(opts.Config), InputDigest: inputDigest(opts.Blueprint.Hash, inputs), Scope: "blueprint", Source: "effective HCL"}
+	var lookup rateLookup
+	if opts.Blueprint.Cloud == "gcp" {
+		lookup, err = pricingLookup(binPath, res.Currency)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if opts.PlanPath != "" {
+		res.Source = "authenticated plan JSON"
+		data, err := os.ReadFile(opts.PlanPath)
+		if err != nil {
+			return nil, err
+		}
+		inputs["authenticated-plan.json"] = data
+		res.InputDigest = inputDigest(opts.Blueprint.Hash, inputs)
+	}
+	if opts.PlanPath != "" && opts.Environment == "" {
+		return nil, fmt.Errorf("-plan requires -env so a plan cannot be mistaken for all environments")
+	}
+	if opts.Environment != "" {
+		res.Scope = opts.Environment
+	}
+
 	mapped := map[string]bool{}
+	projectRules := map[string]float64{}
 	for _, env := range opts.Blueprint.Environments {
+		if opts.Environment != "" && env.Name != opts.Environment {
+			continue
+		}
 		envDir := filepath.Join(scratch, "infra", "envs", env.Name)
-		ee, types, err := estimateEnv(binPath, scratch, envDir, env.Name, res.Currency, usage)
+		if opts.PlanPath != "" {
+			envDir = opts.PlanPath
+			if opts.Blueprint.Cloud == "gcp" {
+				expectedHTTP := 0
+				if opts.Blueprint.Runtime == "serverless-containers" {
+					for _, svc := range opts.Blueprint.Services {
+						if svc.Kind == "http" {
+							expectedHTTP++
+						}
+					}
+				}
+				if err := validateGCPPlan(inputs["authenticated-plan.json"], env, expectedHTTP); err != nil {
+					return nil, err
+				}
+			}
+		}
+		project := env.Container
+		if project == "" {
+			project = env.Name
+		}
+		envUsage := usage
+		if opts.Blueprint.Cloud == "gcp" {
+			envUsage = map[string]float64{}
+			for k, v := range usage {
+				envUsage[k] = v
+			}
+			existing, ok := projectRules[project]
+			if !ok {
+				existing = usage["existing_global_forwarding_rules"]
+			}
+			envUsage["existing_global_forwarding_rules"] = existing
+		}
+		ee, types, err := estimateEnv(binPath, scratch, envDir, env, opts.Blueprint, res.Currency, envUsage, lookup)
 		if err != nil {
 			return nil, fmt.Errorf("estimating %s: %w", env.Name, err)
+		}
+		if opts.Blueprint.Cloud == "gcp" {
+			projectRules[project] = envUsage["existing_global_forwarding_rules"] + float64(ee.forwardingRules)
+			mapped["log_ingest_gb"] = true
+			if types["google_cloud_run_v2_service"] {
+				mapped["active_instance_hours"] = true
+			}
+			if types["google_compute_global_forwarding_rule"] {
+				for _, k := range []string{"ingress_gb", "egress_gb", "existing_global_forwarding_rules"} {
+					mapped[k] = true
+				}
+			}
 		}
 		for k := range AppliedUsage(types) {
 			mapped[k] = true
 		}
 		res.Envs = append(res.Envs, *ee)
+	}
+	if len(res.Envs) == 0 {
+		return nil, fmt.Errorf("environment %q is not in the blueprint", opts.Environment)
 	}
 	for k := range usage {
 		if !mapped[k] {
@@ -132,9 +236,9 @@ func Run(opts Options) (*Result, error) {
 	return res, nil
 }
 
-func estimateEnv(bin, scratch, envDir, envName, currency string, usage map[string]float64) (*EnvEstimate, map[string]bool, error) {
-	usageFile := filepath.Join(scratch, "usage-"+envName+".yml")
-	ee := &EnvEstimate{Env: envName, Costs: map[string]float64{}}
+func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blueprint.Blueprint, currency string, usage map[string]float64, lookup rateLookup) (*EnvEstimate, map[string]bool, error) {
+	usageFile := filepath.Join(scratch, "usage-"+env.Name+".yml")
+	ee := &EnvEstimate{Env: env.Name, Costs: map[string]float64{}}
 	types := map[string]bool{}
 	for _, sc := range scenarios {
 		uf, err := BuildUsageFile(usage, sc.Multiplier)
@@ -148,6 +252,36 @@ func estimateEnv(bin, scratch, envDir, envName, currency string, usage map[strin
 		if err != nil {
 			return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
 		}
+		var adjustments []string
+		if bp.Cloud == "gcp" {
+			var doc breakdown
+			if err = json.Unmarshal(out, &doc); err != nil {
+				return nil, nil, fmt.Errorf("invalid pricing output: %w", err)
+			}
+			if _, err = number(doc.TotalMonthlyCost, "total monthly cost"); err != nil {
+				return nil, nil, err
+			}
+			if sc.Name == "expected" {
+				for _, p := range doc.Projects {
+					for _, r := range p.Breakdown.Resources {
+						if r == nil {
+							return nil, nil, fmt.Errorf("null resource in pricing output")
+						}
+						if r.ResourceType == "google_compute_global_forwarding_rule" && strings.HasPrefix(r.Name, "module.dns_ingress.") {
+							ee.forwardingRules++
+						}
+					}
+				}
+			}
+			adjustments, err = correctGCP(&doc, bp, env, usage, sc.Multiplier, lookup)
+			if err != nil {
+				return nil, nil, err
+			}
+			out, err = json.Marshal(doc)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
 		total, resources, resourceTypes, unpriced, err := parseBreakdown(out)
 		if err != nil {
 			return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
@@ -156,6 +290,27 @@ func estimateEnv(bin, scratch, envDir, envName, currency string, usage map[strin
 		if sc.Name == "expected" {
 			ee.Resources = resources
 			ee.Unpriced = unpriced
+			ee.Adjustments = adjustments
+			if bp.Cloud == "aws" || bp.Cloud == "azure" {
+				if usage["egress_gb"] > 0 {
+					ee.Unknown = append(ee.Unknown, "Internet transfer is not covered by the load-balancer/storage usage mapping")
+					ee.Unpriced = append(ee.Unpriced, "Internet transfer (missing price or usage quantity)")
+				}
+				if bp.Runtime == "serverless-containers" {
+					for _, svc := range bp.Services {
+						if svc.Kind == "cron" {
+							ee.Unknown = append(ee.Unknown, "Scheduled execution compute requires a separate model for this cloud")
+							ee.Unpriced = append(ee.Unpriced, "Scheduled execution compute (missing price or usage quantity)")
+							break
+						}
+					}
+				}
+			}
+			for _, item := range unpriced {
+				if strings.HasSuffix(item, "(missing price or usage quantity)") || strings.HasSuffix(item, "(unsupported by infracost)") {
+					ee.Unknown = append(ee.Unknown, item)
+				}
+			}
 			types = resourceTypes
 		}
 	}
@@ -182,50 +337,6 @@ func runInfracost(bin, currency string, args ...string) ([]byte, error) {
 }
 
 func infracostVersion(bin string) (string, error) { return doctor.Version(bin) }
-
-// parseBreakdown extracts the totals from infracost's JSON output.
-func parseBreakdown(out []byte) (total float64, resources []ResourceCost, resourceTypes map[string]bool, unpriced []string, err error) {
-	var doc struct {
-		TotalMonthlyCost string `json:"totalMonthlyCost"`
-		Projects         []struct {
-			Breakdown struct {
-				Resources []struct {
-					Name         string  `json:"name"`
-					ResourceType string  `json:"resourceType"`
-					MonthlyCost  *string `json:"monthlyCost"`
-				} `json:"resources"`
-			} `json:"breakdown"`
-		} `json:"projects"`
-		Summary struct {
-			UnsupportedResourceCounts map[string]int `json:"unsupportedResourceCounts"`
-			NoPriceResourceCounts     map[string]int `json:"noPriceResourceCounts"`
-		} `json:"summary"`
-	}
-	if err := json.Unmarshal(out, &doc); err != nil {
-		return 0, nil, nil, nil, fmt.Errorf("parsing infracost JSON: %w", err)
-	}
-	total, _ = strconv.ParseFloat(doc.TotalMonthlyCost, 64)
-	resourceTypes = map[string]bool{}
-	for _, p := range doc.Projects {
-		for _, r := range p.Breakdown.Resources {
-			cost := 0.0
-			if r.MonthlyCost != nil {
-				cost, _ = strconv.ParseFloat(*r.MonthlyCost, 64)
-			}
-			resources = append(resources, ResourceCost{Address: r.Name, Monthly: cost})
-			resourceTypes[r.ResourceType] = true
-		}
-	}
-	sortResources(resources)
-	for t, n := range doc.Summary.UnsupportedResourceCounts {
-		unpriced = append(unpriced, fmt.Sprintf("%s ×%d (unsupported by infracost)", t, n))
-	}
-	for t, n := range doc.Summary.NoPriceResourceCounts {
-		unpriced = append(unpriced, fmt.Sprintf("%s ×%d (free / no price)", t, n))
-	}
-	sortStrings(unpriced)
-	return total, resources, resourceTypes, unpriced, nil
-}
 
 func resolveUsage(tier presets.Tier, cfg *config.Config) (map[string]float64, map[string]string) {
 	usage := map[string]float64{}
@@ -270,4 +381,17 @@ func sortResources(rs []ResourceCost) {
 
 func sortStrings(s []string) {
 	sort.Strings(s)
+}
+
+// Complete means every returned billable component has a price and quantity.
+func (r *Result) Complete() bool {
+	if len(r.Envs) == 0 {
+		return false
+	}
+	for _, e := range r.Envs {
+		if len(e.Unknown) > 0 {
+			return false
+		}
+	}
+	return true
 }

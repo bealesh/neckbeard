@@ -2,6 +2,7 @@ package estimate
 
 import (
 	"gopkg.in/yaml.v3"
+	"math"
 )
 
 // mapEntry ties one infracost usage key on a resource type to one of our named
@@ -14,7 +15,7 @@ import (
 //
 // Key names verified against infracost 0.10.45 sync output for AWS
 // (2026-09-08); GCP/Azure names follow infracost's documented usage schemas and
-// harmlessly no-op if a name drifts (the type simply never matches).
+// coverage validation reports missing component prices or quantities.
 type mapEntry struct {
 	Type   string
 	Path   []string // nested path within the type's usage block
@@ -37,6 +38,12 @@ var usageMap = []mapEntry{
 	{"aws_ecr_repository", []string{"storage_gb"}, "registry_storage_gb_fixed", 1},
 
 	// GCP
+	{"google_artifact_registry_repository", []string{"storage_gb"}, "registry_storage_gb", 1},
+	{"google_secret_manager_secret", []string{"active_secret_versions"}, "secret_versions", 1},
+	{"google_secret_manager_secret", []string{"monthly_access_operations"}, "secret_access_operations", 1},
+	{"google_secret_manager_secret", []string{"monthly_rotation_notifications"}, "rotation_notifications_fixed", 1},
+	{"google_cloud_run_v2_job", []string{"monthly_job_executions"}, "job_executions_per_month", 1},
+	{"google_cloud_run_v2_job", []string{"average_task_execution_mins"}, "job_duration_minutes", 1},
 	{"google_compute_router_nat", []string{"monthly_data_processed_gb"}, "nat_processed_gb", 1},
 	{"google_cloud_run_v2_service", []string{"monthly_requests"}, "requests_per_month", 1},
 	{"google_storage_bucket", []string{"storage_gb"}, "storage_growth_gb_month", 12},
@@ -52,7 +59,8 @@ var usageMap = []mapEntry{
 // fixedAssumptions are small constants that are not tier dimensions but keep
 // lines from silently reading as free.
 var fixedAssumptions = map[string]float64{
-	"registry_storage_gb_fixed": 10, // a handful of image versions resident
+	"registry_storage_gb_fixed":    10,
+	"rotation_notifications_fixed": 0, // a handful of image versions resident
 }
 
 // BuildUsageFile emits an infracost usage file using resource_type_default_usage,
@@ -80,7 +88,14 @@ func BuildUsageFile(usage map[string]float64, multiplier float64) ([]byte, error
 			}
 			cur = next
 		}
-		cur[e.Path[len(e.Path)-1]] = base * e.Factor * multiplier
+		if e.OurKey == "job_duration_minutes" {
+			base = math.Max(1, base)
+		}
+		factor := multiplier
+		if e.OurKey == "job_duration_minutes" || e.OurKey == "secret_versions" || e.OurKey == "registry_storage_gb" || e.OurKey == "registry_storage_gb_fixed" {
+			factor = 1
+		}
+		cur[e.Path[len(e.Path)-1]] = base * e.Factor * factor
 	}
 	return yaml.Marshal(map[string]any{
 		"version":                     "0.1",
