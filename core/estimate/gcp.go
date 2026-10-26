@@ -31,7 +31,7 @@ func correctGCP(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environment
 		}
 		var rules []*pricedResource
 		for _, r := range resources {
-			if strings.HasPrefix(r.Name, "module.dns_ingress.") && r.ResourceType == "google_compute_global_forwarding_rule" {
+			if isGCPIngressRule(r) {
 				rules = append(rules, r)
 			}
 		}
@@ -169,7 +169,13 @@ func correctGCP(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environment
 		d.Projects[0].Breakdown.Resources = append(d.Projects[0].Breakdown.Resources, &pricedResource{Name: "neckbeard.cloud_logging", ResourceType: "neckbeard_logging_usage", CostComponents: []*costComponent{{Name: "Log ingestion (free allowance excluded)", Unit: "GiB", Price: decimalString(rate), MonthlyQuantity: decimalString(q), MonthlyCost: decimalString(q * rate), UsageBased: true}}})
 	}
 	// Worker pools are absent from the pinned adapter's priceable resources.
-	count := d.Summary.UnsupportedResourceCounts["google_cloud_run_v2_worker_pool"] + d.Summary.NoPriceResourceCounts["google_cloud_run_v2_worker_pool"]
+	count := 0
+	for _, svc := range bp.Services {
+		if svc.Kind == "worker" {
+			count++
+		}
+	}
+	count = min(count, d.Summary.UnsupportedResourceCounts["google_cloud_run_v2_worker_pool"]+d.Summary.NoPriceResourceCounts["google_cloud_run_v2_worker_pool"])
 	if count > 0 && len(d.Projects) == 1 {
 		runtime := inputs["runtime-serverless"]
 		cpu, err := inputNumber(runtime, "cpu")
@@ -201,8 +207,7 @@ func correctGCP(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environment
 			r.CostComponents = append(r.CostComponents, &costComponent{Name: v.name, Price: decimalString(v.rate), MonthlyQuantity: decimalString(v.quantity), MonthlyCost: decimalString(v.rate * v.quantity)})
 		}
 		d.Projects[0].Breakdown.Resources = append(d.Projects[0].Breakdown.Resources, r)
-		delete(d.Summary.UnsupportedResourceCounts, "google_cloud_run_v2_worker_pool")
-		delete(d.Summary.NoPriceResourceCounts, "google_cloud_run_v2_worker_pool")
+		modeledInstances(d, "google_cloud_run_v2_worker_pool", count)
 		adjustments = append(adjustments, "Worker pools use the catalog's manual instance count and bill continuously, including the idle baseline.")
 	}
 	return adjustments, d.recalculate()

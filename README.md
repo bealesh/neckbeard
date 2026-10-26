@@ -109,24 +109,35 @@ or cloud validation integration. Existing outputs are refused unless you use
 neckbeard prices the infrastructure before scaffolding, with editable usage
 assumptions and a breakdown of idle, expected, and higher-usage scenarios.
 
-The GCP Umami trial now produces the same estimate from its effective Terraform
-and its saved authenticated plan:
+The reference application now has live-price checks across all six lanes.
+Unlike the withdrawn table, these totals include the always-on worker, explicit
+HTTP active hours and previously missed charges; the AWS baseline also includes
+VPC endpoints and $15/month of Container Insights metrics. The
+[postmortem](docs/findings/2026-10-22-cost-estimator-postmortem.md) explains the
+old undercounts and changed workload assumptions:
 
-| One development environment, USD/month | Idle baseline | Low | Expected | High |
-|---|---|---|---|---|
-| Umami on Cloud Run + private Postgres + HTTPS | $28.79 | $58.02 | $87.24 | $93.13 |
+| One development environment, USD/month | Idle baseline | Expected | High |
+|---|---|---|---|
+| AWS Fargate | $149.35 | $155.91 | $180.50 |
+| AWS EKS | $183.20 | $189.75 | $196.31 |
+| Azure Container Apps | $82.91 | $137.97 | $193.04 |
+| Azure AKS | $235.59 | $250.41 | $265.23 |
+| GCP Cloud Run | $61.69 | $120.66 | $179.63 |
+| GCP GKE | $126.47 | $132.85 | $139.22 |
 
-Expected assumes **730 active instance-hours**, 20 GiB internet transfer,
-2 GiB inbound load-balancer traffic, 5 GiB logs, 10 GiB registry storage,
-10 GiB backups, and the configured secrets. The single-instance maximum bounds
-compute in the high scenario. Free allowances, discounts and taxes are excluded;
-this is a conservative usage scenario, not a measured bill.
+October 26, 2026 pricing, solo tier, one HTTP service, one always-on worker,
+one daily job, Postgres and object storage. Each lane uses its own catalog
+sizes; these are not equal-capacity benchmarks or three-environment totals.
+Expected uses 730 active instance-hours per HTTP service, 20 GB internet
+transfer, 2 GB ingress, 5 GB logs and the minimum node count. Free allowances,
+discounts and taxes are excluded. These are usage scenarios, not measured bills.
 
-The [cost model reference](skills/neckbeard/references/cost-model.md) explains the calculations,
-regression tests, and remaining validation scope. The
-[postmortem](docs/findings/2026-10-22-cost-estimator-postmortem.md) records the
-original defects and withdrawn figures. Historical cross-cloud totals have been
-removed until the same numerical reconciliation is complete for each lane.
+The [reference matrix](docs/findings/2026-10-26-cost-model-matrix.md) records the
+full inputs, USD/EUR results and reproducible price-only checks. The
+[cost model](skills/neckbeard/references/cost-model.md) explains calculations,
+coverage and workload assumptions. The
+[postmortem](docs/findings/2026-10-22-cost-estimator-postmortem.md) preserves the
+original failures and withdrawn figures.
 
 ## What it will and won't claim
 

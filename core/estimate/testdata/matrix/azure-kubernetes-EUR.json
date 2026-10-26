@@ -1,0 +1,678 @@
+{
+  "Currency": "EUR",
+  "Blueprint": {
+    "Version": 0,
+    "Hash": "",
+    "GeneratedFrom": {
+      "NeckbeardYAML": "",
+      "AppProfile": "",
+      "EnvironmentManifest": ""
+    },
+    "Pins": {
+      "CatalogDigest": "",
+      "Catalog": "",
+      "OpenTofu": "",
+      "Planner": "",
+      "Providers": null
+    },
+    "App": "",
+    "Org": "",
+    "Cloud": "azure",
+    "Region": "eastus",
+    "Runtime": "kubernetes",
+    "VCS": "",
+    "Repo": "",
+    "Tier": "",
+    "Services": [
+      {
+        "Name": "nightly-report",
+        "Kind": "cron",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "0 3 * * *",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "report"
+        ]
+      },
+      {
+        "Name": "web",
+        "Kind": "http",
+        "Port": 4000,
+        "HealthPath": "/healthz",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "serve"
+        ]
+      },
+      {
+        "Name": "worker",
+        "Kind": "worker",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "work"
+        ]
+      }
+    ],
+    "Environments": null,
+    "References": null,
+    "DatabaseSecret": "",
+    "Decisions": null,
+    "Warnings": null
+  },
+  "Environment": {
+    "Name": "dev",
+    "Container": "",
+    "Modules": [
+      {
+        "Name": "budget",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "network",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "zones",
+            "Value": 1,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "postgres",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "multi_zone",
+            "Value": false,
+            "Provenance": ""
+          },
+          {
+            "Key": "read_replicas",
+            "Value": 0,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "registry",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "runtime-k8s",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "max_nodes",
+            "Value": 2,
+            "Provenance": ""
+          },
+          {
+            "Key": "min_nodes",
+            "Value": 1,
+            "Provenance": ""
+          },
+          {
+            "Key": "node_shape",
+            "Value": "small",
+            "Provenance": ""
+          },
+          {
+            "Key": "spot",
+            "Value": true,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "secrets",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "storage",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      }
+    ]
+  },
+  "Usage": {
+    "active_instance_hours": 730,
+    "additional_node_hours": 0,
+    "backup_gb": 10,
+    "cross_zone_gb": 0,
+    "custom_metrics": 50,
+    "egress_gb": 20,
+    "existing_global_forwarding_rules": 0,
+    "ingress_gb": 2,
+    "job_duration_minutes": 1,
+    "job_executions_per_month": 30,
+    "log_ingest_gb": 5,
+    "log_query_gb": 0,
+    "nat_processed_gb": 10,
+    "object_read_requests": 10000,
+    "object_write_requests": 1000,
+    "registry_storage_gb": 10,
+    "requests_per_month": 2000000,
+    "secret_access_operations": 1000,
+    "secret_versions": 1,
+    "storage_growth_gb_month": 2
+  },
+  "Native": {
+    "totalMonthlyCost": "240.18719508",
+    "projects": [
+      {
+        "breakdown": {
+          "resources": [
+            {
+              "name": "module.runtime_k8s.azurerm_kubernetes_cluster.this",
+              "resourceType": "azurerm_kubernetes_cluster",
+              "monthlyCost": "138.914766",
+              "costComponents": [
+                {
+                  "name": "Uptime SLA",
+                  "unit": "hours",
+                  "price": "0.08934",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "65.2182",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": [
+                {
+                  "name": "default_node_pool",
+                  "resourceType": "",
+                  "monthlyCost": "73.696566",
+                  "costComponents": [
+                    {
+                      "name": "Instance usage (Linux, pay as you go, Standard_D2as_v5)",
+                      "unit": "hours",
+                      "price": "0.0768324",
+                      "monthlyQuantity": "730",
+                      "monthlyCost": "56.087652",
+                      "usageBased": false,
+                      "priceNotFound": false
+                    }
+                  ],
+                  "subresources": [
+                    {
+                      "name": "os_disk",
+                      "resourceType": "",
+                      "monthlyCost": "17.608914",
+                      "costComponents": [
+                        {
+                          "name": "Storage (P10, LRS)",
+                          "unit": "months",
+                          "price": "17.608914",
+                          "monthlyQuantity": "1",
+                          "monthlyCost": "17.608914",
+                          "usageBased": false,
+                          "priceNotFound": false
+                        }
+                      ],
+                      "subresources": null
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "module.runtime_k8s.azurerm_kubernetes_cluster_node_pool.spot[0]",
+              "resourceType": "azurerm_kubernetes_cluster_node_pool",
+              "monthlyCost": "73.696566",
+              "costComponents": [
+                {
+                  "name": "Instance usage (Linux, pay as you go, Standard_D2as_v5)",
+                  "unit": "hours",
+                  "price": "0.0768324",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "56.087652",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": [
+                {
+                  "name": "os_disk",
+                  "resourceType": "",
+                  "monthlyCost": "17.608914",
+                  "costComponents": [
+                    {
+                      "name": "Storage (P10, LRS)",
+                      "unit": "months",
+                      "price": "17.608914",
+                      "monthlyQuantity": "1",
+                      "monthlyCost": "17.608914",
+                      "usageBased": false,
+                      "priceNotFound": false
+                    }
+                  ],
+                  "subresources": null
+                }
+              ]
+            },
+            {
+              "name": "module.postgres.azurerm_postgresql_flexible_server.this",
+              "resourceType": "azurerm_postgresql_flexible_server",
+              "monthlyCost": "11.935824",
+              "costComponents": [
+                {
+                  "name": "Compute (B_Standard_B1ms)",
+                  "unit": "hours",
+                  "price": "0.0151878",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "11.087094",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Storage",
+                  "unit": "GB",
+                  "price": "0",
+                  "monthlyQuantity": "32",
+                  "monthlyCost": "0",
+                  "usageBased": false,
+                  "priceNotFound": true
+                },
+                {
+                  "name": "Additional backup storage",
+                  "unit": "GB",
+                  "price": "0.084873",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.84873",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.runtime_k8s.azurerm_log_analytics_workspace.this",
+              "resourceType": "azurerm_log_analytics_workspace",
+              "monthlyCost": "10.2741",
+              "costComponents": [
+                {
+                  "name": "Log data ingestion",
+                  "unit": "GB",
+                  "price": "2.05482",
+                  "monthlyQuantity": "5",
+                  "monthlyCost": "10.2741",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Log data export",
+                  "unit": "GB",
+                  "price": "0.08934",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Basic log data ingestion",
+                  "unit": "GB",
+                  "price": "0.4467",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Basic log search queries",
+                  "unit": "GB searched",
+                  "price": "0.004467",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Archive data",
+                  "unit": "GB",
+                  "price": "0.017868",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Archive data restored",
+                  "unit": "GB",
+                  "price": "0.08934",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Archive data searched",
+                  "unit": "GB",
+                  "price": "0.004467",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.registry.azurerm_container_registry.this",
+              "resourceType": "azurerm_container_registry",
+              "monthlyCost": "4.4652132",
+              "costComponents": [
+                {
+                  "name": "Registry usage (Basic)",
+                  "unit": "days",
+                  "price": "0.14884044",
+                  "monthlyQuantity": "30",
+                  "monthlyCost": "4.4652132",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Build vCPU",
+                  "unit": "seconds",
+                  "price": "0.00008934",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.storage.azurerm_storage_account.data",
+              "resourceType": "azurerm_storage_account",
+              "monthlyCost": "0.45402588",
+              "costComponents": [
+                {
+                  "name": "Capacity (first 50TB)",
+                  "unit": "GB",
+                  "price": "0.01858272",
+                  "monthlyQuantity": "24",
+                  "monthlyCost": "0.44598528",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Write operations",
+                  "unit": "10k operations",
+                  "price": "0.04467",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.004467",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "List and create container operations",
+                  "unit": "10k operations",
+                  "price": "0.04467",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Read operations",
+                  "unit": "10k operations",
+                  "price": "0.0035736",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.0035736",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "All other operations",
+                  "unit": "10k operations",
+                  "price": "0.0035736",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Blob index",
+                  "unit": "10k tags",
+                  "price": "0.026802",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.network.azurerm_private_dns_zone.postgres",
+              "resourceType": "azurerm_private_dns_zone",
+              "monthlyCost": "0.4467",
+              "costComponents": [
+                {
+                  "name": "Hosted zone",
+                  "unit": "months",
+                  "price": "0.4467",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.4467",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.runtime_k8s.azurerm_federated_identity_credential.external_secrets",
+              "resourceType": "azurerm_federated_identity_credential",
+              "monthlyCost": null,
+              "costComponents": [
+                {
+                  "name": "Active users (P1)",
+                  "unit": "users",
+                  "price": "0.00290355",
+                  "monthlyQuantity": null,
+                  "monthlyCost": null,
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Active users (P2)",
+                  "unit": "users",
+                  "price": "0.01451775",
+                  "monthlyQuantity": null,
+                  "monthlyCost": null,
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            }
+          ]
+        }
+      }
+    ],
+    "summary": {
+      "unsupportedResourceCounts": {},
+      "noPriceResourceCounts": {
+        "azurerm_consumption_budget_resource_group": 1,
+        "azurerm_key_vault": 1,
+        "azurerm_postgresql_flexible_server_database": 1,
+        "azurerm_private_dns_zone_virtual_network_link": 1,
+        "azurerm_resource_group": 1,
+        "azurerm_role_assignment": 3,
+        "azurerm_storage_container": 1,
+        "azurerm_subnet": 2,
+        "azurerm_user_assigned_identity": 1,
+        "azurerm_virtual_network": 1
+      }
+    }
+  },
+  "Prices": [
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "Global",
+        "Service": "Load Balancer",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GB",
+        "Attributes": [
+          {
+            "Key": "meterName",
+            "Value": "Standard Data Processed",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.004467
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "Global",
+        "Service": "Load Balancer",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 Hour",
+        "Attributes": [
+          {
+            "Key": "meterName",
+            "Value": "Standard Included LB Rules and Outbound Rules",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.022335
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Azure Database for PostgreSQL",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GB/Month",
+        "Attributes": [
+          {
+            "Key": "productName",
+            "Value": "Azure Database for PostgreSQL Flex Server Storage",
+            "Regex": ""
+          },
+          {
+            "Key": "skuName",
+            "Value": "Storage",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Storage Data Stored",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.102741
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Bandwidth",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 GB",
+        "Attributes": [
+          {
+            "Key": "productName",
+            "Value": "Bandwidth - Routing Preference: Microsoft Global network",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard Data Transfer Out",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": true
+      },
+      "Rate": 0.0781725
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Virtual Machines",
+        "Family": "",
+        "PurchaseOption": "Spot",
+        "Unit": "1 Hour",
+        "Attributes": [
+          {
+            "Key": "armSkuName",
+            "Value": "Standard_D2as_v5",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "D2as v5 Spot",
+            "Regex": ""
+          },
+          {
+            "Key": "productName",
+            "Value": "Virtual Machines Dasv5 Series",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.016219677
+    },
+    {
+      "Query": {
+        "Vendor": "azure",
+        "Region": "eastus",
+        "Service": "Virtual Network",
+        "Family": "",
+        "PurchaseOption": "Consumption",
+        "Unit": "1 Hour",
+        "Attributes": [
+          {
+            "Key": "productName",
+            "Value": "IP Addresses",
+            "Regex": ""
+          },
+          {
+            "Key": "meterName",
+            "Value": "Standard IPv4 Static Public IP",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.004467
+    }
+  ],
+  "Totals": {
+    "baseline": 210.47713340999996,
+    "expected": 223.71571328999994,
+    "high": 236.95429317,
+    "low": 217.09642334999995
+  }
+}

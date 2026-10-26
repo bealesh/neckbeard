@@ -2,7 +2,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +21,18 @@ import (
 // Run the built distribution from unrelated app directories, never using a
 // source-checkout catalog flag. Pricing is stubbed; this is not a price/live test.
 func TestInstalledOnboarding(t *testing.T) {
+	pricing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		unit := "1 Hour"
+		if bytes.Contains(body, []byte("Bandwidth")) || bytes.Contains(body, []byte("Standard Data Processed")) {
+			unit = "1 GB"
+		}
+		_, _ = fmt.Fprintf(w, `{"data":{"products":[{"prices":[{"USD":"0.1","unit":%q}]}]}}`, unit)
+	}))
+	defer pricing.Close()
+	t.Setenv("INFRACOST_API_KEY", "onboarding-fixture")
+	t.Setenv("INFRACOST_PRICING_API_ENDPOINT", pricing.URL)
+
 	bin := filepath.Join(t.TempDir(), "neckbeard")
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
@@ -183,14 +199,18 @@ func TestInstalledOnboarding(t *testing.T) {
 				}
 			}
 			fake := filepath.Join(t.TempDir(), "infracost")
-			writeTest(t, fake, []byte(`#!/bin/sh
+			writeTest(t, fake, []byte(fmt.Sprintf(`#!/bin/sh
 if [ "$1" = --version ]; then echo 'Infracost v0.10.45'; exit 0; fi
 # Verify the estimator receives a self-contained scratch tree, not just env roots.
 [ "$1" = breakdown ] && [ "$2" = --path ] || exit 2
+project_path="$3"
 set -- "$3"/../../../.neckbeard/catalog/*/catalog/azure/runtime-k8s/main.tf
 [ -f "$1" ] || { echo 'bundled catalog missing from estimate scratch' >&2; exit 3; }
-echo '{"currency":"USD","totalMonthlyCost":"42","projects":[{"breakdown":{"resources":[{"name":"fixture","resourceType":"aws_db_instance","monthlyCost":"42","costComponents":[{"name":"compute","price":"42","monthlyQuantity":"1","monthlyCost":"42"}]}]}}],"summary":{}}'
-`))
+case "$project_path" in
+ */dev) echo '%s' ;;
+ *) echo '%s' ;;
+esac
+`, onboardingPriceFixture(true), onboardingPriceFixture(false))))
 			if err := os.Chmod(fake, 0755); err != nil {
 				t.Fatal(err)
 			}
@@ -207,4 +227,24 @@ func writeTest(t *testing.T, p string, data []byte) {
 	if err := os.WriteFile(p, data, 0644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// The final onboarding loop selects AKS. Keep the pricing stub structurally
+// faithful; the estimator now rejects a missing cluster or node pool.
+func onboardingPriceFixture(spot bool) string {
+	comp := func(name, q, p, cost string) map[string]any {
+		return map[string]any{"name": name, "monthlyQuantity": q, "price": p, "monthlyCost": cost}
+	}
+	pool := func(name, kind string) map[string]any {
+		return map[string]any{"name": name, "resourceType": kind, "costComponents": []any{comp("Instance usage (Linux)", "730", "0.086", "62.78")}, "subresources": []any{map[string]any{"name": "os_disk", "costComponents": []any{comp("Storage (P10)", "1", "19.71", "19.71")}}}}
+	}
+	cluster := map[string]any{"name": "module.runtime_k8s.azurerm_kubernetes_cluster.this", "resourceType": "azurerm_kubernetes_cluster", "costComponents": []any{comp("Control plane", "730", "0.1", "73")}, "subresources": []any{pool("default_node_pool", "")}}
+	resources := []any{cluster}
+	total := "155.49"
+	if spot {
+		resources = append(resources, pool("module.runtime_k8s.azurerm_kubernetes_cluster_node_pool.spot[0]", "azurerm_kubernetes_cluster_node_pool"))
+		total = "237.98"
+	}
+	out, _ := json.Marshal(map[string]any{"totalMonthlyCost": total, "projects": []any{map[string]any{"breakdown": map[string]any{"resources": resources}}}})
+	return string(out)
 }

@@ -1,0 +1,713 @@
+{
+  "Currency": "EUR",
+  "Blueprint": {
+    "Version": 0,
+    "Hash": "",
+    "GeneratedFrom": {
+      "NeckbeardYAML": "",
+      "AppProfile": "",
+      "EnvironmentManifest": ""
+    },
+    "Pins": {
+      "CatalogDigest": "",
+      "Catalog": "",
+      "OpenTofu": "",
+      "Planner": "",
+      "Providers": null
+    },
+    "App": "",
+    "Org": "",
+    "Cloud": "gcp",
+    "Region": "us-central1",
+    "Runtime": "kubernetes",
+    "VCS": "",
+    "Repo": "",
+    "Tier": "",
+    "Services": [
+      {
+        "Name": "nightly-report",
+        "Kind": "cron",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "0 3 * * *",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "report"
+        ]
+      },
+      {
+        "Name": "web",
+        "Kind": "http",
+        "Port": 4000,
+        "HealthPath": "/healthz",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "serve"
+        ]
+      },
+      {
+        "Name": "worker",
+        "Kind": "worker",
+        "Port": 0,
+        "HealthPath": "",
+        "Schedule": "",
+        "Dockerfile": "Dockerfile",
+        "Args": [
+          "work"
+        ]
+      }
+    ],
+    "Environments": null,
+    "References": null,
+    "DatabaseSecret": "",
+    "Decisions": null,
+    "Warnings": null
+  },
+  "Environment": {
+    "Name": "dev",
+    "Container": "",
+    "Modules": [
+      {
+        "Name": "budget",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "network",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "zones",
+            "Value": 1,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "postgres",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "multi_zone",
+            "Value": false,
+            "Provenance": ""
+          },
+          {
+            "Key": "read_replicas",
+            "Value": 0,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "registry",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "runtime-k8s",
+        "Source": "",
+        "Version": "",
+        "Inputs": [
+          {
+            "Key": "max_nodes",
+            "Value": 2,
+            "Provenance": ""
+          },
+          {
+            "Key": "min_nodes",
+            "Value": 1,
+            "Provenance": ""
+          },
+          {
+            "Key": "node_shape",
+            "Value": "small",
+            "Provenance": ""
+          },
+          {
+            "Key": "spot",
+            "Value": true,
+            "Provenance": ""
+          }
+        ]
+      },
+      {
+        "Name": "secrets",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      },
+      {
+        "Name": "storage",
+        "Source": "",
+        "Version": "",
+        "Inputs": []
+      }
+    ]
+  },
+  "Usage": {
+    "active_instance_hours": 730,
+    "additional_node_hours": 0,
+    "backup_gb": 10,
+    "cross_zone_gb": 0,
+    "custom_metrics": 50,
+    "egress_gb": 20,
+    "existing_global_forwarding_rules": 0,
+    "ingress_gb": 2,
+    "job_duration_minutes": 1,
+    "job_executions_per_month": 30,
+    "log_ingest_gb": 5,
+    "log_query_gb": 0,
+    "nat_processed_gb": 10,
+    "object_read_requests": 10000,
+    "object_write_requests": 1000,
+    "registry_storage_gb": 10,
+    "requests_per_month": 2000000,
+    "secret_access_operations": 1000,
+    "secret_versions": 1,
+    "storage_growth_gb_month": 2
+  },
+  "Native": {
+    "totalMonthlyCost": "225.976078228",
+    "projects": [
+      {
+        "breakdown": {
+          "resources": [
+            {
+              "name": "module.runtime_k8s.google_container_node_pool.default",
+              "resourceType": "google_container_node_pool",
+              "monthlyCost": "150.177341628",
+              "costComponents": [
+                {
+                  "name": "Instance usage (Linux/UNIX, preemptible, e2-medium)",
+                  "unit": "hours",
+                  "price": "0.0179627004",
+                  "monthlyQuantity": "6570",
+                  "monthlyCost": "118.014941628",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Standard provisioned storage (pd-standard)",
+                  "unit": "GB",
+                  "price": "0.035736",
+                  "monthlyQuantity": "900",
+                  "monthlyCost": "32.1624",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.runtime_k8s.google_container_cluster.this",
+              "resourceType": "google_container_cluster",
+              "monthlyCost": "65.2182",
+              "costComponents": [
+                {
+                  "name": "Cluster management fee",
+                  "unit": "hours",
+                  "price": "0.08934",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "65.2182",
+                  "usageBased": false,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.postgres.google_sql_database_instance.this",
+              "resourceType": "google_sql_database_instance",
+              "monthlyCost": "9.081411",
+              "costComponents": [
+                {
+                  "name": "SQL instance (db-f1-micro, zonal)",
+                  "unit": "hours",
+                  "price": "0.0093807",
+                  "monthlyQuantity": "730",
+                  "monthlyCost": "6.847911",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Storage (SSD, zonal)",
+                  "unit": "GB",
+                  "price": "0.151878",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "1.51878",
+                  "usageBased": false,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Backups",
+                  "unit": "GB",
+                  "price": "0.071472",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.71472",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.registry.google_artifact_registry_repository.this",
+              "resourceType": "google_artifact_registry_repository",
+              "monthlyCost": "0.8934",
+              "costComponents": [
+                {
+                  "name": "Storage",
+                  "unit": "GB",
+                  "price": "0.08934",
+                  "monthlyQuantity": "10",
+                  "monthlyCost": "0.8934",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.storage.google_storage_bucket.data",
+              "resourceType": "google_storage_bucket",
+              "monthlyCost": "0.436873",
+              "costComponents": [
+                {
+                  "name": "Storage (standard)",
+                  "unit": "GiB",
+                  "price": "0.017868",
+                  "monthlyQuantity": "24",
+                  "monthlyCost": "0.428832",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Object adds, bucket/object list (class A)",
+                  "unit": "10k operations",
+                  "price": "0.04467",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.004467",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Object gets, retrieve bucket/object metadata (class B)",
+                  "unit": "10k operations",
+                  "price": "0.003574",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.003574",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": [
+                {
+                  "name": "Network egress",
+                  "resourceType": "",
+                  "monthlyCost": "0",
+                  "costComponents": [
+                    {
+                      "name": "Data transfer in same continent",
+                      "unit": "GB",
+                      "price": "0.017868",
+                      "monthlyQuantity": "0",
+                      "monthlyCost": "0",
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Data transfer to worldwide excluding Asia, Australia (first 1TB)",
+                      "unit": "GB",
+                      "price": "0.107208",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Data transfer to Asia excluding China, but including Hong Kong (first 1TB)",
+                      "unit": "GB",
+                      "price": "0.107208",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Data transfer to China excluding Hong Kong (first 1TB)",
+                      "unit": "GB",
+                      "price": "0.205482",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": true,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Data transfer to Australia (first 1TB)",
+                      "unit": "GB",
+                      "price": "0.169746",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": true,
+                      "priceNotFound": false
+                    }
+                  ],
+                  "subresources": null
+                }
+              ]
+            },
+            {
+              "name": "module.secrets.google_secret_manager_secret.this[\"DATABASE_URL\"]",
+              "resourceType": "google_secret_manager_secret",
+              "monthlyCost": "0.0562842",
+              "costComponents": [
+                {
+                  "name": "Active secret versions",
+                  "unit": "versions",
+                  "price": "0.053604",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.053604",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Access operations",
+                  "unit": "10K requests",
+                  "price": "0.026802",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.0026802",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Rotation notifications",
+                  "unit": "rotations",
+                  "price": "0.04467",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.secrets.google_secret_manager_secret.this[\"SECRET_KEY_BASE\"]",
+              "resourceType": "google_secret_manager_secret",
+              "monthlyCost": "0.0562842",
+              "costComponents": [
+                {
+                  "name": "Active secret versions",
+                  "unit": "versions",
+                  "price": "0.053604",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.053604",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Access operations",
+                  "unit": "10K requests",
+                  "price": "0.026802",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.0026802",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Rotation notifications",
+                  "unit": "rotations",
+                  "price": "0.04467",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.secrets.google_secret_manager_secret.this[\"SMTP_PASSWORD\"]",
+              "resourceType": "google_secret_manager_secret",
+              "monthlyCost": "0.0562842",
+              "costComponents": [
+                {
+                  "name": "Active secret versions",
+                  "unit": "versions",
+                  "price": "0.053604",
+                  "monthlyQuantity": "1",
+                  "monthlyCost": "0.053604",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Access operations",
+                  "unit": "10K requests",
+                  "price": "0.026802",
+                  "monthlyQuantity": "0.1",
+                  "monthlyCost": "0.0026802",
+                  "usageBased": true,
+                  "priceNotFound": false
+                },
+                {
+                  "name": "Rotation notifications",
+                  "unit": "rotations",
+                  "price": "0.04467",
+                  "monthlyQuantity": "0",
+                  "monthlyCost": "0",
+                  "usageBased": true,
+                  "priceNotFound": false
+                }
+              ],
+              "subresources": null
+            },
+            {
+              "name": "module.network.google_service_networking_connection.psa",
+              "resourceType": "google_service_networking_connection",
+              "monthlyCost": null,
+              "costComponents": null,
+              "subresources": [
+                {
+                  "name": "Network egress",
+                  "resourceType": "",
+                  "monthlyCost": null,
+                  "costComponents": [
+                    {
+                      "name": "Traffic within the same region",
+                      "unit": "GB",
+                      "price": "0.017868",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": false,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Traffic within the US or Canada",
+                      "unit": "GB",
+                      "price": "0.017868",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": false,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Traffic within Europe",
+                      "unit": "GB",
+                      "price": "0.017868",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": false,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Traffic within Asia",
+                      "unit": "GB",
+                      "price": "0.071472",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": false,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Traffic within South America",
+                      "unit": "GB",
+                      "price": "0.125076",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": false,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Traffic to/from Indonesia and Oceania",
+                      "unit": "GB",
+                      "price": "0.08934",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": false,
+                      "priceNotFound": false
+                    },
+                    {
+                      "name": "Traffic between continents (excludes Oceania)",
+                      "unit": "GB",
+                      "price": "0.071472",
+                      "monthlyQuantity": null,
+                      "monthlyCost": null,
+                      "usageBased": false,
+                      "priceNotFound": false
+                    }
+                  ],
+                  "subresources": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "summary": {
+      "unsupportedResourceCounts": {
+        "google_billing_budget": 1
+      },
+      "noPriceResourceCounts": {
+        "google_compute_firewall": 1,
+        "google_compute_global_address": 1,
+        "google_compute_network": 1,
+        "google_compute_subnetwork": 1,
+        "google_monitoring_notification_channel": 1,
+        "google_project_iam_member": 4,
+        "google_secret_manager_secret_iam_member": 3,
+        "google_service_account": 2,
+        "google_service_account_iam_member": 1,
+        "google_sql_database": 1,
+        "google_sql_user": 1
+      }
+    }
+  },
+  "Prices": [
+    {
+      "Query": {
+        "Vendor": "gcp",
+        "Region": "global",
+        "Service": "Cloud Logging",
+        "Family": "",
+        "PurchaseOption": "",
+        "Unit": "",
+        "Attributes": [
+          {
+            "Key": "description",
+            "Value": "",
+            "Regex": "/^Log Volume$/i"
+          }
+        ],
+        "HighestTier": true
+      },
+      "Rate": 0.4467
+    },
+    {
+      "Query": {
+        "Vendor": "gcp",
+        "Region": "global",
+        "Service": "Compute Engine",
+        "Family": "",
+        "PurchaseOption": "",
+        "Unit": "",
+        "Attributes": [
+          {
+            "Key": "description",
+            "Value": "",
+            "Regex": "/^HTTP Load Balancing: Global Forwarding Rule Additional Service Charge$/i"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.008934
+    },
+    {
+      "Query": {
+        "Vendor": "gcp",
+        "Region": "global",
+        "Service": "Compute Engine",
+        "Family": "",
+        "PurchaseOption": "",
+        "Unit": "",
+        "Attributes": [
+          {
+            "Key": "description",
+            "Value": "",
+            "Regex": "/^HTTP Load Balancing: Global Forwarding Rule Minimum Service Charge$/i"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.022335
+    },
+    {
+      "Query": {
+        "Vendor": "gcp",
+        "Region": "us-central1",
+        "Service": "Compute Engine",
+        "Family": "",
+        "PurchaseOption": "",
+        "Unit": "",
+        "Attributes": [
+          {
+            "Key": "description",
+            "Value": "",
+            "Regex": "/^Network Internet Data Transfer Out from Americas to Americas$/i"
+          }
+        ],
+        "HighestTier": true
+      },
+      "Rate": 0.107208
+    },
+    {
+      "Query": {
+        "Vendor": "gcp",
+        "Region": "us-central1",
+        "Service": "Compute Engine",
+        "Family": "",
+        "PurchaseOption": "",
+        "Unit": "gibibyte month",
+        "Attributes": [
+          {
+            "Key": "description",
+            "Value": "Balanced PD Capacity",
+            "Regex": ""
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.08934
+    },
+    {
+      "Query": {
+        "Vendor": "gcp",
+        "Region": "us-central1",
+        "Service": "Networking",
+        "Family": "",
+        "PurchaseOption": "",
+        "Unit": "",
+        "Attributes": [
+          {
+            "Key": "description",
+            "Value": "",
+            "Regex": "/^Global External Application Load Balancer Inbound Data Processing for /i"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.0071472
+    },
+    {
+      "Query": {
+        "Vendor": "gcp",
+        "Region": "us-central1",
+        "Service": "Networking",
+        "Family": "",
+        "PurchaseOption": "",
+        "Unit": "",
+        "Attributes": [
+          {
+            "Key": "description",
+            "Value": "",
+            "Regex": "/^Global External Application Load Balancer Outbound Data Processing for /i"
+          }
+        ],
+        "HighestTier": false
+      },
+      "Rate": 0.0071472
+    }
+  ],
+  "Totals": {
+    "baseline": 112.99042429200003,
+    "expected": 118.684956292,
+    "high": 124.37948829199998,
+    "low": 115.83769029199999
+  }
+}

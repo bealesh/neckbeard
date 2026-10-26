@@ -66,6 +66,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "custom_metrics": { "type": "number", "minimum": 0 },
+            "additional_node_hours": { "type": "number", "minimum": 0 },
+            "object_write_requests": { "type": "number", "minimum": 0 },
+            "object_read_requests": { "type": "number", "minimum": 0 },
+            "log_query_gb": { "type": "number", "minimum": 0 },
             "active_instance_hours": { "type": "number", "minimum": 0 },
             "ingress_gb": { "type": "number", "minimum": 0 },
             "registry_storage_gb": { "type": "number", "minimum": 0 },

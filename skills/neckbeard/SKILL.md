@@ -144,3 +144,12 @@ eating same-named recreations, orphaned resources needing import-or-fail
 reconciliation, regional capability holes) live there with recoveries. New
 failures deserve the same treatment: capture what happened and why before
 working around it.
+
+Cost model v3 covers AWS/Azure/GCP serverless and Kubernetes. Before presenting
+an estimate, review `active_instance_hours` (per HTTP service), job executions
+and duration, and `additional_node_hours` (aggregate hours above minimum nodes).
+Workers and minimum nodes remain billable at idle. Check log queries, object
+operations, custom metric series and explicit unused-feature assumptions in the
+report. Unused inputs for another runtime add no charge; missing billable
+components make coverage partial. See the
+[cost model](references/cost-model.md) and distinguish pricing evidence from deployed billing.

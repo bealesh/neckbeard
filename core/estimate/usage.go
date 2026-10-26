@@ -1,8 +1,9 @@
 package estimate
 
 import (
-	"gopkg.in/yaml.v3"
 	"math"
+
+	"gopkg.in/yaml.v3"
 )
 
 // mapEntry ties one infracost usage key on a resource type to one of our named
@@ -35,7 +36,7 @@ var usageMap = []mapEntry{
 	// Steady-state volume after a year of growth.
 	{"aws_s3_bucket", []string{"standard", "storage_gb"}, "storage_growth_gb_month", 12},
 	{"aws_lb", []string{"processed_bytes_gb"}, "egress_gb", 1},
-	{"aws_ecr_repository", []string{"storage_gb"}, "registry_storage_gb_fixed", 1},
+	{"aws_ecr_repository", []string{"storage_gb"}, "registry_storage_gb", 1},
 
 	// GCP
 	{"google_artifact_registry_repository", []string{"storage_gb"}, "registry_storage_gb", 1},
@@ -51,15 +52,46 @@ var usageMap = []mapEntry{
 
 	// Azure
 	{"azurerm_postgresql_flexible_server", []string{"additional_backup_storage_gb"}, "backup_gb", 1},
-	{"azurerm_storage_account", []string{"capacity_gb"}, "storage_growth_gb_month", 12},
+	{"azurerm_storage_account", []string{"storage_gb"}, "storage_growth_gb_month", 12},
 	{"azurerm_nat_gateway", []string{"monthly_data_processed_gb"}, "nat_processed_gb", 1},
 	{"azurerm_log_analytics_workspace", []string{"monthly_log_data_ingestion_gb"}, "log_ingest_gb", 1},
+	{"aws_secretsmanager_secret", []string{"monthly_requests"}, "secret_access_operations", 1},
+	{"aws_cloudwatch_log_group", []string{"monthly_data_scanned_gb"}, "log_query_gb", 1},
+	{"aws_s3_bucket", []string{"standard", "monthly_tier_1_requests"}, "object_write_requests", 1},
+	{"aws_s3_bucket", []string{"standard", "monthly_tier_2_requests"}, "object_read_requests", 1},
+	{"aws_s3_bucket", []string{"standard", "monthly_select_data_scanned_gb"}, "unused_catalog_features", 1},
+	{"aws_s3_bucket", []string{"standard", "monthly_select_data_returned_gb"}, "unused_catalog_features", 1},
+	{"aws_wafv2_web_acl", []string{"monthly_requests"}, "requests_per_month", 1},
+	{"azurerm_container_registry", []string{"storage_gb"}, "registry_storage_gb", 1},
+	{"azurerm_container_registry", []string{"monthly_build_vcpu_hrs"}, "unused_catalog_features", 1},
+	{"azurerm_storage_account", []string{"monthly_write_operations"}, "object_write_requests", 1},
+	{"azurerm_storage_account", []string{"monthly_read_operations"}, "object_read_requests", 1},
+	{"azurerm_storage_account", []string{"monthly_list_and_create_container_operations"}, "unused_catalog_features", 1},
+	{"azurerm_storage_account", []string{"monthly_other_operations"}, "unused_catalog_features", 1},
+	{"azurerm_storage_account", []string{"blob_index_tags"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_log_data_export_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_basic_log_data_ingestion_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_basic_log_search_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_archive_data_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_archive_data_restored_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_archive_data_searched_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_archived_data_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_archived_data_restored_gb"}, "unused_catalog_features", 1},
+	{"azurerm_log_analytics_workspace", []string{"monthly_archived_data_searched_gb"}, "unused_catalog_features", 1},
+
+	{"google_storage_bucket", []string{"monthly_class_a_operations"}, "object_write_requests", 1},
+	{"google_storage_bucket", []string{"monthly_class_b_operations"}, "object_read_requests", 1},
+	{"google_storage_bucket", []string{"monthly_egress_data_transfer_gb", "same_continent"}, "unused_catalog_features", 1},
+	{"google_storage_bucket", []string{"monthly_egress_data_transfer_gb", "worldwide"}, "unused_catalog_features", 1},
+	{"google_storage_bucket", []string{"monthly_egress_data_transfer_gb", "asia"}, "unused_catalog_features", 1},
+	{"google_storage_bucket", []string{"monthly_egress_data_transfer_gb", "china"}, "unused_catalog_features", 1},
+	{"google_storage_bucket", []string{"monthly_egress_data_transfer_gb", "australia"}, "unused_catalog_features", 1},
 }
 
 // fixedAssumptions are small constants that are not tier dimensions but keep
 // lines from silently reading as free.
 var fixedAssumptions = map[string]float64{
-	"registry_storage_gb_fixed":    10,
+	"unused_catalog_features":      0,
 	"rotation_notifications_fixed": 0, // a handful of image versions resident
 }
 

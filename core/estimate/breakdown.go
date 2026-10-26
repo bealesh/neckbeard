@@ -163,8 +163,20 @@ func parseBreakdown(out []byte) (total float64, resources []ResourceCost, resour
 	// These resources have no separate charge in the upstream model; do not call
 	// the whole service free merely because its control-plane object is unpriced.
 	for name, n := range doc.Summary.NoPriceResourceCounts {
-		unpriced = append(unpriced, fmt.Sprintf("%s ×%d (no separate modeled charge)", name, n))
+		if billableResource(name) {
+			unpriced = append(unpriced, fmt.Sprintf("%s ×%d (missing price or usage quantity)", name, n))
+		} else {
+			unpriced = append(unpriced, fmt.Sprintf("%s ×%d (no separate modeled charge)", name, n))
+		}
 	}
 	sortStrings(unpriced)
 	return total, resources, resourceTypes, unpriced, nil
+}
+
+func billableResource(kind string) bool {
+	switch kind {
+	case "azurerm_postgresql_flexible_server", "azurerm_container_app", "azurerm_container_app_job", "azurerm_container_app_environment", "azurerm_kubernetes_cluster", "azurerm_kubernetes_cluster_node_pool", "aws_ecs_service", "aws_eks_node_group", "google_cloud_run_v2_service", "google_cloud_run_v2_job", "google_cloud_run_v2_worker_pool", "google_container_cluster", "google_container_node_pool":
+		return true
+	}
+	return false
 }

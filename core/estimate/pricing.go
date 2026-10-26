@@ -18,7 +18,7 @@ type rateLookup func(region, service, description string) (float64, error)
 
 // Reuse the configured pricing service and credentials. Keys never enter command
 // arguments, reports, fixtures or diagnostics. This is price lookup, not cloud auth.
-func pricingLookup(bin, currency string) (rateLookup, error) {
+func pricingLookup(bin, currency string) (productLookup, error) {
 	if !regexp.MustCompile(`^[A-Z]{3}$`).MatchString(currency) {
 		return nil, fmt.Errorf("invalid pricing currency")
 	}
@@ -53,17 +53,55 @@ func pricingLookup(bin, currency string) (rateLookup, error) {
 		return nil, fmt.Errorf("pricing endpoint must use HTTPS (or localhost HTTP)")
 	}
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return newRateLookup(client, endpoint, key, currency), nil
+	return newProductLookup(client, endpoint, key, currency), nil
+}
+
+type priceAttribute struct{ Key, Value, Regex string }
+type priceQuery struct {
+	Vendor, Region, Service, Family, PurchaseOption, Unit string
+	Attributes                                            []priceAttribute
+	HighestTier                                           bool
+}
+type productLookup func(priceQuery) (float64, error)
+
+func gcpRateLookup(products productLookup) rateLookup {
+	return func(region, service, description string) (float64, error) {
+		return products(priceQuery{Vendor: "gcp", Region: region, Service: service, Attributes: []priceAttribute{{Key: "description", Regex: description}}, HighestTier: strings.Contains(description, "Network Internet Data Transfer Out") || description == "/^Log Volume$/i"})
+	}
 }
 
 func newRateLookup(client *http.Client, endpoint, key, currency string) rateLookup {
+	return gcpRateLookup(newProductLookup(client, endpoint, key, currency))
+}
+
+func newProductLookup(client *http.Client, endpoint, key, currency string) productLookup {
 	cache := map[string]float64{}
-	return func(region, service, description string) (float64, error) {
-		id := region + "\x00" + service + "\x00" + description
+	return func(q priceQuery) (float64, error) {
+		filters := []string{fmt.Sprintf("vendorName:%q", q.Vendor), fmt.Sprintf("service:%q", q.Service)}
+		if q.Region != "" {
+			filters = append(filters, fmt.Sprintf("region:%q", q.Region))
+		}
+		if q.Family != "" {
+			filters = append(filters, fmt.Sprintf("productFamily:%q", q.Family))
+		}
+		attrs := []string{}
+		for _, a := range q.Attributes {
+			if a.Regex != "" {
+				attrs = append(attrs, fmt.Sprintf("{key:%q,value_regex:%q}", a.Key, a.Regex))
+			} else {
+				attrs = append(attrs, fmt.Sprintf("{key:%q,value:%q}", a.Key, a.Value))
+			}
+		}
+		filters = append(filters, "attributeFilters:["+strings.Join(attrs, ",")+"]")
+		prices := "prices"
+		if q.PurchaseOption != "" {
+			prices += fmt.Sprintf("(filter:{purchaseOption:%q})", q.PurchaseOption)
+		}
+		query := fmt.Sprintf("{products(filter:{%s}){%s{%s unit}}}", strings.Join(filters, ","), prices, currency)
+		id := fmt.Sprintf("%s|%s|%t", query, q.Unit, q.HighestTier)
 		if p, ok := cache[id]; ok {
 			return p, nil
 		}
-		query := fmt.Sprintf(`{products(filter:{vendorName:"gcp",region:%q,service:%q,attributeFilters:[{key:"description",value_regex:%q}]}){prices{%s}}}`, region, service, description, currency)
 		body, _ := json.Marshal(map[string]string{"query": query})
 		req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
@@ -73,7 +111,7 @@ func newRateLookup(client *http.Client, endpoint, key, currency string) rateLook
 		req.Header.Set("X-Api-Key", key)
 		response, err := client.Do(req)
 		if err != nil {
-			return 0, fmt.Errorf("pricing API unavailable for %s", description)
+			return 0, fmt.Errorf("pricing API unavailable for %s %s", q.Vendor, q.Service)
 		}
 		defer response.Body.Close()
 		if response.StatusCode != http.StatusOK {
@@ -88,18 +126,24 @@ func newRateLookup(client *http.Client, endpoint, key, currency string) rateLook
 			Errors []json.RawMessage `json:"errors"`
 		}
 		if err = json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&result); err != nil || len(result.Errors) > 0 {
-			return 0, fmt.Errorf("invalid pricing API response for %s", description)
+			return 0, fmt.Errorf("invalid pricing API response for %s %s", q.Vendor, q.Service)
+		}
+		if q.HighestTier && len(result.Data.Products) > 1 {
+			return 0, fmt.Errorf("ambiguous products for %s %s", q.Vendor, q.Service)
 		}
 		found := false
 		var price float64
 		for _, product := range result.Data.Products {
 			for _, rates := range product.Prices {
+				if q.Unit != "" && rates["unit"] != q.Unit {
+					return 0, fmt.Errorf("unexpected price unit for %s %s: got %q, need %q", q.Vendor, q.Service, rates["unit"], q.Unit)
+				}
 				v, e := number(rates[currency], "unit price")
 				if e != nil {
 					return 0, e
 				}
-				if found && price != v && !strings.Contains(description, "Network Internet Data Transfer Out") && description != "/^Log Volume$/i" {
-					return 0, fmt.Errorf("ambiguous unit price for %s", description)
+				if found && price != v && !q.HighestTier {
+					return 0, fmt.Errorf("ambiguous unit price for %s %s", q.Vendor, q.Service)
 				}
 				if !found || v > price {
 					price = v
@@ -108,7 +152,7 @@ func newRateLookup(client *http.Client, endpoint, key, currency string) rateLook
 			}
 		}
 		if !found {
-			return 0, fmt.Errorf("no unit price for %s in %s", description, currency)
+			return 0, fmt.Errorf("no unit price for %s %s in %s (%v)", q.Vendor, q.Service, currency, q.Attributes)
 		}
 		cache[id] = price
 		return price, nil

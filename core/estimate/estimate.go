@@ -141,12 +141,9 @@ func Run(opts Options) (*Result, error) {
 		}
 	}
 	res := &Result{Usage: usage, UsageSource: usageSource, InfracostVersion: version, Currency: currencyOr(opts.Config), InputDigest: inputDigest(opts.Blueprint.Hash, inputs), Scope: "blueprint", Source: "effective HCL"}
-	var lookup rateLookup
-	if opts.Blueprint.Cloud == "gcp" {
-		lookup, err = pricingLookup(binPath, res.Currency)
-		if err != nil {
-			return nil, err
-		}
+	lookup, err := pricingLookup(binPath, res.Currency)
+	if err != nil {
+		return nil, err
 	}
 	if opts.PlanPath != "" {
 		res.Source = "authenticated plan JSON"
@@ -173,18 +170,8 @@ func Run(opts Options) (*Result, error) {
 		envDir := filepath.Join(scratch, "infra", "envs", env.Name)
 		if opts.PlanPath != "" {
 			envDir = opts.PlanPath
-			if opts.Blueprint.Cloud == "gcp" {
-				expectedHTTP := 0
-				if opts.Blueprint.Runtime == "serverless-containers" {
-					for _, svc := range opts.Blueprint.Services {
-						if svc.Kind == "http" {
-							expectedHTTP++
-						}
-					}
-				}
-				if err := validateGCPPlan(inputs["authenticated-plan.json"], env, expectedHTTP); err != nil {
-					return nil, err
-				}
+			if err := validateCostPlan(inputs["authenticated-plan.json"], opts.Blueprint, env); err != nil {
+				return nil, err
 			}
 		}
 		project := env.Container
@@ -219,6 +206,37 @@ func Run(opts Options) (*Result, error) {
 				}
 			}
 		}
+		if opts.Blueprint.Runtime == "kubernetes" {
+			mapped["additional_node_hours"] = true
+		}
+		if opts.Blueprint.Runtime == "serverless-containers" {
+			for _, svc := range opts.Blueprint.Services {
+				if svc.Kind == "http" {
+					mapped["active_instance_hours"] = true
+				}
+				if svc.Kind == "cron" {
+					mapped["job_executions_per_month"] = true
+					mapped["job_duration_minutes"] = true
+				}
+			}
+		}
+		mapped["egress_gb"] = true
+		mapped["ingress_gb"] = true
+		mapped["cross_zone_gb"] = true
+		if opts.Blueprint.Cloud == "aws" {
+			mapped["log_ingest_gb"] = true
+			mapped["log_query_gb"] = true
+			if opts.Blueprint.Runtime == "serverless-containers" {
+				mapped["custom_metrics"] = true
+			}
+		}
+		if opts.Blueprint.Cloud == "azure" || opts.Blueprint.Cloud == "aws" {
+			for _, svc := range opts.Blueprint.Services {
+				if svc.Kind == "http" {
+					mapped["requests_per_month"] = true
+				}
+			}
+		}
 		for k := range AppliedUsage(types) {
 			mapped[k] = true
 		}
@@ -236,7 +254,7 @@ func Run(opts Options) (*Result, error) {
 	return res, nil
 }
 
-func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blueprint.Blueprint, currency string, usage map[string]float64, lookup rateLookup) (*EnvEstimate, map[string]bool, error) {
+func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blueprint.Blueprint, currency string, usage map[string]float64, lookup productLookup) (*EnvEstimate, map[string]bool, error) {
 	usageFile := filepath.Join(scratch, "usage-"+env.Name+".yml")
 	ee := &EnvEstimate{Env: env.Name, Costs: map[string]float64{}}
 	types := map[string]bool{}
@@ -253,12 +271,16 @@ func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blu
 			return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
 		}
 		var adjustments []string
-		if bp.Cloud == "gcp" {
+		{
 			var doc breakdown
 			if err = json.Unmarshal(out, &doc); err != nil {
 				return nil, nil, fmt.Errorf("invalid pricing output: %w", err)
 			}
 			if _, err = number(doc.TotalMonthlyCost, "total monthly cost"); err != nil {
+				return nil, nil, err
+			}
+			adjustments, err = correctCloud(&doc, bp, env, usage, sc.Multiplier, lookup)
+			if err != nil {
 				return nil, nil, err
 			}
 			if sc.Name == "expected" {
@@ -267,15 +289,11 @@ func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blu
 						if r == nil {
 							return nil, nil, fmt.Errorf("null resource in pricing output")
 						}
-						if r.ResourceType == "google_compute_global_forwarding_rule" && strings.HasPrefix(r.Name, "module.dns_ingress.") {
+						if isGCPIngressRule(r) {
 							ee.forwardingRules++
 						}
 					}
 				}
-			}
-			adjustments, err = correctGCP(&doc, bp, env, usage, sc.Multiplier, lookup)
-			if err != nil {
-				return nil, nil, err
 			}
 			out, err = json.Marshal(doc)
 			if err != nil {
@@ -291,21 +309,6 @@ func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blu
 			ee.Resources = resources
 			ee.Unpriced = unpriced
 			ee.Adjustments = adjustments
-			if bp.Cloud == "aws" || bp.Cloud == "azure" {
-				if usage["egress_gb"] > 0 {
-					ee.Unknown = append(ee.Unknown, "Internet transfer is not covered by the load-balancer/storage usage mapping")
-					ee.Unpriced = append(ee.Unpriced, "Internet transfer (missing price or usage quantity)")
-				}
-				if bp.Runtime == "serverless-containers" {
-					for _, svc := range bp.Services {
-						if svc.Kind == "cron" {
-							ee.Unknown = append(ee.Unknown, "Scheduled execution compute requires a separate model for this cloud")
-							ee.Unpriced = append(ee.Unpriced, "Scheduled execution compute (missing price or usage quantity)")
-							break
-						}
-					}
-				}
-			}
 			for _, item := range unpriced {
 				if strings.HasSuffix(item, "(missing price or usage quantity)") || strings.HasSuffix(item, "(unsupported by infracost)") {
 					ee.Unknown = append(ee.Unknown, item)
