@@ -26,11 +26,39 @@ HTTP services need a port and health_path; scheduled jobs need a five-field cron
 Leave `command` absent to inherit the image's CMD and ENTRYPOINT. A nonempty
 `command` replaces CMD arguments, not ENTRYPOINT. Empty command also inherits.
 
+## Check build context and persistent data first
+
+A Dockerfile is evidence of a container, not proof the app fits the catalog.
+Read its `COPY`, `WORKDIR`, `ENTRYPOINT`, `CMD`, `HEALTHCHECK`, and any Compose
+build/volume declarations before asking cloud questions:
+
+- Generated pipelines build from the repository root. A nested Dockerfile may
+  expect its own directory as context; `-f engine/Dockerfile .` does not change
+  that context. Use the intended application root or stop and name the mismatch.
+- Confirm which HTTP listener and readiness endpoint belong together. The first
+  `EXPOSE` and a health-path literal elsewhere in the tree can refer to different
+  listeners; neither proves the generated probe will work.
+- Ask what must survive restart, replacement, and scaling. The catalog does not
+  model application-owned persistent filesystem mounts. A named volume or data
+  directory used by a search engine/database is a workload boundary, not a
+  request for managed Postgres or an object-storage bucket. Stop onboarding that
+  service and explain the missing storage/recovery contract. Do not mark its own
+  data as an `external` dependency or treat the directory as disposable merely
+  to make planning pass. A separate supported app can reference an independently
+  operated service; that does not deploy or validate the service itself.
+
+The [Xerj trial](https://github.com/bealesh/neckbeard/blob/main/docs/findings/2026-10-21-xerj-onboarding.md)
+is a concrete example of why these checks precede infrastructure generation.
+
 ## Resolve a draft before planning
 
 Every `assumptions` entry must have a `confirmed` answer with the **same id**.
 Correct the actual services/needs as well: an answer is evidence, not executable
-configuration. Never invent a confirmation on the user's behalf.
+configuration. Never invent a confirmation on the user's behalf. Follow each
+datastore's cited evidence into its enclosing code: a test fixture, comparison
+script, or variable such as `BUCKET_COUNT` is not a production dependency.
+Remove disproved needs and their associated assumptions, and record why in the
+findings; confirm dependencies only when application configuration supports them.
 
 **Needs can be missing entirely — review datastores as a first-class step.**
 Deterministic detection only sees direct environment reads, quoted
