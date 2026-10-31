@@ -240,6 +240,67 @@ func TestTypedEnvWrapperAndTemplateDetection(t *testing.T) {
 	}
 }
 
+// The idiomatic environment reads of each launch language must be seen: a
+// missed read silently drops the datastore need and the secret name.
+func TestIdiomaticEnvReadsAreDetected(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, src string
+	}{
+		{"python os.getenv", "settings.py", `REDIS = os.getenv("REDIS_URL")` + "\n" + `KEY = os.getenv( 'STRIPE_API_KEY', '')`},
+		{"ruby ENV.fetch", "config.rb", `redis = ENV.fetch("REDIS_URL") { "redis://localhost" }` + "\n" + `key = ENV.fetch 'STRIPE_API_KEY'`},
+		{"elixir System.fetch_env!", "runtime.exs", `redis: System.fetch_env!("REDIS_URL")` + "\n" + `{:ok, key} = System.fetch_env("STRIPE_API_KEY")`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
+			writeFile(t, dir, tc.file, tc.src)
+			res, err := Dir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			foundRedis := false
+			for _, n := range res.Profile.Needs {
+				if n.Capability == "redis" {
+					foundRedis = true
+					if len(n.Evidence) == 0 || n.Evidence[0].File != tc.file || n.Evidence[0].Line != 1 {
+						t.Errorf("redis need must cite %s:1, got %+v", tc.file, n.Evidence)
+					}
+				}
+			}
+			if !foundRedis {
+				t.Error("REDIS_URL read must surface as an undecided redis need")
+			}
+			secrets := map[string]bool{}
+			for _, s := range res.Profile.Secrets {
+				secrets[s.Name] = true
+			}
+			for _, want := range []string{"REDIS_URL", "STRIPE_API_KEY"} {
+				if !secrets[want] {
+					t.Errorf("%s must surface as a secret name, got %v", want, res.Profile.Secrets)
+				}
+			}
+		})
+	}
+}
+
+// A mixed-case name is not an environment-variable literal the analyzer claims
+// to understand; it must not be truncated into an uppercase prefix.
+func TestEnvReadOfMixedCaseNameIsNotTruncated(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
+	writeFile(t, dir, "settings.py", `x = os.getenv("API_Token")`)
+	writeFile(t, dir, "config.rb", `x = ENV.fetch("API_Token")`)
+	res, err := Dir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range res.Profile.Facts {
+		if strings.HasPrefix(f.ID, "env-") {
+			t.Errorf("mixed-case name must not yield a truncated env fact, got %+v", f)
+		}
+	}
+}
+
 func TestDatabaseURLLiteralBecomesInferenceNotFact(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 4000\n")
