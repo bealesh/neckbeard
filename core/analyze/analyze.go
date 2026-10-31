@@ -185,7 +185,9 @@ func Dir(root string) (*Result, error) {
 			})
 		}
 
-		if strings.HasPrefix(base, "Dockerfile") {
+		// Dockerfile.dockerignore is BuildKit's per-Dockerfile ignore file, not a
+		// container build.
+		if strings.HasPrefix(base, "Dockerfile") && !strings.HasSuffix(base, ".dockerignore") {
 			dockerfiles = append(dockerfiles, rel)
 			scanLines(path, func(line string, n int) {
 				if m := exposeRe.FindStringSubmatch(line); m != nil {
