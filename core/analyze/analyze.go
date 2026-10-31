@@ -123,7 +123,9 @@ func classifyEnv(name string) (envClass, unsupportedHit) {
 
 var (
 	exposeRe = regexp.MustCompile(`(?i)^\s*EXPOSE\s+(\d+)`)
-	healthRe = regexp.MustCompile(`"(/(?:_?healthz?|readyz|livez))"`)
+	// Any string-literal quote: JavaScript, Python and Ruby routes are as often
+	// single-quoted (or template literals) as double-quoted.
+	healthRe = regexp.MustCompile("[\"'`](/(?:_?healthz?|readyz|livez))[\"'`]")
 	dbURLRe  = regexp.MustCompile(`["']DATABASE_URL["']`)
 	// Template names only — a real .env may hold values and is never scanned.
 	envTemplateRe = regexp.MustCompile(`^\.?env\.(example|sample|template|dist)$`)
