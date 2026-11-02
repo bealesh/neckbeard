@@ -139,6 +139,8 @@ func TestHetznerPipelinesUseSecretsNotFederationAndTheVCSRegistry(t *testing.T) 
 		"secrets." + SecretHetznerS3Key + "_DEV",
 		"HCLOUD_TOKEN=",
 		"vars." + VarHetznerReady + "_DEV",
+		"secrets." + SecretHetznerSSHKey + "_DEV",
+		"NECKBEARD_SSH_IDENTITY=$RUNNER_TEMP/neckbeard-deploy-key",
 	} {
 		if !strings.Contains(gh, want) {
 			t.Errorf("GitHub pipelines for Hetzner missing %q", want)
@@ -154,7 +156,7 @@ func TestHetznerPipelinesUseSecretsNotFederationAndTheVCSRegistry(t *testing.T) 
 		t.Error("Hetzner credentials step must be gated to pushes on the infra workflow")
 	}
 	gl := string(RenderGitLab(m))
-	for _, want := range []string{`docker login -u "$CI_REGISTRY_USER"`, SecretHetznerToken + "_DEV", "merge-request plans are validate-only"} {
+	for _, want := range []string{`docker login -u "$CI_REGISTRY_USER"`, SecretHetznerToken + "_DEV", "merge-request plans are validate-only", SecretHetznerSSHKey + "_DEV", "export NECKBEARD_SSH_IDENTITY=/tmp/neckbeard-deploy-key"} {
 		if !strings.Contains(gl, want) {
 			t.Errorf("GitLab pipeline for Hetzner missing %q", want)
 		}

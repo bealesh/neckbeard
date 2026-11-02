@@ -77,8 +77,14 @@ ln -sf /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud
 ln -sf /opt/google-cloud-sdk/bin/gke-gcloud-auth-plugin /usr/local/bin/gke-gcloud-auth-plugin
 `
 	case "hetzner":
-		// No cloud CLI: the release path (when it exists) is OpenTofu plus SSH,
-		// both already on the runner. Nothing to fetch, nothing to pin.
+		// No cloud CLI. The release path is SSH to the server plus awscli for
+		// the receipts in Object Storage (S3-compatible, so the same pinned
+		// archive the AWS lane fetches).
+		script += `apt-get install -y --no-install-recommends openssh-client >/dev/null
+fetch "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-AWSCLI_VERSION.zip" "$work/aws.zip" "AWSCLI_SHA256"
+unzip -q "$work/aws.zip" -d "$work"
+"$work/aws/install" --update >/dev/null
+`
 	case "azure":
 		script += `python3 -m venv /opt/neckbeard-azure
 /opt/neckbeard-azure/bin/pip install --quiet azure-cli==2.90.0

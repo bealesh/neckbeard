@@ -144,7 +144,10 @@ First-class launch lanes: **3 clouds × 2 VCS = 6 lanes**, each supporting **2
 runtimes** (kubernetes, serverless-containers) = 12 tested paths, plus the **Hetzner
 lane** (1 cloud × 2 VCS × 1 runtime, `vps-containers`) = 14 statically tested paths.
 Hetzner is deliberately narrower: solo and smallteam tiers only, no Kubernetes, and
-it is the one lane without federated CI identity. Everything else is pinned to keep
+it is the one lane without federated CI identity. Its releases go over SSH with a
+committed host key and a deploy key held as a secret, because there is no
+deployment API to call; the runner verifies the result from `docker inspect`
+rather than from the reload's exit code. Everything else is pinned to keep
 that lattice testable: one database engine, one region per deployment,
 a fixed dev/stg/prd environment set, Flux as the only GitOps tool, one delivery
 topology per runtime. Widening any pinned dimension is a post-launch decision with its

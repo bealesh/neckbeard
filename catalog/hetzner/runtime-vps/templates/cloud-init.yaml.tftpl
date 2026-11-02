@@ -18,7 +18,7 @@ write_files:
   - path: /etc/neckbeard/image.env
     permissions: "0644"
     content: |
-      # The release flow rewrites this line, then restarts neckbeard-app.service.
+      # The release runner rewrites this line over SSH, then reloads neckbeard-app.service.
       APP_IMAGE=${image}
   - path: /etc/neckbeard/app.env.template
     permissions: "0600"
@@ -34,6 +34,25 @@ write_files:
       # Read-only deploy token for ${registry_host}; copy to registry.env and fill.
       REGISTRY_USER=
       REGISTRY_TOKEN=
+  - path: /usr/local/bin/neckbeard-app-sync
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Converge docker compose onto the image named in /etc/neckbeard/image.env.
+      # systemd runs this for start and for reload; the release runner rewrites
+      # image.env over SSH and reloads, so only the changed containers restart.
+      set -eu
+      cd /etc/neckbeard
+      . /etc/neckbeard/image.env
+      export APP_IMAGE
+      if [ -f /etc/neckbeard/registry.env ]; then
+        . /etc/neckbeard/registry.env
+        if [ -n "$${REGISTRY_TOKEN:-}" ]; then
+          printf %s "$REGISTRY_TOKEN" | docker login ${registry_host} -u "$REGISTRY_USER" --password-stdin
+        fi
+      fi
+      docker compose -f /etc/neckbeard/compose.yaml pull --quiet
+      docker compose -f /etc/neckbeard/compose.yaml up -d --remove-orphans
   - path: /etc/systemd/system/neckbeard-app.service
     permissions: "0644"
     content: |
@@ -47,9 +66,8 @@ write_files:
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=/etc/neckbeard
-      EnvironmentFile=/etc/neckbeard/image.env
-      ExecStartPre=-/bin/sh -c '. /etc/neckbeard/registry.env 2>/dev/null && [ -n "$REGISTRY_TOKEN" ] && printf %s "$REGISTRY_TOKEN" | docker login ${registry_host} -u "$REGISTRY_USER" --password-stdin'
-      ExecStart=/usr/bin/docker compose -f /etc/neckbeard/compose.yaml up -d --remove-orphans
+      ExecStart=/usr/local/bin/neckbeard-app-sync
+      ExecReload=/usr/local/bin/neckbeard-app-sync
       ExecStop=/usr/bin/docker compose -f /etc/neckbeard/compose.yaml down
 
       [Install]

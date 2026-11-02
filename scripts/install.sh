@@ -62,7 +62,11 @@ tag="$version"
 if [ "$version" = "latest" ]; then
   tag=""
   if command -v curl >/dev/null 2>&1; then
-    tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+    # Unauthenticated API calls share a small per-address rate limit, which
+    # CI runners exhaust; a token, when the caller has one, lifts it.
+    auth_header="X-Neckbeard-Installer: 1"
+    if [ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]; then auth_header="Authorization: Bearer ${GITHUB_TOKEN:-${GH_TOKEN:-}}"; fi
+    tag="$(curl -fsSL -H "$auth_header" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
       | sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
   fi
 fi

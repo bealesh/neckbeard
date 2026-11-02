@@ -281,7 +281,7 @@ func (r Runner) Deploy(ctx context.Context, env string) error {
 	case t.Cloud == "azure":
 		err = r.azure(ctx, t, a, values)
 	case t.Cloud == "hetzner":
-		err = fmt.Errorf("Hetzner release automation is not implemented yet (roadmap #25): update /etc/neckbeard/image.env on the server and restart neckbeard-app over SSH, as docs/bootstrap.md describes")
+		err = r.hetzner(ctx, t, a, values)
 	default:
 		err = fmt.Errorf("unsupported release target %s/%s", t.Cloud, t.Runtime)
 	}

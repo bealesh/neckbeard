@@ -1,10 +1,10 @@
 version: 1
-blueprint_hash: sha256:31cf6066d69d61f8246588c33f7daeccf1e63640aa32eb59df44a213603e6899
+blueprint_hash: sha256:e3feebe328564d6f4173877387acadd8da2f84e794474de76563264c2a5b833c
 generated_from:
     neckbeard_yaml: sha256:e49cac7a2527034557326dfe9f0e20932eda9e3d6ac1b5900de84e3b57582cee
     app_profile: sha256:9bd3442bf7779ffcb2b2ebd2b542e1438d8ef7418d70868e6643416a521cce8a
 pins:
-    catalog: 0.5.0
+    catalog: 0.5.1
     opentofu: 1.12.6
     planner: test
     providers:

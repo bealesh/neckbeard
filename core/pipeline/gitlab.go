@@ -170,6 +170,12 @@ func RenderGitLab(m Model) []byte {
 		for _, line := range gitlabCloudLogin(m) {
 			w("      %s", line)
 		}
+		if m.Cloud == "hetzner" {
+			key := SecretHetznerSSHKey + "_" + strings.ToUpper(env)
+			w("      [ -n \"$%s\" ] || { echo \"%s is not set (see docs/bootstrap.md)\"; exit 1; }", key, key)
+			w("      printf '%%s\\n' \"$%s\" > /tmp/neckbeard-deploy-key", key)
+			w("      export NECKBEARD_SSH_IDENTITY=/tmp/neckbeard-deploy-key")
+		}
 		w("      tofu -chdir=infra/envs/%s init -input=false -backend-config=backend.hcl", env)
 		w("      cd .neckbeard/release")
 		w("      GOWORK=off go run . restore-receipts -root ../.. -env %s", env)

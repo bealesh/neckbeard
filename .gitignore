@@ -2,3 +2,5 @@ bin/
 *.test
 .DS_Store
 coverage.out
+.terraform/
+.terraform.lock.hcl

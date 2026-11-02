@@ -25,6 +25,9 @@ func (r Runner) PrepareDatabase(ctx context.Context, t Target) error {
 		return err
 	}
 	if t.DatabaseSecret == "" {
+		if t.Cloud == "hetzner" {
+			return fmt.Errorf("Hetzner runs Postgres on the server: its password is /etc/neckbeard/pg_password there and DATABASE_URL belongs in /etc/neckbeard/app.env (docs/bootstrap.md); there is no managed database to prepare")
+		}
 		return fmt.Errorf("this target has no managed database connection; re-plan and scaffold a provisioned PostgreSQL need first")
 	}
 	dir := filepath.Join(r.Root, "infra/envs", t.Environment)
