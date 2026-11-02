@@ -284,12 +284,14 @@ func TestIdiomaticEnvReadsAreDetected(t *testing.T) {
 }
 
 // A mixed-case name is not an environment-variable literal the analyzer claims
-// to understand; it must not be truncated into an uppercase prefix.
+// to understand; it must not be truncated into an uppercase prefix. The name is
+// chosen so the truncated prefix (STRIPE_SECRET_) would classify as a secret.
 func TestEnvReadOfMixedCaseNameIsNotTruncated(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
-	writeFile(t, dir, "settings.py", `x = os.getenv("API_Token")`)
-	writeFile(t, dir, "config.rb", `x = ENV.fetch("API_Token")`)
+	writeFile(t, dir, "settings.py", `x = os.getenv("STRIPE_SECRET_Key")`)
+	writeFile(t, dir, "config.rb", `x = ENV.fetch("STRIPE_SECRET_Key")`)
+	writeFile(t, dir, "runtime.exs", `x = System.fetch_env!("STRIPE_SECRET_Key")`)
 	res, err := Dir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -298,6 +300,9 @@ func TestEnvReadOfMixedCaseNameIsNotTruncated(t *testing.T) {
 		if strings.HasPrefix(f.ID, "env-") {
 			t.Errorf("mixed-case name must not yield a truncated env fact, got %+v", f)
 		}
+	}
+	if len(res.Profile.Secrets) != 0 {
+		t.Errorf("mixed-case name must not yield a truncated secret name, got %v", res.Profile.Secrets)
 	}
 }
 
