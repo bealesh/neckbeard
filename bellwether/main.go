@@ -73,6 +73,10 @@ type note struct {
 type app struct {
 	env string
 	db  *sql.DB
+	// readyAt simulates a slow boot: /healthz answers 503 "starting" until then.
+	// Set BELLWETHER_STARTUP_DELAY (a Go duration, e.g. 150s) in a live fixture
+	// to prove a lane's startup allowance; unset means ready immediately (#44).
+	readyAt time.Time
 
 	mu    sync.Mutex
 	notes []note
@@ -80,7 +84,15 @@ type app struct {
 }
 
 func newApp(ctx context.Context) (*app, error) {
-	a := &app{env: envOr("APP_ENV", "dev"), next: 1}
+	a := &app{env: envOr("APP_ENV", "dev"), next: 1, readyAt: time.Now()}
+	if raw := strings.TrimSpace(os.Getenv("BELLWETHER_STARTUP_DELAY")); raw != "" {
+		delay, err := time.ParseDuration(raw)
+		if err != nil || delay < 0 {
+			return nil, fmt.Errorf("BELLWETHER_STARTUP_DELAY %q is not a non-negative duration", raw)
+		}
+		a.readyAt = a.readyAt.Add(delay)
+		log.Printf("startup: simulating a %s boot; /healthz reports starting until then", delay)
+	}
 	// TrimSpace: secret stores cannot represent empty values (Key Vault rejects
 	// them), so a blank-ish secret means "no database" — V2 finding, 2026-09-08.
 	dsn := strings.TrimSpace(os.Getenv("DATABASE_URL"))
@@ -146,6 +158,15 @@ func (a *app) routes() http.Handler {
 }
 
 func (a *app) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if remaining := time.Until(a.readyAt); remaining > 0 {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status":   "starting",
+			"env":      a.env,
+			"version":  version,
+			"ready_in": remaining.Round(time.Second).String(),
+		})
+		return
+	}
 	status := http.StatusOK
 	dbState := a.dbState()
 	if a.db != nil {
