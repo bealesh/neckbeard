@@ -201,6 +201,62 @@ func TestNoRootDockerfileKeepsAllCandidates(t *testing.T) {
 	}
 }
 
+// <Dockerfile>.dockerignore is BuildKit's per-Dockerfile ignore file. It must
+// never become a draft service: beside docker/Dockerfile it produced a second
+// "docker" service that failed the workload gate, and beside a root Dockerfile
+// it was listed as another container build to ask about.
+func TestDockerignoreFilesAreNotContainerBuilds(t *testing.T) {
+	t.Run("no root Dockerfile", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(dir+"/docker", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, dir, "docker/Dockerfile", "FROM x\nEXPOSE 80\n")
+		writeFile(t, dir, "docker/Dockerfile.dockerignore", "node_modules\n")
+		res, err := Dir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Profile.Services) != 1 || res.Profile.Services[0].Dockerfile != "docker/Dockerfile" {
+			t.Fatalf("docker/Dockerfile must be the single draft service, got %+v", res.Profile.Services)
+		}
+		if err := profile.WorkloadError(&res.Profile); err != nil {
+			t.Errorf("draft must pass the workload gate, got %v", err)
+		}
+	})
+	t.Run("root Dockerfile", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
+		writeFile(t, dir, "Dockerfile.dockerignore", "node_modules\n")
+		writeFile(t, dir, "Dockerfile.prod", "FROM x\n")
+		writeFile(t, dir, "Dockerfile.prod.dockerignore", "node_modules\n")
+		res, err := Dir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Profile.Services) != 1 || res.Profile.Services[0].Dockerfile != "Dockerfile" {
+			t.Fatalf("root Dockerfile must be the single draft service, got %+v", res.Profile.Services)
+		}
+		found := false
+		for _, a := range res.Profile.Assumptions {
+			if a.ID == "container-images" {
+				found = true
+				if strings.Contains(a.Statement, ".dockerignore") || !strings.Contains(a.Statement, "Dockerfile.prod") {
+					t.Errorf("assumption must name Dockerfile.prod and no ignore file, got %q", a.Statement)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("expected a container-images assumption for Dockerfile.prod")
+		}
+		for _, q := range res.Questions {
+			if strings.Contains(q, ".dockerignore") {
+				t.Errorf("an ignore file is not a container build to ask about: %q", q)
+			}
+		}
+	})
+}
+
 func TestTypedEnvWrapperAndTemplateDetection(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
