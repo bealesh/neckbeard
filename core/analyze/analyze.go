@@ -249,11 +249,41 @@ func Dir(root string) (*Result, error) {
 		return nil, err
 	}
 
-	composeHits := readComposeCapabilities(root)
-	return synthesize(root, dockerfiles, exposePorts, langs, envHits, healthPaths, dbURLLiterals, composeHits, manifestPostgres, manifestORM)
+	return synthesize(detection{
+		root:             root,
+		dockerfiles:      dockerfiles,
+		exposePorts:      exposePorts,
+		langs:            langs,
+		envHits:          envHits,
+		healthPaths:      healthPaths,
+		dbURLLiterals:    dbURLLiterals,
+		composeHits:      readComposeCapabilities(root),
+		manifestPostgres: manifestPostgres,
+		manifestORM:      manifestORM,
+	})
 }
 
-func synthesize(root string, dockerfiles []string, exposePorts map[string]int, langs []profile.Fact, envHits map[string][]profile.Evidence, healthPaths map[string]profile.Evidence, dbURLLiterals []profile.Evidence, composeHits []composeCapability, manifestPostgres, manifestORM []profile.Evidence) (*Result, error) {
+// detection is everything the repository walk observed. Each field is raw
+// mechanical evidence; synthesize turns it into facts, inferences, needs, and
+// questions. Adding a detection source means adding a field here, not a
+// positional parameter that a caller can silently transpose (#20).
+type detection struct {
+	root             string
+	dockerfiles      []string
+	exposePorts      map[string]int
+	langs            []profile.Fact
+	envHits          map[string][]profile.Evidence
+	healthPaths      map[string]profile.Evidence
+	dbURLLiterals    []profile.Evidence
+	composeHits      []composeCapability
+	manifestPostgres []profile.Evidence
+	manifestORM      []profile.Evidence
+}
+
+func synthesize(d detection) (*Result, error) {
+	root, dockerfiles, exposePorts, langs := d.root, d.dockerfiles, d.exposePorts, d.langs
+	envHits, healthPaths, dbURLLiterals := d.envHits, d.healthPaths, d.dbURLLiterals
+	composeHits, manifestPostgres, manifestORM := d.composeHits, d.manifestPostgres, d.manifestORM
 	p := profile.AppProfile{Version: 1}
 	var questions []string
 
