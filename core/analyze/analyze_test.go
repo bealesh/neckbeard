@@ -87,6 +87,52 @@ func TestDraftValidatesAgainstSchema(t *testing.T) {
 	}
 }
 
+// A health route is detected whichever quote style the source uses; a miss
+// falls back to an assumed /healthz the app may not serve.
+func TestHealthPathDetectedInAnyQuoteStyle(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, src, want string
+	}{
+		{"double-quoted go", "main.go", `mux.HandleFunc("/readyz", ready)`, "/readyz"},
+		{"single-quoted express", "server.js", `app.get('/health', (req, res) => res.send('ok'))`, "/health"},
+		{"single-quoted flask", "app.py", `@app.route('/healthz')`, "/healthz"},
+		{"template literal", "routes.ts", "router.get(`/livez`, live)", "/livez"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 3000\n")
+			writeFile(t, dir, tc.file, "// routes\n"+tc.src+"\n")
+			res, err := Dir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Profile.Services) != 1 {
+				t.Fatalf("want 1 service, got %+v", res.Profile.Services)
+			}
+			if got := res.Profile.Services[0].HealthPath; got != tc.want {
+				t.Fatalf("health path: want %q, got %q", tc.want, got)
+			}
+			for _, a := range res.Profile.Assumptions {
+				if a.ID == "health-web" {
+					t.Errorf("a detected health path must not also be assumed: %q", a.Statement)
+				}
+			}
+			found := false
+			for _, f := range res.Profile.Facts {
+				if f.ID == "health-web" {
+					found = true
+					if len(f.Evidence) != 1 || f.Evidence[0].File != tc.file || f.Evidence[0].Line != 2 {
+						t.Errorf("health fact must cite %s:2, got %+v", tc.file, f.Evidence)
+					}
+				}
+			}
+			if !found {
+				t.Error("a detected health path must be recorded as a fact")
+			}
+		})
+	}
+}
+
 func TestClassifyEnv(t *testing.T) {
 	cases := map[string]envClass{
 		"DATABASE_URL":    classPostgres,
