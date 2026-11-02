@@ -100,9 +100,12 @@ func TestInstalledOnboarding(t *testing.T) {
 				t.Fatal(err)
 			}
 			config := func(cloud, vcs, runtime string) {
-				region := map[string]string{"aws": "us-east-1", "gcp": "us-central1", "azure": "centralus"}[cloud]
+				region := map[string]string{"aws": "us-east-1", "gcp": "us-central1", "azure": "centralus", "hetzner": "fsn1"}[cloud]
 				data := fmt.Sprintf("version: 1\napp: example\norg: acme\ncloud: %s\nregion: %s\nvcs: %s\nrepo: acme/example\nruntime: %s\ntier: smallteam\nentry_path: adopt\n", cloud, region, vcs, runtime)
-				if cloud != "aws" {
+				if cloud == "hetzner" {
+					data += "finops: {currency: EUR}\n" // the price table is EUR
+				}
+				if cloud == "gcp" || cloud == "azure" {
 					data += "containers: {dev: example-dev, stg: example-stg, prd: example-prd}\n"
 				}
 				writeTest(t, filepath.Join(app, "neckbeard.yaml"), []byte(data))
@@ -150,9 +153,16 @@ func TestInstalledOnboarding(t *testing.T) {
 				saveProfile()
 			}
 
-			for _, cloud := range []string{"aws", "gcp", "azure"} {
+			lanes := []struct{ cloud, runtime string }{
+				{"aws", "serverless-containers"}, {"aws", "kubernetes"},
+				{"gcp", "serverless-containers"}, {"gcp", "kubernetes"},
+				{"azure", "serverless-containers"}, {"azure", "kubernetes"},
+				{"hetzner", "vps-containers"},
+			}
+			for _, lane := range lanes {
+				cloud, runtime := lane.cloud, lane.runtime
 				for _, vcs := range []string{"github", "gitlab"} {
-					for _, runtime := range []string{"serverless-containers", "kubernetes"} {
+					{
 						config(cloud, vcs, runtime)
 						run(true, "plan")
 						first, err := os.ReadFile(filepath.Join(app, "blueprint.yaml"))

@@ -76,6 +76,9 @@ ln -sf /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud
 /opt/google-cloud-sdk/bin/gcloud components install gke-gcloud-auth-plugin --quiet >/dev/null
 ln -sf /opt/google-cloud-sdk/bin/gke-gcloud-auth-plugin /usr/local/bin/gke-gcloud-auth-plugin
 `
+	case "hetzner":
+		// No cloud CLI: the release path (when it exists) is OpenTofu plus SSH,
+		// both already on the runner. Nothing to fetch, nothing to pin.
 	case "azure":
 		script += `python3 -m venv /opt/neckbeard-azure
 /opt/neckbeard-azure/bin/pip install --quiet azure-cli==2.90.0

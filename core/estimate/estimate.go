@@ -67,6 +67,7 @@ type Result struct {
 	UsageSource      map[string]string  // usage key → "tier preset" | "finops.usage override"
 	UnmappedUsage    []string           // assumptions with no IaC resource to attach to
 	InfracostVersion string
+	PriceTable       *hetznerPriceTable // set on price-table lanes; nil when Infracost priced the estimate
 	Currency         string
 	InputDigest      string
 	Scope            string
@@ -74,19 +75,36 @@ type Result struct {
 }
 
 func Run(opts Options) (*Result, error) {
-	// Discovery order: explicit flag, then the classic CLI installed as
-	// infracost-0.10 (the v2 SaaS CLI often shadows `infracost`), then PATH.
-	binPath, err := doctor.Infracost(opts.InfracostBin)
-	if err != nil {
-		return nil, fmt.Errorf("infracost not found: install the 0.10.x CLI (as `infracost-0.10` or `infracost`) and run its `auth login`, or pass -infracost-bin")
+	// Hetzner is priced from the bundled list-price table: Infracost has no
+	// hcloud coverage, so neither its binary nor its API is involved.
+	var table *hetznerPriceTable
+	var binPath, version string
+	if opts.Blueprint.Cloud == "hetzner" {
+		t, err := loadHetznerPriceTable()
+		if err != nil {
+			return nil, err
+		}
+		if cur := currencyOr(opts.Config); cur != t.Currency {
+			return nil, fmt.Errorf("Hetzner list prices are in %s and neckbeard does not convert currencies; set finops.currency: %s", t.Currency, t.Currency)
+		}
+		table = t
+	} else {
+		// Discovery order: explicit flag, then the classic CLI installed as
+		// infracost-0.10 (the v2 SaaS CLI often shadows `infracost`), then PATH.
+		var err error
+		binPath, err = doctor.Infracost(opts.InfracostBin)
+		if err != nil {
+			return nil, fmt.Errorf("infracost not found: install the 0.10.x CLI (as `infracost-0.10` or `infracost`) and run its `auth login`, or pass -infracost-bin")
+		}
+		version, err = infracostVersion(binPath)
+		if err != nil {
+			return nil, err
+		}
+		if !strings.HasPrefix(strings.TrimPrefix(version, "v"), "0.10.") {
+			return nil, fmt.Errorf("infracost %s is not the supported classic CLI; neckbeard estimates with the 0.10.x CLI — point -infracost-bin at it", version)
+		}
 	}
-	version, err := infracostVersion(binPath)
-	if err != nil {
-		return nil, err
-	}
-	if !strings.HasPrefix(strings.TrimPrefix(version, "v"), "0.10.") {
-		return nil, fmt.Errorf("infracost %s is not the supported classic CLI; neckbeard estimates with the 0.10.x CLI — point -infracost-bin at it", version)
-	}
+	var err error
 
 	// Staleness gate: the blueprint must have been planned from this exact config.
 	if opts.Blueprint.GeneratedFrom.NeckbeardYAML != opts.ConfigDigest {
@@ -141,9 +159,18 @@ func Run(opts Options) (*Result, error) {
 		}
 	}
 	res := &Result{Usage: usage, UsageSource: usageSource, InfracostVersion: version, Currency: currencyOr(opts.Config), InputDigest: inputDigest(opts.Blueprint.Hash, inputs), Scope: "blueprint", Source: "effective HCL"}
-	lookup, err := pricingLookup(binPath, res.Currency)
-	if err != nil {
-		return nil, err
+	var lookup productLookup
+	if table != nil {
+		res.Source = "the bundled Hetzner list-price table (as of " + table.AsOf + ")"
+		res.PriceTable = table
+		if opts.PlanPath != "" {
+			return nil, fmt.Errorf("plan-based estimates are not available for Hetzner: the price table prices the blueprint, not a plan")
+		}
+	} else {
+		lookup, err = pricingLookup(binPath, res.Currency)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if opts.PlanPath != "" {
 		res.Source = "authenticated plan JSON"
@@ -190,7 +217,7 @@ func Run(opts Options) (*Result, error) {
 			}
 			envUsage["existing_global_forwarding_rules"] = existing
 		}
-		ee, types, err := estimateEnv(binPath, scratch, envDir, env, opts.Blueprint, res.Currency, envUsage, lookup)
+		ee, types, err := estimateEnv(binPath, scratch, envDir, env, opts.Blueprint, res.Currency, envUsage, lookup, table)
 		if err != nil {
 			return nil, fmt.Errorf("estimating %s: %w", env.Name, err)
 		}
@@ -221,8 +248,10 @@ func Run(opts Options) (*Result, error) {
 			}
 		}
 		mapped["egress_gb"] = true
-		mapped["ingress_gb"] = true
-		mapped["cross_zone_gb"] = true
+		if opts.Blueprint.Cloud != "hetzner" {
+			mapped["ingress_gb"] = true
+			mapped["cross_zone_gb"] = true
+		}
 		if opts.Blueprint.Cloud == "aws" {
 			mapped["log_ingest_gb"] = true
 			mapped["log_query_gb"] = true
@@ -254,24 +283,35 @@ func Run(opts Options) (*Result, error) {
 	return res, nil
 }
 
-func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blueprint.Blueprint, currency string, usage map[string]float64, lookup productLookup) (*EnvEstimate, map[string]bool, error) {
+func estimateEnv(bin, scratch, envDir string, env blueprint.Environment, bp *blueprint.Blueprint, currency string, usage map[string]float64, lookup productLookup, table *hetznerPriceTable) (*EnvEstimate, map[string]bool, error) {
 	usageFile := filepath.Join(scratch, "usage-"+env.Name+".yml")
 	ee := &EnvEstimate{Env: env.Name, Costs: map[string]float64{}}
 	types := map[string]bool{}
 	for _, sc := range scenarios {
-		uf, err := BuildUsageFile(usage, sc.Multiplier)
-		if err != nil {
-			return nil, nil, fmt.Errorf("building usage file: %w", err)
-		}
-		if err := os.WriteFile(usageFile, uf, 0o644); err != nil {
-			return nil, nil, err
-		}
-		out, err := runInfracost(bin, currency, "breakdown", "--path", envDir, "--format", "json", "--usage-file", usageFile)
-		if err != nil {
-			return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
-		}
+		var out []byte
 		var adjustments []string
-		{
+		if table != nil {
+			// Price-table lane: no usage file, no adapter, no corrections.
+			doc, notes, err := hetznerBreakdown(bp, env, usage, sc.Multiplier, table)
+			if err != nil {
+				return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
+			}
+			adjustments = notes
+			if out, err = json.Marshal(doc); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			uf, err := BuildUsageFile(usage, sc.Multiplier)
+			if err != nil {
+				return nil, nil, fmt.Errorf("building usage file: %w", err)
+			}
+			if err := os.WriteFile(usageFile, uf, 0o644); err != nil {
+				return nil, nil, err
+			}
+			out, err = runInfracost(bin, currency, "breakdown", "--path", envDir, "--format", "json", "--usage-file", usageFile)
+			if err != nil {
+				return nil, nil, fmt.Errorf("scenario %s: %w", sc.Name, err)
+			}
 			var doc breakdown
 			if err = json.Unmarshal(out, &doc); err != nil {
 				return nil, nil, fmt.Errorf("invalid pricing output: %w", err)

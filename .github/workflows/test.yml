@@ -110,6 +110,7 @@ jobs:
           - { cloud: aws, runtime: kubernetes }
           - { cloud: gcp, runtime: kubernetes }
           - { cloud: azure, runtime: kubernetes }
+          - { cloud: hetzner, runtime: vps-containers }
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -152,6 +153,11 @@ jobs:
                   -e 's/^vcs: github/vcs: gitlab/' \
                 bellwether/neckbeard.yaml > "$LANE/neckbeard.yaml"
               printf 'containers:\n  dev: 00000000-0000-0000-0000-000000000001\n  stg: 00000000-0000-0000-0000-000000000002\n  prd: 00000000-0000-0000-0000-000000000003\n' >> "$LANE/neckbeard.yaml" ;;
+            hetzner)
+              # one box per env; EUR list prices; Object Storage exists in fsn1/nbg1/hel1
+              sed -e 's/^cloud: aws/cloud: hetzner/' -e 's/^region: us-east-1/region: fsn1/' \
+                  -e 's/^runtime: serverless-containers/runtime: vps-containers/' -e 's/^  currency: USD/  currency: EUR/' \
+                bellwether/neckbeard.yaml > "$LANE/neckbeard.yaml" ;;
           esac
           if [ "${{ matrix.runtime }}" = "kubernetes" ]; then
             sed -i 's/^runtime: serverless-containers/runtime: kubernetes/' "$LANE/neckbeard.yaml"

@@ -27,6 +27,7 @@ func TestReleaseToolDownloadsArePinnedByChecksum(t *testing.T) {
 		{"aws", "kubernetes"},
 		{"gcp", "kubernetes"},
 		{"azure", "kubernetes"},
+		{"hetzner", "vps-containers"},
 	} {
 		bp := testBlueprint(t)
 		bp.Cloud, bp.Runtime = lane.cloud, lane.runtime

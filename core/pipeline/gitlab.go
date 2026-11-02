@@ -124,7 +124,7 @@ func RenderGitLab(m Model) []byte {
 		w("        echo \"bootstrap pending for %s (backend.hcl or CI variables missing, see docs/bootstrap.md) — validate-only run; plan/apply NOT EXERCISED\"", env)
 		w("        exit 0")
 		w("      fi")
-		if m.Runtime == "serverless-containers" {
+		if m.Runtime == "serverless-containers" || m.Runtime == "vps-containers" {
 			w("      if [ ! -e releases/%s.json ] && [ ! -e releases/%s.tfvars.json ]; then", env, env)
 			w("        echo \"first image pending for %s — pin the successful build artifact; plan/apply NOT EXERCISED\"", env)
 			w("        exit 0")
@@ -226,6 +226,16 @@ func gitlabInfraAuth(m Model, env string) []string {
 			fmt.Sprintf(`export ARM_TENANT_ID="$%s" ARM_SUBSCRIPTION_ID="$%s_%s"`, VarAzureTenant, VarAzureSub, envU),
 			`export ARM_USE_OIDC=true ARM_OIDC_TOKEN="$NECKBEARD_OIDC_TOKEN"`,
 		}
+	case "hetzner":
+		// No federation: the project token and Object Storage key pair are
+		// protected CI/CD variables. Merge-request pipelines must not see them
+		// (mark them protected, masked); without them the job is validate-only.
+		return []string{
+			fmt.Sprintf(`if ! %s; then echo "Hetzner credentials are protected variables; merge-request plans are validate-only on this lane"; exit 0; fi`, apply),
+			fmt.Sprintf(`[ -n "$%s_%s" ] && [ -n "$%s_%s" ] && [ -n "$%s_%s" ] || { echo "Hetzner secrets for %s are not set (see docs/bootstrap.md)"; exit 1; }`, SecretHetznerToken, envU, SecretHetznerS3Key, envU, SecretHetznerS3Sec, envU, env),
+			fmt.Sprintf(`export HCLOUD_TOKEN="$%s_%s" MINIO_USER="$%s_%s" MINIO_PASSWORD="$%s_%s"`, SecretHetznerToken, envU, SecretHetznerS3Key, envU, SecretHetznerS3Sec, envU),
+			fmt.Sprintf(`export AWS_ACCESS_KEY_ID="$%s_%s" AWS_SECRET_ACCESS_KEY="$%s_%s"`, SecretHetznerS3Key, envU, SecretHetznerS3Sec, envU),
+		}
 	default: // aws
 		return []string{
 			fmt.Sprintf(`ROLE="$%s_%s"; if %s; then ROLE="$%s_%s"; fi`, VarPlanRole, envU, apply, VarApplyRole, envU),
@@ -253,6 +263,11 @@ func gitlabRegistryLogin(m Model) []string {
 			`ACR_HOST="${REGISTRY%%/*}"`,
 			`REFRESH=$(curl -sf -X POST "https://${ACR_HOST}/oauth2/exchange" --data-urlencode "grant_type=access_token" --data-urlencode "service=${ACR_HOST}" --data-urlencode "access_token=${AAD}" | jq -r .refresh_token)`,
 			`echo "$REFRESH" | docker login -u 00000000-0000-0000-0000-000000000000 --password-stdin "$ACR_HOST"`,
+		}
+	case "hetzner":
+		// GitLab's own registry, with the job token.
+		return []string{
+			`echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"`,
 		}
 	default: // aws
 		return []string{

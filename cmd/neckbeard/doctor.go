@@ -23,7 +23,7 @@ func runDoctor(args []string) error {
 		return err
 	}
 	fmt.Printf("READY  bundled catalog %s (%s)\n", cat.Version, cat.Digest)
-	fmt.Println("Supported: AWS/GCP/Azure × GitHub/GitLab × serverless-containers/kubernetes; adopt existing accounts; one image, up to 10 services.")
+	fmt.Println("Supported: AWS/GCP/Azure × GitHub/GitLab × serverless-containers/kubernetes, plus Hetzner × GitHub/GitLab × vps-containers (solo and smallteam tiers); adopt existing accounts; one image, up to 10 services.")
 	fmt.Println("Plan uses the bundled catalog and schemas; no external tools or cloud credentials are required.")
 	failed := false
 	for _, c := range checks {

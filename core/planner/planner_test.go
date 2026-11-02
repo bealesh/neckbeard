@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bealesh/neckbeard/core/blueprint"
 	"github.com/bealesh/neckbeard/core/catalog"
 	"github.com/bealesh/neckbeard/core/config"
 	"github.com/bealesh/neckbeard/core/presets"
@@ -398,4 +399,84 @@ func TestBudgetAlertNeedsRecipientsAndGCPBillingAccount(t *testing.T) {
 		}
 	}
 	t.Fatal("gcp budget module should carry billing_account")
+}
+
+func hetznerInputs_(t *testing.T) Inputs {
+	t.Helper()
+	in := loadInputs(t, filepath.Join("testdata", "basic"))
+	in.Config.Cloud, in.Config.Region, in.Config.Runtime, in.Config.Tier = "hetzner", "fsn1", "vps-containers", "solo"
+	in.Config.Overrides = nil
+	return in
+}
+
+func TestHetznerLanePlansOneBoxPerEnvironment(t *testing.T) {
+	in := hetznerInputs_(t)
+	bp, err := Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mods := map[string]blueprint.ModuleUsage{}
+	for _, m := range bp.Environments[0].Modules {
+		mods[m.Name] = m
+	}
+	for _, want := range []string{"network", "runtime-vps", "postgres", "storage", "secrets", "registry", "dns-ingress"} {
+		if _, ok := mods[want]; !ok {
+			t.Errorf("hetzner plan should include %s, got %v", want, keysCSV(mods))
+		}
+	}
+	for _, absent := range []string{"runtime-serverless", "runtime-k8s", "budget"} {
+		if _, ok := mods[absent]; ok {
+			t.Errorf("hetzner plan must not include %s", absent)
+		}
+	}
+	inputs := func(mod string) map[string]any {
+		out := map[string]any{}
+		for _, in := range mods[mod].Inputs {
+			out[in.Key] = in.Value
+		}
+		return out
+	}
+	if inputs("network")["network_zone"] != "eu-central" {
+		t.Errorf("fsn1 must derive network_zone eu-central, got %v", inputs("network")["network_zone"])
+	}
+	if inputs("registry")["vcs"] != "github" || inputs("registry")["repo"] != "bealesh/neckbeard" {
+		t.Errorf("registry module needs vcs/repo to name the VCS registry, got %v", inputs("registry"))
+	}
+	pg := inputs("postgres")
+	for _, gone := range []string{"instance_class", "multi_zone", "read_replicas", "pitr"} {
+		if _, ok := pg[gone]; ok {
+			t.Errorf("a single box has no %s; the input must be dropped, not passed", gone)
+		}
+	}
+	if fmt.Sprint(pg["volume_gb"]) != "20" {
+		t.Errorf("solo tier should derive a 20 GB data volume, got %v", pg["volume_gb"])
+	}
+	if !strings.Contains(strings.Join(bp.Decisions, "\n"), "no budget alerts API") {
+		t.Error("the plan must say Hetzner renders no budget alert while the ceiling still applies")
+	}
+}
+
+func TestHetznerRefusalsAreNamed(t *testing.T) {
+	for name, mutate := range map[string]func(*Inputs){
+		"runtime mismatch": func(in *Inputs) { in.Config.Runtime = "serverless-containers" },
+		"vps on aws":       func(in *Inputs) { in.Config.Cloud, in.Config.Region = "aws", "us-east-1" },
+		"established tier": func(in *Inputs) { in.Config.Tier = "established" },
+		"unknown location": func(in *Inputs) { in.Config.Region = "us-east-1" },
+		"storage location": func(in *Inputs) { in.Config.Region = "ash" }, // no Object Storage there; the module refuses at validate, the plan is allowed
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := hetznerInputs_(t)
+			mutate(&in)
+			_, err := Plan(in)
+			if name == "storage location" {
+				if err != nil {
+					t.Fatalf("ash is a real location; the planner must not refuse it: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected a named refusal")
+			}
+		})
+	}
 }

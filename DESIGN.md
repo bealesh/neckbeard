@@ -126,23 +126,26 @@ The contract defines **outcomes**; each cloud satisfies them with its native ser
 Resource graphs are *not* identical, and meaningful differences are surfaced in `plan`
 output rather than hidden:
 
-| Outcome | AWS | GCP | Azure | Meaningful differences surfaced |
-|---|---|---|---|---|
-| Runtime: kubernetes | EKS | GKE | AKS | node pricing models, upgrade cadence, LB integration |
-| Runtime: serverless-containers | ECS on Fargate | Cloud Run | Container Apps | Cloud Run & Container Apps scale to zero; ECS services have a min task count (idle floor cost); Container Apps scaling is KEDA-based |
-| PostgreSQL | RDS for PostgreSQL | Cloud SQL for PostgreSQL | Azure Database for PostgreSQL – Flexible Server | HA models differ (Multi-AZ vs regional vs zone-redundant); maintenance/failover semantics differ |
-| Object storage | S3 | GCS | Blob Storage | consistency and class/lifecycle models |
-| Secrets | Secrets Manager | Secret Manager | Key Vault | per-secret vs per-vault pricing and access models |
-| Registry | ECR | Artifact Registry | ACR | |
-| Ingress + TLS | ALB + ACM | External Application LB + managed certs | Application Gateway / Container Apps ingress | cert automation and WAF options differ |
-| DNS | Route 53 | Cloud DNS | Azure DNS | |
-| CI → cloud auth | GitHub/GitLab OIDC → IAM role | → Workload Identity Federation | → Workload identity federation | no static cloud keys on any lane ([GitHub OIDC docs](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect), [GitLab id_tokens docs](https://docs.gitlab.com/ci/cloud_services/)) |
+| Outcome | AWS | GCP | Azure | Hetzner | Meaningful differences surfaced |
+|---|---|---|---|---|---|
+| Runtime: kubernetes | EKS | GKE | AKS | not offered | node pricing models, upgrade cadence, LB integration |
+| Runtime: serverless-containers | ECS on Fargate | Cloud Run | Container Apps | not offered; `vps-containers` instead: one server per env running docker compose, no autoscaling, no zero-downtime deploy | Cloud Run & Container Apps scale to zero; ECS services have a min task count (idle floor cost); Container Apps scaling is KEDA-based; a VPS bills 24/7 whatever happens |
+| PostgreSQL | RDS for PostgreSQL | Cloud SQL for PostgreSQL | Azure Database for PostgreSQL – Flexible Server | a postgres container on the box, data on a block-storage volume, nightly `pg_dump` to Object Storage; no standby, no PITR; solo and smallteam tiers only | HA models differ (Multi-AZ vs regional vs zone-redundant); maintenance/failover semantics differ; on Hetzner there is no HA to differ about |
+| Object storage | S3 | GCS | Blob Storage | Object Storage (S3-compatible, via the MinIO provider; fsn1/nbg1/hel1 only) | consistency and class/lifecycle models |
+| Secrets | Secrets Manager | Secret Manager | Key Vault | none exists: an operator-written env file on the box, names rendered, values never in git or state | per-secret vs per-vault pricing and access models |
+| Registry | ECR | Artifact Registry | ACR | none exists: the VCS's registry (GHCR / GitLab) | |
+| Ingress + TLS | ALB + ACM | External Application LB + managed certs | Application Gateway / Container Apps ingress | managed Load Balancer + managed certificate; routes by port, not path; no WAF | cert automation and WAF options differ |
+| DNS | Route 53 | Cloud DNS | Azure DNS | Hetzner DNS (hcloud zones; managed certificates need it) | |
+| CI → cloud auth | GitHub/GitLab OIDC → IAM role | → Workload Identity Federation | → Workload identity federation | **no federation exists**: a project API token and an Object Storage key pair as VCS secrets, apply-only; PR plans are validate-only | no static cloud keys on any of the three big clouds; Hetzner is the stated exception, and its runbook says so in those words ([GitHub OIDC docs](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect), [GitLab id_tokens docs](https://docs.gitlab.com/ci/cloud_services/)) |
 
 ### 3.4 The combination lattice
 
 First-class launch lanes: **3 clouds × 2 VCS = 6 lanes**, each supporting **2
-runtimes** (kubernetes, serverless-containers) = 12 tested paths. Everything else is
-pinned to keep that lattice testable: one database engine, one region per deployment,
+runtimes** (kubernetes, serverless-containers) = 12 tested paths, plus the **Hetzner
+lane** (1 cloud × 2 VCS × 1 runtime, `vps-containers`) = 14 statically tested paths.
+Hetzner is deliberately narrower: solo and smallteam tiers only, no Kubernetes, and
+it is the one lane without federated CI identity. Everything else is pinned to keep
+that lattice testable: one database engine, one region per deployment,
 a fixed dev/stg/prd environment set, Flux as the only GitOps tool, one delivery
 topology per runtime. Widening any pinned dimension is a post-launch decision with its
 own test cost.

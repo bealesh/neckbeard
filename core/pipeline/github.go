@@ -42,6 +42,9 @@ func RenderGitHubCI(m Model) []byte {
 	w("    permissions:")
 	w("      contents: read")
 	w("      id-token: write # OIDC federation — no static cloud keys (DESIGN §10.1)")
+	if m.Cloud == "hetzner" {
+		w("      packages: write # images live in GHCR on this lane (Hetzner has no registry)")
+	}
 	w("    env:")
 	w("      REGISTRY: ${{ vars.%s_DEV }}", VarRegistry)
 	w("    steps:")
@@ -160,7 +163,7 @@ func RenderGitHubInfra(m Model) []byte {
 		w("            echo \"::warning::bootstrap pending for %s (backend.hcl or CI variables missing) — validate-only run; plan/apply NOT EXERCISED\"", env)
 		w("            exit 0")
 		w("          fi")
-		if m.Runtime == "serverless-containers" {
+		if m.Runtime == "serverless-containers" || m.Runtime == "vps-containers" {
 			w("          if [ ! -e releases/%s.json ] && [ ! -e releases/%s.tfvars.json ]; then", env, env)
 			w("            echo \"::warning::first image pending for %s — pin the successful build artifact; plan/apply NOT EXERCISED\"", env)
 			w("            exit 0")
@@ -206,6 +209,23 @@ func githubFederation(w func(string, ...any), m Model, env, roleKind, ifExpr str
 		w("          client-id: %s", client)
 		w("          tenant-id: ${{ vars.%s }}", VarAzureTenant)
 		w("          subscription-id: ${{ vars.%s_%s }}", VarAzureSub, envU)
+	case "hetzner":
+		// No federation exists. Pull-request plans get nothing (validate-only);
+		// pushes get the environment's secrets as process environment for tofu's
+		// hcloud/minio providers and the s3 backend against Object Storage.
+		w("      - name: Hetzner credentials (%s) — project token and Object Storage key, from secrets", env)
+		if roleKind == "auto" {
+			w("        if: github.event_name == 'push' && %s", ifExpr)
+		} else {
+			w("        if: %s", ifExpr)
+		}
+		w("        env:")
+		w("          TOKEN: ${{ secrets.%s_%s }}", SecretHetznerToken, envU)
+		w("          S3_KEY: ${{ secrets.%s_%s }}", SecretHetznerS3Key, envU)
+		w("          S3_SECRET: ${{ secrets.%s_%s }}", SecretHetznerS3Sec, envU)
+		w("        run: |")
+		w("          [ -n \"$TOKEN\" ] && [ -n \"$S3_KEY\" ] && [ -n \"$S3_SECRET\" ] || { echo \"::error::Hetzner secrets for %s are not set (see docs/bootstrap.md)\"; exit 1; }", env)
+		w("          { echo \"HCLOUD_TOKEN=$TOKEN\"; echo \"MINIO_USER=$S3_KEY\"; echo \"MINIO_PASSWORD=$S3_SECRET\"; echo \"AWS_ACCESS_KEY_ID=$S3_KEY\"; echo \"AWS_SECRET_ACCESS_KEY=$S3_SECRET\"; } >> \"$GITHUB_ENV\"")
 	default: // aws
 		role := fmt.Sprintf("${{ vars.%s_%s }}", VarApplyRole, envU)
 		if roleKind == "auto" {
@@ -230,6 +250,11 @@ func registryLogin(m Model) []string {
 	case "azure":
 		return []string{
 			`az acr login --name "${REGISTRY%%.*}"`,
+		}
+	case "hetzner":
+		// The VCS's own registry; the job token can push packages.
+		return []string{
+			`echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin`,
 		}
 	default: // aws
 		return []string{

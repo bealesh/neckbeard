@@ -57,9 +57,27 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 	}
 
 	// GCP and Azure need an explicit isolation container per environment; AWS
-	// accounts are implied by the federated credentials.
-	if cfg.Cloud != "aws" && len(cfg.Containers) == 0 {
+	// accounts are implied by the federated credentials, and a Hetzner project
+	// is implied by the API token.
+	if (cfg.Cloud == "gcp" || cfg.Cloud == "azure") && len(cfg.Containers) == 0 {
 		return nil, fmt.Errorf("cloud %q requires per-environment container ids (GCP project ids / Azure subscription ids); set containers: {dev: …, stg: …, prd: …} in neckbeard.yaml", cfg.Cloud)
+	}
+
+	// The Hetzner lane is one box per environment. It is the only lane with the
+	// vps-containers runtime, and that runtime exists nowhere else; neither
+	// mismatch is silently corrected. Tiers above smallteam are refused by
+	// name: no standby, no autoscaling, no managed anything is not what
+	// "established" or "regulated" means.
+	if (cfg.Cloud == "hetzner") != (cfg.Runtime == "vps-containers") {
+		return nil, fmt.Errorf("runtime %q and cloud %q do not go together: Hetzner runs vps-containers only, and vps-containers runs on Hetzner only", cfg.Runtime, cfg.Cloud)
+	}
+	if cfg.Cloud == "hetzner" {
+		if cfg.Tier != "solo" && cfg.Tier != "smallteam" {
+			return nil, fmt.Errorf("tier %q is not offered on Hetzner: one server per environment has no standby database, no autoscaling and no managed WAF, which is what that tier promises; choose solo or smallteam, or a cloud with managed services", cfg.Tier)
+		}
+		if _, ok := hetznerNetworkZones[cfg.Region]; !ok {
+			return nil, fmt.Errorf("region %q is not a Hetzner location (known: %s)", cfg.Region, keysCSV(hetznerNetworkZones))
+		}
 	}
 
 	// Budgets are config-driven, not profile-driven: the app doesn't know what
@@ -84,6 +102,9 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 			}
 		}
 		sort.Strings(moduleNames)
+		if len(mods) == 0 {
+			decisions = append(decisions, fmt.Sprintf("budget: %s has no budget alerts API, so finops.monthly_budget_alert renders nothing here; finops.monthly_ceiling still refuses scaffold above the estimate", cfg.Cloud))
+		}
 		budgetPerEnv = math.Round(cfg.FinOps.MonthlyBudgetAlert/float64(len(cfg.Environments))*100) / 100
 		decisions = append(decisions, fmt.Sprintf("budget: %.2f/month total split evenly as %.2f per environment (%s); alerts at 80%% and 100%% actual and 100%% forecasted notify %s — they do not cap spend", cfg.FinOps.MonthlyBudgetAlert, budgetPerEnv, strings.Join(cfg.Environments, "/"), strings.Join(cfg.FinOps.AlertEmails, ", ")))
 	}
@@ -151,6 +172,9 @@ func Plan(in Inputs) (*blueprint.Blueprint, error) {
 						inputs[i] = blueprint.Input{Key: "cpu", Value: "1", Provenance: "derived"}
 					}
 				}
+			}
+			if cfg.Cloud == "hetzner" {
+				inputs = hetznerInputs(cfg, modName, inputs)
 			}
 			if modName == "budget" {
 				inputs = insertInput(inputs, blueprint.Input{Key: "monthly_amount", Value: budgetPerEnv, Provenance: "derived"})
@@ -291,9 +315,12 @@ func requiredModules(cfg *config.Config, prof *profile.AppProfile, idx *catalog.
 	// Resolve the runtime placeholder to the configured runtime module.
 	if set["runtime"] {
 		delete(set, "runtime")
-		if cfg.Runtime == "kubernetes" {
+		switch cfg.Runtime {
+		case "kubernetes":
 			set["runtime-k8s"] = true
-		} else {
+		case "vps-containers":
+			set["runtime-vps"] = true
+		default:
 			set["runtime-serverless"] = true
 		}
 	}
@@ -374,4 +401,40 @@ func currencyOr(cfg *config.Config) string {
 
 func keysCSV[V any](m map[string]V) string {
 	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
+}
+
+// hetznerNetworkZones maps Hetzner locations to the network zone a private
+// network subnet must name. It doubles as the list of known locations.
+var hetznerNetworkZones = map[string]string{
+	"fsn1": "eu-central", "nbg1": "eu-central", "hel1": "eu-central",
+	"ash": "us-east", "hil": "us-west", "sin": "ap-southeast",
+}
+
+// hetznerInputs derives the inputs the Hetzner modules need that no tier
+// preset carries, and flattens the managed-Postgres knobs a single box cannot
+// honour into the values it can. Each flattening is a "derived" input the
+// topology shows, so nobody mistakes smallteam-on-Hetzner for a standby.
+func hetznerInputs(cfg *config.Config, modName string, inputs []blueprint.Input) []blueprint.Input {
+	switch modName {
+	case "network":
+		inputs = insertInput(inputs, blueprint.Input{Key: "network_zone", Value: hetznerNetworkZones[cfg.Region], Provenance: "derived"})
+	case "registry":
+		inputs = insertInput(inputs, blueprint.Input{Key: "vcs", Value: cfg.VCS, Provenance: "derived"})
+		inputs = insertInput(inputs, blueprint.Input{Key: "repo", Value: cfg.Repo, Provenance: "derived"})
+	case "postgres":
+		volume := 20
+		if cfg.Tier == "smallteam" {
+			volume = 40
+		}
+		kept := inputs[:0]
+		for _, in := range inputs {
+			switch in.Key {
+			case "instance_class", "multi_zone", "read_replicas", "pitr":
+				continue // a single box has none of these; the module validates them away
+			}
+			kept = append(kept, in)
+		}
+		inputs = insertInput(kept, blueprint.Input{Key: "volume_gb", Value: volume, Provenance: "derived"})
+	}
+	return inputs
 }

@@ -32,7 +32,12 @@ It covers AWS, GCP, and Azure, with GitHub Actions or GitLab CI, as serverless
 containers (Cloud Run, ECS Fargate, Container Apps) or Kubernetes (EKS, GKE,
 AKS). The plugin shape is borrowed from
 [ponytail](https://github.com/DietrichGebert/ponytail), which proved a plugin
-can be mostly one good prompt.
+can be mostly one good prompt. There is also a Hetzner lane for the apps that don't need a cloud at all:
+one server per environment running your containers under docker compose,
+Postgres on the box with nightly dumps to Object Storage, a managed load
+balancer in front, priced from a dated list-price table because Infracost
+doesn't know Hetzner. It is honest about what it isn't: no autoscaling, no
+standby database, no OIDC, solo and smallteam tiers only.
 
 ## Install
 
@@ -190,9 +195,9 @@ Pre-alpha, and specific about which parts.
 
 | Claim | Evidence |
 |---|---|
-| analyze, plan, estimate, scaffold, validate on all 12 cloud × VCS × runtime paths | Static matrix runs in CI on every PR; three unrelated fixture apps onboard end to end |
+| analyze, plan, estimate, scaffold, validate on all 12 cloud × VCS × runtime paths, plus Hetzner × GitHub/GitLab | Static matrix runs in CI on every PR; three unrelated fixture apps onboard end to end |
 | Live deploy, update, and rollback on serverless containers | Passed on AWS/GitHub and Azure/GitHub with real database checks ([evidence](docs/tranche-2.md)) |
-| Live deploy on GCP, the GitLab lanes, Kubernetes, promotion, recovery drills | Not yet. Implemented, NOT EXERCISED |
+| Live deploy on GCP, the GitLab lanes, Kubernetes, Hetzner, promotion, recovery drills | Not yet. Implemented, NOT EXERCISED |
 
 The plugin's product today is the front half: reviewable infrastructure,
 pipelines, a cost estimate, and a runbook you can hand to whoever holds the

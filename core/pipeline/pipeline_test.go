@@ -127,3 +127,39 @@ func TestMultipleDockerfilesRefused(t *testing.T) {
 		t.Errorf("expected named refusal for multi-image apps, got: %v", err)
 	}
 }
+
+func TestHetznerPipelinesUseSecretsNotFederationAndTheVCSRegistry(t *testing.T) {
+	m := testModel(t)
+	m.Cloud, m.Runtime, m.Region = "hetzner", "vps-containers", "fsn1"
+	gh := string(RenderGitHubCI(m)) + string(RenderGitHubInfra(m)) + string(RenderGitHubRelease(m))
+	for _, want := range []string{
+		"packages: write",
+		"docker login ghcr.io",
+		"secrets." + SecretHetznerToken + "_DEV",
+		"secrets." + SecretHetznerS3Key + "_DEV",
+		"HCLOUD_TOKEN=",
+		"vars." + VarHetznerReady + "_DEV",
+	} {
+		if !strings.Contains(gh, want) {
+			t.Errorf("GitHub pipelines for Hetzner missing %q", want)
+		}
+	}
+	for _, banned := range []string{"aws-actions/configure-aws-credentials", "google-github-actions/auth", "azure/login", "aws ecr get-login-password", VarPlanRole} {
+		if strings.Contains(gh, banned) {
+			t.Errorf("GitHub pipelines for Hetzner must not reference %q (no federation exists)", banned)
+		}
+	}
+	// The static-secret path only ever runs on pushes; pull requests get no credentials.
+	if !strings.Contains(gh, "if: github.event_name == 'push' && vars."+VarHetznerReady+"_DEV != ''") {
+		t.Error("Hetzner credentials step must be gated to pushes on the infra workflow")
+	}
+	gl := string(RenderGitLab(m))
+	for _, want := range []string{`docker login -u "$CI_REGISTRY_USER"`, SecretHetznerToken + "_DEV", "merge-request plans are validate-only"} {
+		if !strings.Contains(gl, want) {
+			t.Errorf("GitLab pipeline for Hetzner missing %q", want)
+		}
+	}
+	if strings.Contains(gl, "AWS_ROLE_ARN") || strings.Contains(gl, "apk add --no-cache aws-cli") {
+		t.Error("GitLab pipeline for Hetzner must not take the AWS path")
+	}
+}

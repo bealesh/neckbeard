@@ -190,13 +190,13 @@ func (t Target) Validate(env string) error {
 	if t.App == "" || t.Environment != env || !validEnv(env) || t.Region == "" {
 		return fmt.Errorf("invalid deployment target identity")
 	}
-	if t.Cloud != "aws" && t.Cloud != "gcp" && t.Cloud != "azure" {
+	if t.Cloud != "aws" && t.Cloud != "gcp" && t.Cloud != "azure" && t.Cloud != "hetzner" {
 		return fmt.Errorf("unsupported cloud %q", t.Cloud)
 	}
-	if t.Runtime != "serverless-containers" && t.Runtime != "kubernetes" {
+	if t.Runtime != "serverless-containers" && t.Runtime != "kubernetes" && t.Runtime != "vps-containers" {
 		return fmt.Errorf("unsupported runtime %q", t.Runtime)
 	}
-	if t.Cloud != "aws" && t.Container == "" {
+	if t.Cloud != "aws" && t.Cloud != "hetzner" && t.Container == "" {
 		return fmt.Errorf("cloud project/subscription is missing")
 	}
 	if t.DatabaseSecret != "" && !regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`).MatchString(t.DatabaseSecret) {
@@ -280,6 +280,8 @@ func (r Runner) Deploy(ctx context.Context, env string) error {
 		err = r.gcp(ctx, t, a, values)
 	case t.Cloud == "azure":
 		err = r.azure(ctx, t, a, values)
+	case t.Cloud == "hetzner":
+		err = fmt.Errorf("Hetzner release automation is not implemented yet (roadmap #25): update /etc/neckbeard/image.env on the server and restart neckbeard-app over SSH, as docs/bootstrap.md describes")
 	default:
 		err = fmt.Errorf("unsupported release target %s/%s", t.Cloud, t.Runtime)
 	}
