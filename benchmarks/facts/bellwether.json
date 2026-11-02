@@ -1,0 +1,14 @@
+{
+  "app": "bellwether",
+  "facts": [
+    {"id": "http-serve", "what": "HTTP service started by the serve subcommand", "any": ["\\bserve\\b"]},
+    {"id": "port-8080", "what": "listens on $PORT, default 8080", "any": ["8080"]},
+    {"id": "health-path", "what": "health check at GET /healthz", "any": ["/healthz"]},
+    {"id": "worker", "what": "background worker started by the work subcommand", "any": ["\\bwork\\b", "worker"]},
+    {"id": "cron-report", "what": "report subcommand is a one-shot job meant for a schedule", "any": ["\\breport\\b"]},
+    {"id": "postgres", "what": "PostgreSQL via DATABASE_URL (pgx)", "any": ["postgres", "pgx"]},
+    {"id": "database-url", "what": "reads DATABASE_URL", "any": ["DATABASE_URL"]},
+    {"id": "app-env", "what": "reads APP_ENV", "any": ["APP_ENV"]},
+    {"id": "db-optional", "what": "runs without a database when DATABASE_URL is unset", "any": ["optional", "without a database", "not set", "unset", "if set", "when set"]}
+  ]
+}

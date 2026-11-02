@@ -1,0 +1,253 @@
+{
+  "run": {
+    "task": "onboard",
+    "app": "python",
+    "arm": "bare",
+    "n": 3,
+    "exit": 0,
+    "wall_seconds": 1010,
+    "started": "2026-11-02T20:30:48Z"
+  },
+  "agent": {
+    "cost_usd": 5.815167399999998,
+    "turns": 20,
+    "duration_ms": 1007687,
+    "input_tokens": 580,
+    "output_tokens": 75464,
+    "cache_read_tokens": 1795050,
+    "cache_write_tokens": 101839,
+    "model": "claude-fable-5-1,claude-haiku-5-5",
+    "is_error": false
+  },
+  "tools": {
+    "tool_calls": 19,
+    "by_name": {
+      "Bash": 19
+    },
+    "shell_commands": 19,
+    "neckbeard_cli_calls": 0,
+    "neckbeard_subcommands": [],
+    "neckbeard_skill_loaded": false,
+    "cloud_cli_attempts": 0
+  },
+  "sizes": {
+    "tf_lines": 1985,
+    "workflow_lines": 292,
+    "files_changed": 41,
+    "has_tf": true
+  },
+  "v0": {
+    "roots": [
+      {
+        "root": "infra/app",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 106,
+          "failed": 11,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_157",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_338",
+            "CKV_AWS_353",
+            "CKV_AWS_65"
+          ]
+        },
+        "checkov": {
+          "passed": 106,
+          "failed": 11,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_157",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_338",
+            "CKV_AWS_353",
+            "CKV_AWS_65"
+          ]
+        }
+      },
+      {
+        "root": "infra/bootstrap",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 87,
+          "failed": 5,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_107",
+            "CKV_AWS_109",
+            "CKV_AWS_111",
+            "CKV_AWS_136",
+            "CKV_AWS_356"
+          ]
+        },
+        "checkov": {
+          "passed": 87,
+          "failed": 5,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_107",
+            "CKV_AWS_109",
+            "CKV_AWS_111",
+            "CKV_AWS_136",
+            "CKV_AWS_356"
+          ]
+        }
+      }
+    ],
+    "actionlint": {
+      "workflows": 3,
+      "issues": [],
+      "excluded_queue_max": 0
+    },
+    "checkov_failed_total": 16,
+    "checkov_raw_failed_total": 16,
+    "checkov_config_present": false,
+    "tofu_valid_all": true,
+    "fmt_clean_all": true,
+    "passes": false
+  },
+  "scan": {
+    "wildcards": {
+      "action_star": 0,
+      "service_star": 13,
+      "resource_star": 6
+    },
+    "wildcard_hits": [
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 158
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 159
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 160
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 161
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 162
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 163
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 164
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 165
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 166
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 179
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 190
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 265
+      },
+      {
+        "kind": "resource_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 119
+      },
+      {
+        "kind": "resource_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 174
+      },
+      {
+        "kind": "resource_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 185
+      },
+      {
+        "kind": "resource_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 231
+      },
+      {
+        "kind": "resource_star",
+        "file": "infra/bootstrap/github_oidc.tf",
+        "line": 246
+      },
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/state.tf",
+        "line": 72
+      },
+      {
+        "kind": "resource_star",
+        "file": "infra/modules/service/iam.tf",
+        "line": 71
+      }
+    ],
+    "secrets": [],
+    "secrets_count": 0
+  },
+  "infracost": {
+    "available": true,
+    "roots": [
+      {
+        "root": "infra/app",
+        "monthly_usd": 140.6351,
+        "unsupported": 0
+      },
+      {
+        "root": "infra/bootstrap",
+        "monthly_usd": 0.0,
+        "unsupported": 0
+      }
+    ],
+    "total_monthly_usd": 140.6351,
+    "dev_monthly_usd": null,
+    "binary": "Infracost v0.10.45"
+  },
+  "declined": false
+}

@@ -198,6 +198,7 @@ Pre-alpha, and specific about which parts.
 | analyze, plan, estimate, scaffold, validate on all 12 cloud × VCS × runtime paths, plus Hetzner × GitHub/GitLab | Static matrix runs in CI on every PR; three unrelated fixture apps onboard end to end |
 | Live deploy, update, and rollback on serverless containers | Passed on AWS/GitHub and Azure/GitHub with real database checks ([evidence](docs/tranche-2.md)) |
 | Live deploy on GCP, the GitLab lanes, Kubernetes, Hetzner, promotion, recovery drills | Not yet. Implemented, NOT EXERCISED |
+| The plugin changes what the agent produces, not just how fast | Same agent, same prompts, with and without the plugin, 36 runs on three apps: half the wall time, under half the HCL, V0 on 9 of 9 against 0 of 9, and no help at all on two tasks it was not built for ([benchmarks](benchmarks/README.md)) |
 
 The plugin's product today is the front half: reviewable infrastructure,
 pipelines, a cost estimate, and a runbook you can hand to whoever holds the

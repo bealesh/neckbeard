@@ -4,3 +4,5 @@ bin/
 coverage.out
 .terraform/
 .terraform.lock.hcl
+benchmarks/.work/
+__pycache__/

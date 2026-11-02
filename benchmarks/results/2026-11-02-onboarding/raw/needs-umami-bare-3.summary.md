@@ -1,0 +1,10 @@
+Written to `PRODUCTION_NEEDS.md` in the repo root. Every claim cites a file and line. The headline facts:
+
+- **One process only.** A Next.js standalone server started by `scripts/start-docker.sh:14-16`, which ends in `exec node server.js`. No worker, no scheduler. Kafka is producer-only, so if you enable it something outside this repo must feed ClickHouse.
+- **Port 3000 on 0.0.0.0**, from `Dockerfile:99-102`. Health check is `GET /api/heartbeat`, which returns `{ok:true}` without touching any datastore (`src/app/api/heartbeat/route.ts`).
+- **PostgreSQL is mandatory** via `DATABASE_URL`, even when ClickHouse is configured. ClickHouse, Kafka and Redis are optional and switched on by `CLICKHOUSE_URL`, `KAFKA_URL` plus `KAFKA_BROKER`, and `REDIS_URL`. Redis becomes mandatory in cloud mode. A GeoLite2 file is read from disk at request time.
+- **Secrets:** `DATABASE_URL`, `DATABASE_REPLICA_URL`, `DIRECT_DATABASE_URL`, `APP_SECRET`, `TWO_FACTOR_ENCRYPTION_KEY`, `CLICKHOUSE_URL`, `KAFKA_URL`, `REDIS_URL`, and `MAXMIND_LICENSE_KEY` at build time. `APP_SECRET` falls back to hashing `DATABASE_URL` if unset, which is worth knowing before you rotate either.
+- **Startup runs migrations every boot.** `scripts/check-db.js` connects, checks the PostgreSQL version, runs `prisma migrate deploy`, and exits non-zero on any failure. Multiple replicas starting together will race unless you set `SKIP_DB_MIGRATION`. The first migration seeds an `admin` user with password `umami`.
+- **No scheduled work** on the server. The only cron in the repo is a GitHub Actions stale-issue job.
+
+Four things the code does not settle, listed in section 7 of the file: how the ClickHouse schema and its ten migration files get applied, what consumes the Kafka topics, whether the GeoLite2 `.mmdb` actually lands in the Docker runner stage (the Dockerfile never copies the `geo` directory), and who writes the cloud-mode Redis keys the app only reads.
