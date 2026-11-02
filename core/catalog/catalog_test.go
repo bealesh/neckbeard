@@ -53,3 +53,55 @@ func TestGCPStartupProbeAllowsColdStarts(t *testing.T) {
 		}
 	}
 }
+
+// A healthy app that takes a few minutes to answer its first request must not
+// be killed mid-boot. Each serverless lane gets the same four-minute startup
+// allowance; the regression here is per cloud because each expresses it
+// differently (#44).
+func TestAWSLoadBalancedServicesGetAStartupGracePeriod(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "catalog", "aws", "runtime-serverless", "main.tf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := regexp.MustCompile(`(?s)resource "aws_ecs_service" "this" \{(.*?)\n\}`).FindStringSubmatch(string(data))
+	if len(service) != 2 {
+		t.Fatal("ECS service resource not found")
+	}
+	grace := regexp.MustCompile(`health_check_grace_period_seconds\s*=\s*each\.value\.kind == "http" && contains\(keys\(var\.target_group_arns\), each\.key\) \? 240 : null`)
+	if !grace.MatchString(service[1]) {
+		t.Error("load-balanced HTTP services need a 240s grace period; workers (no load balancer) must keep the default, or ECS rejects the service")
+	}
+	if !strings.Contains(service[1], `rollback = true`) {
+		t.Error("the deployment circuit breaker rollback must survive the grace-period change")
+	}
+}
+
+func TestAzureHTTPContainersSeparateStartupReadinessAndLiveness(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "catalog", "azure", "runtime-serverless", "main.tf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, probe := range []string{"startup_probe", "readiness_probe", "liveness_probe"} {
+		block := regexp.MustCompile(`(?s)dynamic "` + probe + `" \{(.*?)\n      \}`).FindStringSubmatch(source)
+		if len(block) != 2 {
+			t.Fatalf("%s block not found", probe)
+		}
+		if !strings.Contains(block[1], `for_each = each.value.kind == "http"`) {
+			t.Errorf("%s must apply to HTTP services only; workers have no ingress to probe", probe)
+		}
+		if !regexp.MustCompile(`transport\s*=\s*"HTTP"`).MatchString(block[1]) || !strings.Contains(block[1], ".health_path") {
+			t.Errorf("%s must probe the app's health path over HTTP, not just the TCP port", probe)
+		}
+	}
+	startup := regexp.MustCompile(`(?s)dynamic "startup_probe" \{(.*?)\n      \}`).FindStringSubmatch(source)[1]
+	for _, setting := range []string{`interval_seconds\s*=\s*10`, `timeout\s*=\s*5`, `failure_count_threshold\s*=\s*24`} {
+		if !regexp.MustCompile(setting).MatchString(startup) {
+			t.Errorf("startup probe needs a four-minute allowance (24 x 10s, 5s timeout): missing %s", setting)
+		}
+	}
+	liveness := regexp.MustCompile(`(?s)dynamic "liveness_probe" \{(.*?)\n      \}`).FindStringSubmatch(source)[1]
+	if !regexp.MustCompile(`failure_count_threshold\s*=\s*3`).MatchString(liveness) {
+		t.Error("liveness must stay tight (3 failures); the startup allowance belongs to the startup probe, not liveness")
+	}
+}

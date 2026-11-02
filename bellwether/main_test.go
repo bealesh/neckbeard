@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Tests run against the in-memory fallback (no DATABASE_URL): they prove the app's
@@ -74,5 +75,39 @@ func TestCreateNoteRejectsEmptyBody(t *testing.T) {
 	a.routes().ServeHTTP(rec, httptest.NewRequest("POST", "/notes", strings.NewReader(`{}`)))
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status %d", rec.Code)
+	}
+}
+
+func TestHealthzReportsStartingUntilTheConfiguredDelay(t *testing.T) {
+	t.Setenv("BELLWETHER_STARTUP_DELAY", "2s")
+	a, err := newApp(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.close()
+	srv := httptest.NewServer(a.routes())
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("during the delay /healthz must be 503, got %d", res.StatusCode)
+	}
+	a.readyAt = time.Now() // fast-forward instead of sleeping through the delay
+	res, err = http.Get(srv.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("after the delay /healthz must be 200, got %d", res.StatusCode)
+	}
+
+	t.Setenv("BELLWETHER_STARTUP_DELAY", "soon")
+	if _, err := newApp(context.Background()); err == nil {
+		t.Fatal("a malformed delay must fail startup loudly, not silently start ready")
 	}
 }
