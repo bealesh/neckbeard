@@ -1,0 +1,15 @@
+{
+  "app": "umami",
+  "facts": [
+    {"id": "nextjs", "what": "Next.js application served by node server.js", "any": ["next", "server\\.js"]},
+    {"id": "port-3000", "what": "listens on 3000", "any": ["3000"]},
+    {"id": "heartbeat", "what": "health endpoint at /api/heartbeat", "any": ["heartbeat"]},
+    {"id": "postgres", "what": "PostgreSQL through Prisma", "any": ["postgres"]},
+    {"id": "database-url", "what": "reads DATABASE_URL", "any": ["DATABASE_URL"]},
+    {"id": "migrations", "what": "runs prisma migrate deploy at container start (check-db.js)", "any": ["migrat"]},
+    {"id": "tracker-update", "what": "update-tracker.js runs at startup", "any": ["update-tracker", "tracker"]},
+    {"id": "replica", "what": "optional DATABASE_REPLICA_URL", "any": ["DATABASE_REPLICA_URL", "replica"]},
+    {"id": "clickhouse", "what": "optional ClickHouse/Kafka path exists", "any": ["clickhouse"]},
+    {"id": "no-cron", "what": "no scheduled jobs in the app itself", "any": ["no scheduled", "no cron", "none found", "does not .*schedul", "no periodic", "not .*scheduled"]}
+  ]
+}

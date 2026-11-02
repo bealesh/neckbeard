@@ -1,0 +1,292 @@
+{
+  "run": {
+    "task": "onboard",
+    "app": "bellwether",
+    "arm": "bare",
+    "n": 1,
+    "exit": 0,
+    "wall_seconds": 1233,
+    "started": "2026-11-02T19:26:09Z"
+  },
+  "agent": {
+    "cost_usd": 7.864884149999999,
+    "turns": 17,
+    "duration_ms": 1230022,
+    "input_tokens": 514,
+    "output_tokens": 87130,
+    "cache_read_tokens": 1848337,
+    "cache_write_tokens": 152050,
+    "model": "claude-fable-5-1,claude-haiku-5-5",
+    "is_error": false
+  },
+  "tools": {
+    "tool_calls": 16,
+    "by_name": {
+      "Bash": 15,
+      "Write": 1
+    },
+    "shell_commands": 15,
+    "neckbeard_cli_calls": 0,
+    "neckbeard_subcommands": [],
+    "neckbeard_skill_loaded": false,
+    "cloud_cli_attempts": 0
+  },
+  "sizes": {
+    "tf_lines": 2426,
+    "workflow_lines": 319,
+    "files_changed": 50,
+    "has_tf": true
+  },
+  "v0": {
+    "roots": [
+      {
+        "root": "infra/bootstrap",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 46,
+          "failed": 2,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_274",
+            "CKV_AWS_300"
+          ]
+        },
+        "checkov": {
+          "passed": 46,
+          "failed": 2,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_274",
+            "CKV_AWS_300"
+          ]
+        }
+      },
+      {
+        "root": "infra/envs/dev",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 125,
+          "failed": 14,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_150",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_23",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_297",
+            "CKV_AWS_353",
+            "CKV_AWS_65",
+            "CKV_AWS_91"
+          ]
+        },
+        "checkov": {
+          "passed": 125,
+          "failed": 14,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_150",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_23",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_297",
+            "CKV_AWS_353",
+            "CKV_AWS_65",
+            "CKV_AWS_91"
+          ]
+        }
+      },
+      {
+        "root": "infra/envs/prd",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 126,
+          "failed": 13,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_23",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_297",
+            "CKV_AWS_353",
+            "CKV_AWS_65",
+            "CKV_AWS_91"
+          ]
+        },
+        "checkov": {
+          "passed": 126,
+          "failed": 13,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_23",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_297",
+            "CKV_AWS_353",
+            "CKV_AWS_65",
+            "CKV_AWS_91"
+          ]
+        }
+      },
+      {
+        "root": "infra/envs/stg",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 125,
+          "failed": 14,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_150",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_23",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_297",
+            "CKV_AWS_353",
+            "CKV_AWS_65",
+            "CKV_AWS_91"
+          ]
+        },
+        "checkov": {
+          "passed": 125,
+          "failed": 14,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_118",
+            "CKV_AWS_129",
+            "CKV_AWS_149",
+            "CKV_AWS_150",
+            "CKV_AWS_158",
+            "CKV_AWS_161",
+            "CKV_AWS_23",
+            "CKV_AWS_26",
+            "CKV_AWS_260",
+            "CKV_AWS_297",
+            "CKV_AWS_353",
+            "CKV_AWS_65",
+            "CKV_AWS_91"
+          ]
+        }
+      },
+      {
+        "root": "infra/global",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 3,
+          "failed": 1,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_136"
+          ]
+        },
+        "checkov": {
+          "passed": 3,
+          "failed": 1,
+          "skipped": 0,
+          "failed_ids": [
+            "CKV_AWS_136"
+          ]
+        }
+      }
+    ],
+    "actionlint": {
+      "workflows": 4,
+      "issues": [],
+      "excluded_queue_max": 0
+    },
+    "checkov_failed_total": 44,
+    "checkov_raw_failed_total": 44,
+    "checkov_config_present": false,
+    "tofu_valid_all": true,
+    "fmt_clean_all": true,
+    "passes": false
+  },
+  "scan": {
+    "wildcards": {
+      "action_star": 0,
+      "service_star": 1,
+      "resource_star": 0
+    },
+    "wildcard_hits": [
+      {
+        "kind": "service_star",
+        "file": "infra/bootstrap/main.tf",
+        "line": 101
+      }
+    ],
+    "secrets": [],
+    "secrets_count": 0
+  },
+  "infracost": {
+    "available": true,
+    "roots": [
+      {
+        "root": "infra/bootstrap",
+        "monthly_usd": 0.0,
+        "unsupported": 0
+      },
+      {
+        "root": "infra/envs/dev",
+        "monthly_usd": 48.82505,
+        "unsupported": 0
+      },
+      {
+        "root": "infra/envs/prd",
+        "monthly_usd": 69.915075,
+        "unsupported": 0
+      },
+      {
+        "root": "infra/envs/stg",
+        "monthly_usd": 48.82505,
+        "unsupported": 0
+      },
+      {
+        "root": "infra/global",
+        "monthly_usd": 0.5,
+        "unsupported": 0
+      }
+    ],
+    "total_monthly_usd": 168.065175,
+    "dev_monthly_usd": 48.82505,
+    "binary": "Infracost v0.10.45"
+  },
+  "declined": false
+}

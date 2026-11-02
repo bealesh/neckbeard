@@ -1,0 +1,82 @@
+{
+  "run": {
+    "task": "needs",
+    "app": "bellwether",
+    "arm": "bare",
+    "n": 3,
+    "exit": 0,
+    "wall_seconds": 108,
+    "started": "2026-11-02T20:58:30Z"
+  },
+  "agent": {
+    "cost_usd": 1.13160995,
+    "turns": 6,
+    "duration_ms": 106158,
+    "input_tokens": 162,
+    "output_tokens": 7986,
+    "cache_read_tokens": 287511,
+    "cache_write_tokens": 38991,
+    "model": "claude-fable-5-1,claude-haiku-5-5",
+    "is_error": false
+  },
+  "tools": {
+    "tool_calls": 5,
+    "by_name": {
+      "Bash": 5
+    },
+    "shell_commands": 5,
+    "neckbeard_cli_calls": 0,
+    "neckbeard_subcommands": [],
+    "neckbeard_skill_loaded": false,
+    "cloud_cli_attempts": 0
+  },
+  "sizes": {
+    "tf_lines": 0,
+    "workflow_lines": 0,
+    "files_changed": 1,
+    "has_tf": false
+  },
+  "v0": {
+    "roots": [],
+    "actionlint": {
+      "workflows": 0,
+      "issues": null
+    },
+    "checkov_failed_total": 0,
+    "checkov_raw_failed_total": 0,
+    "checkov_config_present": false,
+    "tofu_valid_all": false,
+    "fmt_clean_all": false,
+    "passes": false
+  },
+  "scan": {
+    "wildcards": {
+      "action_star": 0,
+      "service_star": 0,
+      "resource_star": 0
+    },
+    "wildcard_hits": [],
+    "secrets": [],
+    "secrets_count": 0
+  },
+  "facts": {
+    "doc_present": true,
+    "found": [
+      "http-serve",
+      "port-8080",
+      "health-path",
+      "worker",
+      "cron-report",
+      "postgres",
+      "database-url",
+      "app-env",
+      "db-optional"
+    ],
+    "missing": [],
+    "score": "9/9",
+    "ratio": 1.0,
+    "citations_with_lines": 110,
+    "doc_lines": 118
+  },
+  "declined": false
+}

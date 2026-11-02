@@ -1,0 +1,104 @@
+{
+  "run": {
+    "task": "static-site",
+    "app": "none",
+    "arm": "plugin",
+    "n": 2,
+    "exit": 0,
+    "wall_seconds": 244,
+    "started": "2026-11-02T20:56:37Z"
+  },
+  "agent": {
+    "cost_usd": 1.7564868500000002,
+    "turns": 12,
+    "duration_ms": 241501,
+    "input_tokens": 196,
+    "output_tokens": 16875,
+    "cache_read_tokens": 458831,
+    "cache_write_tokens": 50961,
+    "model": "claude-fable-5-1,claude-haiku-5-5",
+    "is_error": false
+  },
+  "tools": {
+    "tool_calls": 10,
+    "by_name": {
+      "Bash": 9,
+      "Skill": 1
+    },
+    "shell_commands": 9,
+    "neckbeard_cli_calls": 0,
+    "neckbeard_subcommands": [],
+    "neckbeard_skill_loaded": true,
+    "cloud_cli_attempts": 0
+  },
+  "sizes": {
+    "tf_lines": 498,
+    "workflow_lines": 67,
+    "files_changed": 14,
+    "has_tf": true
+  },
+  "v0": {
+    "roots": [
+      {
+        "root": ".",
+        "init": true,
+        "validate": true,
+        "validate_errors": [],
+        "fmt": true,
+        "checkov_raw": {
+          "passed": 51,
+          "failed": 0,
+          "skipped": 4,
+          "failed_ids": []
+        },
+        "checkov": {
+          "passed": 51,
+          "failed": 0,
+          "skipped": 0,
+          "failed_ids": []
+        }
+      }
+    ],
+    "actionlint": {
+      "workflows": 1,
+      "issues": [],
+      "excluded_queue_max": 0
+    },
+    "checkov_failed_total": 0,
+    "checkov_raw_failed_total": 0,
+    "checkov_config_present": false,
+    "tofu_valid_all": true,
+    "fmt_clean_all": true,
+    "passes": true
+  },
+  "scan": {
+    "wildcards": {
+      "action_star": 0,
+      "service_star": 1,
+      "resource_star": 0
+    },
+    "wildcard_hits": [
+      {
+        "kind": "service_star",
+        "file": "s3.tf",
+        "line": 88
+      }
+    ],
+    "secrets": [],
+    "secrets_count": 0
+  },
+  "infracost": {
+    "available": true,
+    "roots": [
+      {
+        "root": ".",
+        "monthly_usd": 0.0,
+        "unsupported": 0
+      }
+    ],
+    "total_monthly_usd": 0.0,
+    "dev_monthly_usd": 0.0,
+    "binary": "Infracost v0.10.45"
+  },
+  "declined": false
+}

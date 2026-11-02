@@ -1,0 +1,10 @@
+Written to `PRODUCTION_NEEDS.md` in the app directory. Summary of what it records, each backed in the file by a `main.go` or `Dockerfile` line reference:
+
+- **Three processes from one binary.** `bellwether serve` is the HTTP service, `bellwether work` is a long-running worker that polls every 5 seconds, and `bellwether report` is a run-once job that prints note counts and exits. The container's default command is `serve`.
+- **Port and health check.** The server binds `PORT`, defaulting to 8080, plain HTTP. The health path is `GET /healthz`. It returns 503 during a configured startup delay and 503 whenever a 3-second database ping fails, so a database outage takes every replica out of rotation at once.
+- **One datastore, PostgreSQL, optional.** Found solely through `DATABASE_URL`. When that is unset every process uses its own in-memory store, which means the worker and report job never see what the HTTP service wrote. Only one table, `notes`, is used.
+- **Environment.** Four variables are read: `DATABASE_URL` (the only secret, since it carries the database password), `PORT`, `APP_ENV` (a label only, nothing branches on it), and `BELLWETHER_STARTUP_DELAY` (a test fixture that should stay unset in production). `APP_VERSION` is build-time only.
+- **Startup.** All three processes ping the database with a 10-second timeout and then run `CREATE TABLE IF NOT EXISTS notes` inline. That statement is the entire migration mechanism. Any failure is fatal.
+- **Scheduling.** The worker's 5-second cadence is in code. The report job's schedule is not defined anywhere in the repository, and the file says so.
+
+Two things the code cannot settle are flagged explicitly. The committed Dockerfile is malformed on three lines (the build output path, the runtime `COPY`, and the `ENTRYPOINT` are all truncated), so the image will not build as written and the binary path inside it is unknown. And nothing in the repo pins a PostgreSQL version, replica count, pool size, or TLS requirement for the database connection.
