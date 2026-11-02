@@ -69,6 +69,8 @@ jobs:
           CLAUDE_PLUGIN_ROOT="$PWD" bash hooks/session-start.sh \
             | jq -e '.hookSpecificOutput.hookEventName == "SessionStart" and (.hookSpecificOutput.additionalContext | test("neckbeard"))' >/dev/null
       - name: Installer bootstraps the CLI (release binary when one exists, else go install)
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # the latest-release lookup is rate-limited unauthenticated
         run: |
           set -eu
           # Candidate manifest versions may not be published yet; version selection
