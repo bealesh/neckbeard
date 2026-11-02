@@ -13,9 +13,12 @@ import (
 )
 
 func TestDurableReceiptsAcrossFreshJobs(t *testing.T) {
-	for cloud, location := range map[string]string{"aws": "s3://test-bucket", "gcp": "gs://test-bucket", "azure": "https://teststore.blob.core.windows.net/tfstate"} {
+	for cloud, location := range map[string]string{"aws": "s3://test-bucket", "gcp": "gs://test-bucket", "azure": "https://teststore.blob.core.windows.net/tfstate", "hetzner": "s3://test-bucket"} {
 		t.Run(cloud, func(t *testing.T) {
 			r, target, a := fixture(t, cloud, "worker")
+			if cloud == "hetzner" {
+				target.Runtime, target.Region = "vps-containers", "fsn1"
+			}
 			dir := filepath.Join(r.Root, ".neckbeard/deploy")
 			WriteJSON(filepath.Join(dir, "dev.store.json"), ReleaseStore{URL: location})
 			currentPath, previousPath := filepath.Join(dir, "dev.receipt.json"), filepath.Join(dir, "dev.previous.json")
@@ -23,6 +26,12 @@ func TestDurableReceiptsAcrossFreshJobs(t *testing.T) {
 			failUpload, failListing := false, false
 			r.Run = func(_ context.Context, name string, args []string, _ []byte, _ ...string) ([]byte, error) {
 				listing := slices.Contains(args, "list-objects-v2") || slices.Contains(args, "list") || slices.Contains(args, "exists")
+				if cloud == "hetzner" && !slices.Contains(args, "https://fsn1.your-objectstorage.com") {
+					t.Fatal("Hetzner receipts must address Object Storage's own endpoint", args)
+				}
+				if cloud == "aws" && slices.Contains(args, "--endpoint-url") {
+					t.Fatal("AWS receipts must not carry an endpoint override", args)
+				}
 				if listing {
 					if failListing {
 						return nil, errors.New("access denied")

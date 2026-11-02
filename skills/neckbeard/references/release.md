@@ -21,6 +21,19 @@ lifecycle-proven. Say so when the user asks how tested their lane is; the
 [launch plan](https://github.com/bealesh/neckbeard/blob/main/docs/launch-plan.md)
 tracks acceptance per path.
 
+**Hetzner.** The same commands run, but underneath there is no deployment API.
+`release deploy` connects to the environment's server over SSH as root, rewrites
+`/etc/neckbeard/image.env`, reloads `neckbeard-app.service` so compose converges
+onto the new digest without touching Postgres, and then reads `docker inspect`
+until every service container is on the released image, running, and healthy for
+HTTP. It refuses to connect unless the server's host key is committed at
+`.neckbeard/deploy/<env>.known_hosts`, and it never accepts a new key on its own.
+In CI the private deploy key comes from the secret `NECKBEARD_HETZNER_SSH_KEY_<ENV>`;
+from a workstation, point `NECKBEARD_SSH_IDENTITY` at a key file or let the agent
+supply one. `prepare-database` has nothing to do on this lane and says so:
+Postgres runs on the box and its password lives there. None of this has run
+against a live server yet.
+
 ## Order of operations (per environment, dev first)
 
 ```sh

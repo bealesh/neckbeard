@@ -48,10 +48,11 @@ const (
 	// publishes; the credentials are SECRETS the operator sets by hand (a
 	// project API token and an Object Storage key pair), named here so the
 	// pipelines and docs/bootstrap.md agree. DESIGN §3.3 records the exception.
-	VarHetznerReady    = "NECKBEARD_HETZNER_READY"     // + _<ENV>, variable
-	SecretHetznerToken = "NECKBEARD_HCLOUD_TOKEN"      // + _<ENV>, secret
-	SecretHetznerS3Key = "NECKBEARD_HETZNER_S3_KEY"    // + _<ENV>, secret
-	SecretHetznerS3Sec = "NECKBEARD_HETZNER_S3_SECRET" // + _<ENV>, secret
+	VarHetznerReady     = "NECKBEARD_HETZNER_READY"     // + _<ENV>, variable
+	SecretHetznerToken  = "NECKBEARD_HCLOUD_TOKEN"      // + _<ENV>, secret
+	SecretHetznerS3Key  = "NECKBEARD_HETZNER_S3_KEY"    // + _<ENV>, secret
+	SecretHetznerS3Sec  = "NECKBEARD_HETZNER_S3_SECRET" // + _<ENV>, secret
+	SecretHetznerSSHKey = "NECKBEARD_HETZNER_SSH_KEY"   // + _<ENV>, secret: private deploy key for the release job
 )
 
 // GateVar is the variable whose absence means "bootstrap pending" for a cloud.

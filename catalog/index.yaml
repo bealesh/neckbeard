@@ -4,7 +4,7 @@
 # migration path.
 # Pre-1.0: minor releases may change planner defaults with explicit migration
 # notes accompany each revision; schema/address guarantees above still apply.
-version: "0.5.0"
+version: "0.5.1"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.
 opentofu: "1.12.6"

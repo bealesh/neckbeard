@@ -1,5 +1,7 @@
 # Rendered by neckbeard's runtime-vps module; written to /etc/neckbeard/compose.yaml
-# at first boot. The release flow changes only /etc/neckbeard/image.env.
+# at first boot. The release flow changes only /etc/neckbeard/image.env. The
+# project name is fixed so the release runner can find these containers by label.
+name: neckbeard
 services:
 %{ for name, s in http_services ~}
   ${name}:

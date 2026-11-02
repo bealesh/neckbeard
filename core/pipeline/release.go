@@ -46,6 +46,17 @@ func RenderGitHubRelease(m Model) []byte {
 		w("          tofu_version: %s", m.TofuVersion)
 		w("          tofu_wrapper: false")
 		githubFederation(w, m, env, "apply", "success()")
+		if m.Cloud == "hetzner" {
+			// Releases go over SSH. The private deploy key is a secret; the
+			// server's host key is committed, so the runner checks it strictly.
+			w("      - name: Hetzner deploy key (%s) — from secrets, for the SSH release", env)
+			w("        env:")
+			w("          KEY: ${{ secrets.%s_%s }}", SecretHetznerSSHKey, strings.ToUpper(env))
+			w("        run: |")
+			w("          [ -n \"$KEY\" ] || { echo \"::error::%s_%s is not set (see docs/bootstrap.md)\"; exit 1; }", SecretHetznerSSHKey, strings.ToUpper(env))
+			w("          umask 077 && printf '%%s\\n' \"$KEY\" > \"$RUNNER_TEMP/neckbeard-deploy-key\"")
+			w("          echo \"NECKBEARD_SSH_IDENTITY=$RUNNER_TEMP/neckbeard-deploy-key\" >> \"$GITHUB_ENV\"")
+		}
 		if m.Cloud == "gcp" {
 			w("      - uses: google-github-actions/setup-gcloud@v2")
 			if m.Runtime == "kubernetes" {

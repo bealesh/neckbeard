@@ -141,8 +141,8 @@ func (r Runner) receiptExists(ctx context.Context, t Target, u *url.URL, key str
 	var out []byte
 	var err error
 	switch t.Cloud {
-	case "aws":
-		out, err = r.command(ctx, "aws", "s3api", "list-objects-v2", "--bucket", u.Host, "--prefix", key, "--region", t.Region, "--output", "json")
+	case "aws", "hetzner":
+		out, err = r.command(ctx, "aws", append([]string{"s3api", "list-objects-v2", "--bucket", u.Host, "--prefix", key, "--output", "json"}, hetznerS3Args(t)...)...)
 		if err != nil {
 			return false, err
 		}
@@ -181,7 +181,7 @@ func (r Runner) receiptExists(ctx context.Context, t Target, u *url.URL, key str
 		}
 		return *result.Exists, nil
 	default:
-		return false, fmt.Errorf("release receipt storage is not implemented for %s (Hetzner release automation is roadmap #25)", t.Cloud)
+		return false, fmt.Errorf("release receipt storage is not implemented for %s", t.Cloud)
 	}
 	return false, nil
 }
@@ -198,8 +198,8 @@ func (r Runner) transferReceipts(ctx context.Context, t Target, u *url.URL, key,
 	}
 	var err error
 	switch t.Cloud {
-	case "aws":
-		_, err = r.command(ctx, "aws", "s3", "cp", source, dest, "--region", t.Region, "--only-show-errors")
+	case "aws", "hetzner":
+		_, err = r.command(ctx, "aws", append([]string{"s3", "cp", source, dest, "--only-show-errors"}, hetznerS3Args(t)...)...)
 	case "gcp":
 		_, err = r.command(ctx, "gcloud", "storage", "cp", source, dest, "--project", t.Container, "--quiet")
 	case "azure":
@@ -211,7 +211,17 @@ func (r Runner) transferReceipts(ctx context.Context, t Target, u *url.URL, key,
 		args = append(args, "--file", file, "--overwrite", "true", "--no-progress")
 		_, err = r.command(ctx, "az", args...)
 	default:
-		err = fmt.Errorf("release receipt storage is not implemented for %s (Hetzner release automation is roadmap #25)", t.Cloud)
+		err = fmt.Errorf("release receipt storage is not implemented for %s", t.Cloud)
 	}
 	return err
+}
+
+// hetznerS3Args points awscli at the target's bucket location. Hetzner Object
+// Storage speaks S3 at a per-location endpoint; for AWS the region alone does.
+func hetznerS3Args(t Target) []string {
+	args := []string{"--region", t.Region}
+	if t.Cloud == "hetzner" {
+		args = append(args, "--endpoint-url", "https://"+t.Region+".your-objectstorage.com")
+	}
+	return args
 }
