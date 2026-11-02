@@ -50,8 +50,11 @@ var envAccessors = []*regexp.Regexp{
 	regexp.MustCompile(`process\.env\[["']([A-Z][A-Z0-9_]+)["']\]`),      // Node
 	regexp.MustCompile(`(?:^|[^.\w])env\.([A-Z][A-Z0-9_]+)\b`),           // typed env wrappers (outline-style `env.REDIS_URL`)
 	regexp.MustCompile(`System\.get_env\(\s*"([A-Z][A-Z0-9_]+)"`),        // Elixir
+	regexp.MustCompile(`System\.fetch_env!?\(\s*"([A-Z][A-Z0-9_]+)"`),    // Elixir
 	regexp.MustCompile(`ENV\[["']([A-Z][A-Z0-9_]+)["']\]`),               // Ruby
+	regexp.MustCompile(`ENV\.fetch[(\s]\s*["']([A-Z][A-Z0-9_]+)["']`),    // Ruby
 	regexp.MustCompile(`os\.environ(?:\.get\(|\[)["']([A-Z][A-Z0-9_]+)`), // Python
+	regexp.MustCompile(`os\.getenv\(\s*["']([A-Z][A-Z0-9_]+)["']`),       // Python
 	regexp.MustCompile(`env::var\(\s*"([A-Z][A-Z0-9_]+)"`),               // Rust
 	regexp.MustCompile(`System\.getenv\(\s*"([A-Z][A-Z0-9_]+)"`),         // JVM
 	regexp.MustCompile(`\$\{?([A-Z][A-Z0-9_]+)\}?`),                      // shell-ish (weak; only counted in .sh/.env.example)
