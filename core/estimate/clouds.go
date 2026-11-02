@@ -334,6 +334,9 @@ func correctNodes(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environme
 }
 
 func correctCloud(d *breakdown, bp *blueprint.Blueprint, env blueprint.Environment, usage map[string]float64, mult float64, lookup productLookup) ([]string, error) {
+	if bp.Cloud == "hetzner" {
+		return nil, fmt.Errorf("Hetzner estimates are built from the price table, not corrected adapter output")
+	}
 	var notes []string
 	n, err := correctObservability(d, bp, usage, mult, lookup)
 	if err != nil {

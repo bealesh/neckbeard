@@ -98,7 +98,8 @@ GCP/Azure the per-env `containers`. Show the user the choices before running pla
   section before scaffolding — consequences before generation is a core promise.
 - Money controls, two kinds, never confused: `finops.monthly_budget_alert`
   renders a real cloud budget per environment (its even share of the total;
-  needs `finops.alert_emails`, and on GCP `finops.billing_account`) — alerts
+  needs `finops.alert_emails`, and on GCP `finops.billing_account`; Hetzner has no
+  budgets API, so the alert renders nothing there and the plan says so) — alerts
   NOTIFY, they do not cap. `finops.monthly_ceiling` checks the estimate before
   scaffolding; it is not a cloud spending limit. It refuses estimates above the
   threshold, partial reports, old cost models, a single-environment report, or
@@ -145,7 +146,9 @@ reconciliation, regional capability holes) live there with recoveries. New
 failures deserve the same treatment: capture what happened and why before
 working around it.
 
-Cost model v3 covers AWS/Azure/GCP serverless and Kubernetes. Before presenting
+Cost model v3 covers AWS/Azure/GCP serverless and Kubernetes; Hetzner is priced
+from a bundled, dated list-price table in EUR (no Infracost involved, so `doctor`'s
+Infracost check does not apply there; `finops.currency` must be EUR). Before presenting
 an estimate, review `active_instance_hours` (per HTTP service), job executions
 and duration, and `additional_node_hours` (aggregate hours above minimum nodes).
 Workers and minimum nodes remain billable at idle. Check log queries, object

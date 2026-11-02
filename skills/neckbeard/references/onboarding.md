@@ -149,6 +149,13 @@ finops:
   monthly_ceiling: 200             # the cap: estimate fails and scaffold refuses above this
 ```
 
+For Hetzner: `cloud: hetzner`, `runtime: vps-containers` (the only pairing either
+accepts), `region` one of fsn1/nbg1/hel1 (Object Storage, which holds state and
+backups, exists only there; ash/hil/sin plan but fail at validate), `tier` solo or
+smallteam (others are refused by name: one box has no standby, autoscaling or WAF),
+`finops.currency: EUR`. No `containers`. Postgres runs as a container on the box
+with nightly dumps; say so when the user asks how durable it is.
+
 Replace the example identifiers with the user's choices. For GCP or Azure also
 set `containers: {dev: PROJECT-OR-SUBSCRIPTION, stg: ..., prd: ...}` and choose a
 region belonging to that cloud. Use short names: cloud resource name limits differ.

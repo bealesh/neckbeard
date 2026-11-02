@@ -4,7 +4,7 @@
 # migration path.
 # Pre-1.0: minor releases may change planner defaults with explicit migration
 # notes accompany each revision; schema/address guarantees above still apply.
-version: "0.4.2"
+version: "0.5.0"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.
 opentofu: "1.12.6"
@@ -154,3 +154,43 @@ clouds:
         version: "0.1.0"
         source: catalog/azure/budget
         overridable: []
+  hetzner:
+    providers:
+      - name: hetznercloud/hcloud
+        version: "1.70.0"
+      - name: aminueza/minio
+        version: "3.45.1"   # Object Storage buckets; hcloud has no S3 resource
+    # Honest per-cloud differences (§3.3). Hetzner has no budgets API: the
+    # finops ceiling still refuses before anything exists, but nothing notifies
+    # after. One runtime only; the planner refuses the others by name.
+    capabilities:
+      budget: []
+    modules:
+      network:                       # private network + public-interface firewall
+        version: "0.1.0"
+        source: catalog/hetzner/network
+        overridable: [ssh_allowed_cidrs]
+      runtime-vps:                   # one server per env, docker compose via cloud-init
+        version: "0.1.0"
+        source: catalog/hetzner/runtime-vps
+        overridable: [server_shape, arch]
+      postgres:                      # block-storage volume; the process runs on the box
+        version: "0.1.0"
+        source: catalog/hetzner/postgres
+        overridable: [volume_gb, backup_retention_days]
+      storage:                       # Object Storage (S3-compatible)
+        version: "0.1.0"
+        source: catalog/hetzner/storage
+        overridable: [versioning]
+      secrets:                       # names only; operator-written env file on the box
+        version: "0.1.0"
+        source: catalog/hetzner/secrets
+        overridable: []
+      registry:                      # the VCS's registry (ghcr.io / registry.gitlab.com)
+        version: "0.1.0"
+        source: catalog/hetzner/registry
+        overridable: []
+      dns-ingress:                   # managed load balancer + managed certificate + Hetzner DNS
+        version: "0.1.0"
+        source: catalog/hetzner/dns-ingress
+        overridable: [load_balancer_type]

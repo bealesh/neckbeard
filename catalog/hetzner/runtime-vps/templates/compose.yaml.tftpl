@@ -1,0 +1,61 @@
+# Rendered by neckbeard's runtime-vps module; written to /etc/neckbeard/compose.yaml
+# at first boot. The release flow changes only /etc/neckbeard/image.env.
+services:
+%{ for name, s in http_services ~}
+  ${name}:
+    image: $${APP_IMAGE}
+    restart: unless-stopped
+    env_file: [/etc/neckbeard/app.env]
+    environment:
+      APP_ENV: ${environment}
+      PORT: "${s.port}"
+    ports:
+      - "${s.port}:${s.port}"
+%{ if length(s.args) > 0 ~}
+    command: ${jsonencode(s.args)}
+%{ endif ~}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${s.port}${s.health_path} >/dev/null || curl -fsS http://127.0.0.1:${s.port}${s.health_path} >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 240s
+%{ if postgres ~}
+    depends_on:
+      postgres:
+        condition: service_healthy
+%{ endif ~}
+%{ endfor ~}
+%{ for name, s in worker_services ~}
+  ${name}:
+    image: $${APP_IMAGE}
+    restart: unless-stopped
+    env_file: [/etc/neckbeard/app.env]
+    environment:
+      APP_ENV: ${environment}
+%{ if length(s.args) > 0 ~}
+    command: ${jsonencode(s.args)}
+%{ endif ~}
+%{ if postgres ~}
+    depends_on:
+      postgres:
+        condition: service_healthy
+%{ endif ~}
+%{ endfor ~}
+%{ if postgres ~}
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    volumes:
+      - /mnt/pgdata:/var/lib/postgresql/data
+      - /etc/neckbeard/pg_password:/run/secrets/pg_password:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+%{ endif ~}

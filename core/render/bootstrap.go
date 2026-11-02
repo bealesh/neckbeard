@@ -78,9 +78,10 @@ func bootstrapRunbook(bp *blueprint.Blueprint) []byte {
 	w := func(f string, a ...any) { fmt.Fprintf(&b, f+"\n", a...) }
 
 	login := map[string]string{
-		"aws":   "credentials for THAT environment's AWS account exported (e.g. `aws sso login` / env vars); admin-equivalent IAM",
-		"gcp":   "`gcloud auth application-default login` against THAT environment's project; Owner-equivalent IAM",
-		"azure": "`az login` with rights on THAT environment's subscription: Owner (role assignments are created) plus Entra Application Administrator (flexible federated identity credentials)",
+		"aws":     "credentials for THAT environment's AWS account exported (e.g. `aws sso login` / env vars); admin-equivalent IAM",
+		"gcp":     "`gcloud auth application-default login` against THAT environment's project; Owner-equivalent IAM",
+		"azure":   "`az login` with rights on THAT environment's subscription: Owner (role assignments are created) plus Entra Application Administrator (flexible federated identity credentials)",
+		"hetzner": "a read/write API token for the Hetzner Cloud project exported as `HCLOUD_TOKEN`, and an Object Storage key pair exported as `MINIO_USER` / `MINIO_PASSWORD` (also as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` for the state backend); create both in the Cloud Console",
 	}[bp.Cloud]
 
 	w("# Bootstrap runbook — %s", bp.App)
@@ -181,6 +182,36 @@ func bootstrapRunbook(bp *blueprint.Blueprint) []byte {
 	if bp.VCS == "github" {
 		w("")
 		w("PR plan jobs bind the `<env>-plan` GitHub environments (the OIDC trust names them exactly). Their first run creates them unprotected — leave them that way: a protection rule on a `-plan` environment blocks pull-request plans, and approval belongs on the deploy environments (`dev`, `stg`, `prd`), not on read-only plans. Fork pull requests receive no OIDC token at all and degrade to validate-only.")
+	}
+	w("")
+	if bp.Cloud == "hetzner" {
+		w("")
+		w("## Hetzner: what is different here, stated plainly")
+		w("")
+		w("- **No federation.** Hetzner Cloud has no OIDC trust, so CI authenticates with the")
+		w("  project API token and the Object Storage key pair as plain secrets in the VCS's")
+		w("  secret store (`NECKBEARD_HCLOUD_TOKEN_<ENV>`, `NECKBEARD_HETZNER_S3_KEY_<ENV>`,")
+		w("  `NECKBEARD_HETZNER_S3_SECRET_<ENV>`). That is a weaker boundary than the other")
+		w("  lanes: anyone who can read repository secrets can act on the project. Use one")
+		w("  project per environment, rotate the token when people leave, and never grant")
+		w("  the plan path a token at all — pull-request plans on this lane are validate-only.")
+		w("- **Secret values live on the box.** After the first apply, SSH in (allow your")
+		w("  CIDR via the network module's `ssh_allowed_cidrs` override, and add an SSH key")
+		w("  id to `runtime-vps.ssh_key_ids`), copy `/etc/neckbeard/app.env.template` to")
+		w("  `app.env`, fill the values, copy `registry.env.template` to `registry.env` with a")
+		w("  read-only deploy token for the image repository, and `systemctl start")
+		w("  neckbeard-app`. With Postgres on the box, `/etc/neckbeard/pg_password` was")
+		w("  generated at first boot; set `DATABASE_URL=postgres://app:<that>@postgres:5432/app`")
+		w("  in `app.env`, and write the Object Storage key pair into `/etc/neckbeard/backup.env`")
+		w("  so the nightly dump runs.")
+		w("- **DNS and HTTPS.** Set `public_hostname` and `dns_zone_name` in the environment's")
+		w("  tfvars, apply, then delegate the zone to the `dns_nameservers` output at your")
+		w("  registrar or parent zone. The managed certificate is issued once DNS resolves.")
+		w("- **Images.** The pipelines push to the VCS's registry (`registry_url` output); the")
+		w("  server pulls with the deploy token above. There is no Hetzner registry.")
+		w("- **Recovery.** One server, one volume, nightly `pg_dump` to Object Storage with")
+		w("  the configured retention. No standby, no point-in-time recovery; the tier presets")
+		w("  refuse anything above smallteam for that reason.")
 	}
 	w("")
 	w("## 5. Verify")

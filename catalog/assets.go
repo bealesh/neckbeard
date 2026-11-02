@@ -11,7 +11,7 @@ import (
 // Files includes modules, their policies, and the index. No network or source
 // checkout is needed to plan, render, or inspect the default catalog.
 //
-//go:embed index.yaml aws gcp azure
+//go:embed index.yaml aws gcp azure hetzner
 var Files embed.FS
 
 // Digest pins the actual module bytes, not just a mutable version label.

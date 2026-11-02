@@ -9,10 +9,10 @@
     "version": { "const": 1 },
     "app": { "$ref": "#/$defs/name" },
     "org": { "$ref": "#/$defs/name" },
-    "cloud": { "enum": ["aws", "gcp", "azure"] },
+    "cloud": { "enum": ["aws", "gcp", "azure", "hetzner"] },
     "region": { "type": "string", "minLength": 1 },
     "vcs": { "enum": ["github", "gitlab"] },
-    "runtime": { "enum": ["kubernetes", "serverless-containers"] },
+    "runtime": { "enum": ["kubernetes", "serverless-containers", "vps-containers"] },
     "tier": { "enum": ["solo", "smallteam", "established", "regulated"] },
     "entry_path": { "enum": ["adopt", "found"] },
     "repo": {

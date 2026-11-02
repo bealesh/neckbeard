@@ -43,6 +43,15 @@ const (
 	VarAzureSub         = "NECKBEARD_AZURE_SUBSCRIPTION" // + _<ENV>
 	VarAzurePlanClient  = "NECKBEARD_AZURE_PLAN_CLIENT"  // + _<ENV>
 	VarAzureApplyClient = "NECKBEARD_AZURE_APPLY_CLIENT" // + _<ENV>
+
+	// Hetzner has no OIDC federation. The gate is a plain variable bootstrap
+	// publishes; the credentials are SECRETS the operator sets by hand (a
+	// project API token and an Object Storage key pair), named here so the
+	// pipelines and docs/bootstrap.md agree. DESIGN §3.3 records the exception.
+	VarHetznerReady    = "NECKBEARD_HETZNER_READY"     // + _<ENV>, variable
+	SecretHetznerToken = "NECKBEARD_HCLOUD_TOKEN"      // + _<ENV>, secret
+	SecretHetznerS3Key = "NECKBEARD_HETZNER_S3_KEY"    // + _<ENV>, secret
+	SecretHetznerS3Sec = "NECKBEARD_HETZNER_S3_SECRET" // + _<ENV>, secret
 )
 
 // GateVar is the variable whose absence means "bootstrap pending" for a cloud.
@@ -53,6 +62,8 @@ func GateVar(cloud, env string) string {
 		return VarGCPProvider + "_" + e
 	case "azure":
 		return VarAzurePlanClient + "_" + e
+	case "hetzner":
+		return VarHetznerReady + "_" + e
 	default:
 		return VarPlanRole + "_" + e
 	}

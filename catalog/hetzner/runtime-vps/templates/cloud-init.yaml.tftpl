@@ -1,0 +1,102 @@
+#cloud-config
+# First boot of a neckbeard application server. Everything an operator later
+# changes lives under /etc/neckbeard; nothing secret is in this file.
+package_update: true
+package_upgrade: false
+packages:
+  - docker.io
+  - docker-compose-v2
+  - postgresql-client
+  - awscli
+  - ca-certificates
+  - curl
+write_files:
+  - path: /etc/neckbeard/compose.yaml
+    permissions: "0644"
+    content: |
+      ${indent(6, compose)}
+  - path: /etc/neckbeard/image.env
+    permissions: "0644"
+    content: |
+      # The release flow rewrites this line, then restarts neckbeard-app.service.
+      APP_IMAGE=${image}
+  - path: /etc/neckbeard/app.env.template
+    permissions: "0600"
+    content: |
+      # Copy to /etc/neckbeard/app.env and fill the values (docs/bootstrap.md).
+      # This file is the only place secret values live; it is never in git or state.
+%{ for n in secret_names ~}
+      ${n}=
+%{ endfor ~}
+  - path: /etc/neckbeard/registry.env.template
+    permissions: "0600"
+    content: |
+      # Read-only deploy token for ${registry_host}; copy to registry.env and fill.
+      REGISTRY_USER=
+      REGISTRY_TOKEN=
+  - path: /etc/systemd/system/neckbeard-app.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=neckbeard application (docker compose)
+      Requires=docker.service
+      After=docker.service network-online.target
+      ConditionPathExists=/etc/neckbeard/app.env
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/etc/neckbeard
+      EnvironmentFile=/etc/neckbeard/image.env
+      ExecStartPre=-/bin/sh -c '. /etc/neckbeard/registry.env 2>/dev/null && [ -n "$REGISTRY_TOKEN" ] && printf %s "$REGISTRY_TOKEN" | docker login ${registry_host} -u "$REGISTRY_USER" --password-stdin'
+      ExecStart=/usr/bin/docker compose -f /etc/neckbeard/compose.yaml up -d --remove-orphans
+      ExecStop=/usr/bin/docker compose -f /etc/neckbeard/compose.yaml down
+
+      [Install]
+      WantedBy=multi-user.target
+%{ if postgres ~}
+  - path: /usr/local/bin/neckbeard-pg-backup
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Nightly logical backup to object storage; prunes copies older than the
+      # retention window. Credentials come from /etc/neckbeard/backup.env
+      # (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for the Object Storage key pair).
+      set -eu
+      . /etc/neckbeard/backup.env
+      export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION=${backup_region}
+      stamp=$(date -u +%Y%m%dT%H%M%SZ)
+      docker exec neckbeard-postgres-1 pg_dump -U app -d app -Fc | \
+        aws --endpoint-url "https://${backup_endpoint}" s3 cp - "s3://${backup_bucket}/pgdump/$stamp.dump"
+      cutoff=$(date -u -d "-${backup_retention_days} days" +%Y%m%dT%H%M%SZ)
+      aws --endpoint-url "https://${backup_endpoint}" s3 ls "s3://${backup_bucket}/pgdump/" | awk '{print $4}' | while read -r f; do
+        [ "$${f%%.dump}" \< "$cutoff" ] && aws --endpoint-url "https://${backup_endpoint}" s3 rm "s3://${backup_bucket}/pgdump/$f"
+      done || true
+  - path: /etc/cron.d/neckbeard-pg-backup
+    permissions: "0644"
+    content: |
+      17 3 * * * root [ -f /etc/neckbeard/backup.env ] && /usr/local/bin/neckbeard-pg-backup >> /var/log/neckbeard-pg-backup.log 2>&1
+%{ endif ~}
+%{ if length(cron_services) > 0 ~}
+  - path: /etc/cron.d/neckbeard-jobs
+    permissions: "0644"
+    content: |
+      # Scheduled services run as one-off containers against the same image and env.
+%{ for name, s in cron_services ~}
+      ${s.schedule} root . /etc/neckbeard/image.env && docker run --rm --env-file /etc/neckbeard/app.env --network neckbeard_default -e APP_ENV=${environment} "$APP_IMAGE" ${join(" ", s.args)} >> /var/log/neckbeard-${name}.log 2>&1
+%{ endfor ~}
+%{ endif ~}
+runcmd:
+  - systemctl enable --now docker
+%{ if postgres ~}
+  - mkdir -p /mnt/pgdata
+  - |
+    dev=$(ls /dev/disk/by-id/scsi-0HC_Volume_* | head -n1)
+    blkid "$dev" >/dev/null || mkfs.ext4 -L pgdata "$dev"
+    grep -q 'LABEL=pgdata' /etc/fstab || echo 'LABEL=pgdata /mnt/pgdata ext4 defaults,nofail 0 2' >> /etc/fstab
+    mount -a
+  - '[ -f /etc/neckbeard/pg_password ] || (umask 077 && openssl rand -hex 32 > /etc/neckbeard/pg_password)'
+%{ endif ~}
+  - systemctl daemon-reload
+  - systemctl enable neckbeard-app.service
+  - echo "neckbeard: copy app.env.template to app.env, fill values, then systemctl start neckbeard-app" > /etc/motd

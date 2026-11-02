@@ -133,7 +133,11 @@ func Report(res *Result, cfg *config.Config, bp *blueprint.Blueprint, now time.T
 
 	w("---")
 	w("")
-	w("Provenance: infracost %s (Cloud Pricing API) · catalog %s · planner %s ·", res.InfracostVersion, bp.Pins.Catalog, bp.Pins.Planner)
+	if res.PriceTable != nil {
+		w("Provenance: neckbeard price table for Hetzner, list prices as of %s in %s (%s) · catalog %s · planner %s ·", res.PriceTable.AsOf, res.PriceTable.Currency, strings.Join(res.PriceTable.Sources, ", "), bp.Pins.Catalog, bp.Pins.Planner)
+	} else {
+		w("Provenance: infracost %s (Cloud Pricing API) · catalog %s · planner %s ·", res.InfracostVersion, bp.Pins.Catalog, bp.Pins.Planner)
+	}
 	w("blueprint `%s` · generated %s.", bp.Hash, now.UTC().Format("2006-01-02 15:04 UTC"))
 	w("Effective-input digest: `%s` (cost model v3).", res.InputDigest)
 	for _, e := range res.Envs {

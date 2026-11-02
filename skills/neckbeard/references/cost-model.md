@@ -143,6 +143,20 @@ Price rules: [load balancing](https://cloud.google.com/load-balancing/pricing),
 [logging](https://cloud.google.com/stackdriver/pricing), and the
 [pricing API](https://www.infracost.io/docs/supported_resources/cloud_pricing_api/).
 
+## Hetzner
+
+Infracost has no hcloud coverage, so the Hetzner lane is priced from
+`core/estimate/pricetables/hetzner.yaml`: a dated snapshot of public list prices
+(EUR, excluding VAT, new-order prices after the 2026-06-15 repricing) with its
+sources listed in the file. The estimate is arithmetic over the blueprint: server
+type by shape and arch, primary IPv4, the Postgres data volume, the load balancer
+type, the Object Storage base price per environment, and internet transfer above
+the location's included allowance (20 TB in the EU, 1 TB in the US, 0.5 TB in
+Singapore at a higher rate). Scenarios scale traffic only; everything else is a
+fixed monthly price. The report's provenance line says "price table, as of
+<date>" instead of naming Infracost. Refresh the table deliberately and note the
+date; it is not fetched live.
+
 Additional rules: [Fargate](https://aws.amazon.com/fargate/pricing/),
 [Container Apps billing](https://learn.microsoft.com/en-us/azure/container-apps/billing),
 [Container Apps VNet infrastructure](https://learn.microsoft.com/en-us/azure/container-apps/custom-virtual-networks),

@@ -29,8 +29,8 @@ func (s ReleaseStore) location(t Target) (*url.URL, error) {
 	}
 	valid := false
 	switch t.Cloud {
-	case "aws", "gcp":
-		scheme := map[string]string{"aws": "s3", "gcp": "gs"}[t.Cloud]
+	case "aws", "gcp", "hetzner":
+		scheme := map[string]string{"aws": "s3", "gcp": "gs", "hetzner": "s3"}[t.Cloud]
 		valid = u.Scheme == scheme && regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`).MatchString(u.Host) && (u.Path == "" || u.Path == "/")
 	case "azure":
 		valid = u.Scheme == "https" && regexp.MustCompile(`^[a-z0-9]+\.blob\.core\.windows\.net$`).MatchString(u.Host) && regexp.MustCompile(`^/[a-z0-9][a-z0-9-]+[a-z0-9]$`).MatchString(u.Path)
@@ -180,6 +180,8 @@ func (r Runner) receiptExists(ctx context.Context, t Target, u *url.URL, key str
 			return false, fmt.Errorf("invalid Azure blob existence response")
 		}
 		return *result.Exists, nil
+	default:
+		return false, fmt.Errorf("release receipt storage is not implemented for %s (Hetzner release automation is roadmap #25)", t.Cloud)
 	}
 	return false, nil
 }
@@ -208,6 +210,8 @@ func (r Runner) transferReceipts(ctx context.Context, t Target, u *url.URL, key,
 		args := append([]string{"storage", "blob", action}, azureBlobArgs(t, u, key)...)
 		args = append(args, "--file", file, "--overwrite", "true", "--no-progress")
 		_, err = r.command(ctx, "az", args...)
+	default:
+		err = fmt.Errorf("release receipt storage is not implemented for %s (Hetzner release automation is roadmap #25)", t.Cloud)
 	}
 	return err
 }

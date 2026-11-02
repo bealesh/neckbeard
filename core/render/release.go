@@ -58,7 +58,21 @@ func releaseFiles(bp *blueprint.Blueprint) []ownership.File {
 			panic(err)
 		}
 		files = append(files, ownership.File{Path: ".neckbeard/deploy/" + env.Name + ".json", Content: append(data, '\n'), Owner: ownership.OwnerGenerated})
-		if bp.Runtime == "serverless-containers" {
+		if bp.Cloud == "hetzner" {
+			files = append(files, ownership.File{Path: "infra/envs/" + env.Name + "/https.tf", Content: []byte(generatedHeader + `variable "public_hostname" {
+  description = "Public application hostname; the load balancer gets a managed certificate and an A record once set."
+  type        = string
+  default     = null
+}
+
+variable "dns_zone_name" {
+  description = "Hetzner DNS zone the hostname lives in (created by the ingress module; delegate it from your registrar)."
+  type        = string
+  default     = ""
+}
+`), Owner: ownership.OwnerGenerated})
+		}
+		if bp.Runtime == "serverless-containers" || bp.Runtime == "vps-containers" {
 			if bp.Cloud == "aws" || bp.Cloud == "gcp" {
 				content := generatedHeader + `variable "public_hostname" {
   description = "Public application hostname; configure its DNS to the ingress output."
@@ -116,6 +130,8 @@ func deploymentOutput(bp *blueprint.Blueprint, env blueprint.Environment) string
 		}
 	} else {
 		switch bp.Cloud {
+		case "hetzner":
+			lines = append(lines, kv{"server_ipv4", "module.runtime_vps.public_ipv4"}, kv{"service_names", "module.runtime_vps.service_names"})
 		case "aws":
 			lines = append(lines, kv{"cluster_name", "module.runtime_serverless.cluster_name"}, kv{"task_families", "module.runtime_serverless.task_families"}, kv{"cron_rules", "module.runtime_serverless.cron_rules"})
 		case "gcp":

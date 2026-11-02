@@ -1,0 +1,47 @@
+# Hetzner Cloud list prices, excluding VAT, for the price-table estimate backend.
+# Infracost does not price Hetzner, so this file is the source. It is a dated
+# snapshot of public list prices for NEW orders after the 2026-06-15 repricing;
+# accounts created before then may still see older rates. Every estimate that
+# reads this file prints the as_of date and these sources in its provenance.
+as_of: "2026-11-02"
+currency: EUR
+sources:
+  - https://www.hetzner.com/cloud/load-balancer/        # LB11/21/31 monthly + hourly, 1/2/3 TB included
+  - https://www.hetzner.com/storage/object-storage/     # €6.49/mo incl. 1 TB storage + 1 TB egress
+  - https://costgoat.com/pricing/hetzner                # server types, IPv4, volumes (snapshot 2026-10-20; aggregator)
+  - https://docs.hetzner.com/storage/object-storage/overview
+notes:
+  - Server prices below exclude the Primary IPv4 (+0.50/mo), which this lane always attaches.
+  - Included outbound traffic is per server and per region; the overage rate is per TB.
+  - USD prices are not snapshotted; convert at estimate time if finops.currency is USD and say so.
+servers:
+  cx23:  { vcpu: 2,  memory_gb: 4,  disk_gb: 40,  monthly: 5.49,  arch: x86 }
+  cx33:  { vcpu: 4,  memory_gb: 8,  disk_gb: 80,  monthly: 8.49,  arch: x86 }
+  cx43:  { vcpu: 8,  memory_gb: 16, disk_gb: 160, monthly: 15.99, arch: x86 }
+  cx53:  { vcpu: 16, memory_gb: 32, disk_gb: 320, monthly: 29.49, arch: x86 }
+  cax11: { vcpu: 2,  memory_gb: 4,  disk_gb: 40,  monthly: 5.99,  arch: arm }
+  cax21: { vcpu: 4,  memory_gb: 8,  disk_gb: 80,  monthly: 10.49, arch: arm }
+  cax31: { vcpu: 8,  memory_gb: 16, disk_gb: 160, monthly: 20.99, arch: arm }
+primary_ipv4_monthly: 0.50
+volume_gb_monthly: 0.0572
+snapshot_gb_monthly: 0.0143
+load_balancers:
+  lb11: { monthly: 7.49,  included_traffic_tb: 1 }
+  lb21: { monthly: 21.49, included_traffic_tb: 2 }
+  lb31: { monthly: 42.99, included_traffic_tb: 3 }
+object_storage:
+  base_monthly: 6.49            # includes 1 TB stored (744 TB-hours) and 1 TB egress
+  included_storage_tb: 1
+  included_egress_tb: 1
+  additional_storage_tb_hour: 0.0087
+  additional_egress_tb: 1.00
+traffic:
+  overage_per_tb: 1.00
+  included_tb_by_region:
+    fsn1: 20
+    nbg1: 20
+    hel1: 20
+    ash: 1
+    hil: 1
+    sin: 0.5
+  overage_per_tb_sin: 7.40

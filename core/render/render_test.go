@@ -310,3 +310,75 @@ func TestBudgetModuleRendersPerCloud(t *testing.T) {
 		t.Error("AWS runbook must explain cost allocation tag activation and that budgets do not cap")
 	}
 }
+
+func TestHetznerLaneRenders(t *testing.T) {
+	base := filepath.Join("..", "planner", "testdata", "basic")
+	cfg, cfgDigest, err := config.Load(filepath.Join(base, "neckbeard.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Cloud, cfg.Region, cfg.Runtime, cfg.Tier, cfg.Overrides = "hetzner", "fsn1", "vps-containers", "solo", nil
+	prof, profDigest, err := profile.Load(filepath.Join(base, "app-profile.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := catalog.Load(filepath.Join("..", "..", "catalog", "index.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre, err := presets.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bp, err := planner.Plan(planner.Inputs{Config: cfg, ConfigDigest: cfgDigest, Profile: prof, ProfileDigest: profDigest, Catalog: cat, Presets: pre, PlannerVersion: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bp.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := WriteSet(bp, testOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := map[string]string{}
+	for _, f := range ws {
+		byPath[f.Path] = strings.Join(strings.Fields(string(f.Content)), " ")
+	}
+	main := byPath["infra/envs/dev/main.tf"]
+	for _, want := range []string{
+		`module "runtime_vps" {`,
+		`data_volume_id = module.postgres.volume_id`,
+		`registry_host = module.registry.registry_host`,
+		`secret_names = module.secrets.secret_names`,
+		`server_id = module.runtime_vps.server_id`,
+		`public_hostname = var.public_hostname`,
+		`network_zone = "eu-central"`,
+		`image = var.app_image`,
+	} {
+		if !strings.Contains(main, want) {
+			t.Errorf("dev main.tf missing %q", want)
+		}
+	}
+	if strings.Contains(main, "manage_app_credentials") {
+		t.Error("the Hetzner postgres module has no managed credentials inputs")
+	}
+	if !strings.Contains(byPath["infra/envs/dev/providers.tf"], `provider "hcloud" {}`) || !strings.Contains(byPath["infra/envs/dev/providers.tf"], `minio_server = "fsn1.your-objectstorage.com"`) {
+		t.Error("providers.tf must configure hcloud (token from env) and minio against the location endpoint")
+	}
+	if !strings.Contains(byPath["infra/envs/dev/backend.tf"], `backend "s3" {}`) {
+		t.Error("Hetzner state lives in Object Storage via the s3 backend")
+	}
+	if !strings.Contains(byPath["infra/envs/dev/https.tf"], `variable "dns_zone_name"`) {
+		t.Error("the env root must declare public_hostname and dns_zone_name")
+	}
+	if !strings.Contains(byPath["infra/envs/dev/outputs.tf"], `module.secrets.env_file_path`) || !strings.Contains(byPath["infra/envs/dev/outputs.tf"], `module.postgres.endpoint`) {
+		t.Error("outputs must not render an empty value for secret_locations or database host")
+	}
+	if !strings.Contains(byPath["docs/bootstrap.md"], "No federation") {
+		t.Error("the runbook must state the static-secret trust boundary plainly")
+	}
+	if !strings.Contains(byPath["infra/bootstrap/dev/main.tf"], "catalog/hetzner/bootstrap") {
+		t.Error("bootstrap root must use the Hetzner bootstrap module")
+	}
+}
