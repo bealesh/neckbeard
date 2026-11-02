@@ -173,12 +173,44 @@ resource "azurerm_container_app" "this" {
         }
       }
 
+      # Explicit probes, separated by job: startup gets a four-minute allowance
+      # (24 x 10s, matching Cloud Run and ECS) so migrations and a cold first
+      # route are not restarted mid-boot; readiness gates traffic; liveness
+      # restarts a replica that was healthy and stopped answering. Without an
+      # explicit startup probe the platform's defaults apply (TCP, 240 x 1s),
+      # which proves the port opened, not that the app answers.
+      dynamic "startup_probe" {
+        for_each = each.value.kind == "http" ? [each.value] : []
+        content {
+          transport               = "HTTP"
+          port                    = startup_probe.value.port
+          path                    = startup_probe.value.health_path
+          interval_seconds        = 10
+          timeout                 = 5
+          failure_count_threshold = 24
+        }
+      }
+      dynamic "readiness_probe" {
+        for_each = each.value.kind == "http" ? [each.value] : []
+        content {
+          transport               = "HTTP"
+          port                    = readiness_probe.value.port
+          path                    = readiness_probe.value.health_path
+          interval_seconds        = 10
+          timeout                 = 5
+          failure_count_threshold = 3
+          success_count_threshold = 1
+        }
+      }
       dynamic "liveness_probe" {
         for_each = each.value.kind == "http" ? [each.value] : []
         content {
-          transport = "HTTP"
-          port      = liveness_probe.value.port
-          path      = liveness_probe.value.health_path
+          transport               = "HTTP"
+          port                    = liveness_probe.value.port
+          path                    = liveness_probe.value.health_path
+          interval_seconds        = 10
+          timeout                 = 5
+          failure_count_threshold = 3
         }
       }
     }

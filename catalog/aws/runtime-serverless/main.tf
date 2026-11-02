@@ -172,6 +172,14 @@ resource "aws_ecs_service" "this" {
   # an event source that can wake it from zero.
   desired_count = max(var.min_instances, 1)
 
+  # Load-balanced services get a startup allowance before ALB health results can
+  # stop a task: migrations and a cold application route need more than the
+  # target group's 45-second detection window (interval 15 x unhealthy 3), and
+  # ECS's default grace period is zero. Only valid with a load_balancer block;
+  # workers have no load balancer and keep the default. Matches the four-minute
+  # allowance on Cloud Run and Container Apps.
+  health_check_grace_period_seconds = each.value.kind == "http" && contains(keys(var.target_group_arns), each.key) ? 240 : null
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true

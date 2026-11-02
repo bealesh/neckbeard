@@ -4,7 +4,7 @@
 # migration path.
 # Pre-1.0: minor releases may change planner defaults with explicit migration
 # notes accompany each revision; schema/address guarantees above still apply.
-version: "0.4.1"
+version: "0.4.2"
 
 # Tool pins carried into every blueprint; bumped deliberately, never floated.
 opentofu: "1.12.6"
@@ -34,7 +34,7 @@ clouds:
         source: catalog/aws/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # ECS on Fargate
-        version: "0.3.0"
+        version: "0.3.1"
         source: catalog/aws/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # EKS
@@ -127,7 +127,7 @@ clouds:
         source: catalog/azure/network
         overridable: [nat_strategy, zones]
       runtime-serverless:            # Container Apps
-        version: "0.3.0"
+        version: "0.3.1"
         source: catalog/azure/runtime-serverless
         overridable: [min_instances, max_instances, cpu, memory_gb]
       runtime-k8s:                   # AKS
