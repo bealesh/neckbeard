@@ -236,6 +236,11 @@ func runAnalyze(args []string) error {
 
 	fmt.Printf("draft written: %s (%d services, %d needs, %d secrets, %d facts, %d assumptions, %d unsupported)\n\n",
 		*out, len(res.Profile.Services), len(res.Profile.Needs), len(res.Profile.Secrets), len(res.Profile.Facts), len(res.Profile.Assumptions), len(res.Profile.Unsupported))
+	if res.Truncated {
+		// Printed before the workload gate: "no containerized service found"
+		// may only mean the Dockerfile was past the limit.
+		fmt.Print("warning: the repository scan stopped at its file limit; any Dockerfiles, environment reads, or health paths it did not reach are missing from this draft (assumption scan-limit)\n\n")
+	}
 	if err := profile.WorkloadError(&res.Profile); err != nil {
 		return fmt.Errorf("draft saved, but workload needs attention before cloud configuration: %w", err)
 	}

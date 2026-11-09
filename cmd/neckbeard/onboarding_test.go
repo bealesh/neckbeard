@@ -37,9 +37,22 @@ func TestInstalledOnboarding(t *testing.T) {
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
-	for _, shape := range []string{"no-dockerfile", "multi-image"} {
+	for _, shape := range []string{"no-dockerfile", "multi-image", "scan-limit"} {
 		t.Run(shape, func(t *testing.T) {
 			app := t.TempDir()
+			if shape == "scan-limit" {
+				// The Dockerfile sorts after more files than the walk reads: the
+				// gate still refuses, but must not read as "there is no Dockerfile".
+				for _, dir := range []string{"assets", "server"} {
+					if err := os.Mkdir(filepath.Join(app, dir), 0755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				for i := range 5000 {
+					writeTest(t, filepath.Join(app, "assets", fmt.Sprintf("%d.txt", i)), nil)
+				}
+				writeTest(t, filepath.Join(app, "server", "Dockerfile"), []byte("FROM node:22-alpine\nEXPOSE 3000\n"))
+			}
 			if shape == "multi-image" {
 				// No repository-root Dockerfile: with no convention to prefer, two
 				// candidates stay two images and the workload gate refuses. (A root
@@ -60,6 +73,9 @@ func TestInstalledOnboarding(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join(app, "app-profile.yaml")); err != nil {
 				t.Fatal("draft evidence was not saved:", err)
+			}
+			if warned := bytes.Contains(out, []byte("warning: the repository scan stopped at its file limit")); warned != (shape == "scan-limit") {
+				t.Fatalf("scan-limit warning printed = %v for %s:\n%s", warned, shape, out)
 			}
 		})
 	}

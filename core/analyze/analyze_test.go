@@ -1,7 +1,10 @@
 package analyze
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -245,6 +248,77 @@ func TestNoRootDockerfileKeepsAllCandidates(t *testing.T) {
 	if len(res.Profile.Services) != 2 {
 		t.Fatalf("expected both packaging candidates visible, got %+v", res.Profile.Services)
 	}
+}
+
+// The walk stops at maxFiles. Past that point a Dockerfile or env read is
+// not absent, only unread; the draft must say so instead of reporting "no
+// Dockerfile found" as though the whole repository had been inspected.
+func TestScanLimitIsReported(t *testing.T) {
+	scanLimit := func(res *Result) *profile.Assumption {
+		for i, a := range res.Profile.Assumptions {
+			if a.ID == "scan-limit" {
+				return &res.Profile.Assumptions[i]
+			}
+		}
+		return nil
+	}
+	// fill writes n files in a directory that sorts before server/, so the
+	// walk reaches them first.
+	fill := func(t *testing.T, dir string, n int) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for i := range n {
+			writeFile(t, dir, fmt.Sprintf("assets/%d.txt", i), "")
+		}
+	}
+	t.Run("over the limit", func(t *testing.T) {
+		dir := t.TempDir()
+		fill(t, dir, maxFiles)
+		if err := os.MkdirAll(filepath.Join(dir, "server"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, dir, "server/Dockerfile", "FROM x\nEXPOSE 80\n")
+		res, err := Dir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Profile.Services) != 0 {
+			t.Fatalf("server/Dockerfile is past the limit and should be unread, got %+v", res.Profile.Services)
+		}
+		if !res.Truncated {
+			t.Error("Result.Truncated must be set so the CLI can warn")
+		}
+		a := scanLimit(res)
+		if a == nil {
+			t.Fatal("a truncated scan must leave a plan-gating scan-limit assumption")
+		}
+		if !strings.Contains(a.Statement, fmt.Sprint(maxFiles)) {
+			t.Errorf("assumption must name the limit, got %q", a.Statement)
+		}
+		if !slices.ContainsFunc(res.Questions, func(q string) bool { return strings.Contains(q, "limit") }) {
+			t.Errorf("a truncated scan must ask about the unread files, got %q", res.Questions)
+		}
+	})
+	t.Run("at the limit", func(t *testing.T) {
+		dir := t.TempDir()
+		fill(t, dir, maxFiles-1)
+		writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 80\n")
+		res, err := Dir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Profile.Services) != 1 {
+			t.Fatalf("the Dockerfile is within the limit, got %+v", res.Profile.Services)
+		}
+		if res.Truncated {
+			t.Error("a complete scan must not set Result.Truncated")
+		}
+		if a := scanLimit(res); a != nil {
+			t.Errorf("a complete scan must not report a scan limit, got %q", a.Statement)
+		}
+	})
 }
 
 // <Dockerfile>.dockerignore is BuildKit's per-Dockerfile ignore file. It must
