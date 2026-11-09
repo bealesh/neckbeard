@@ -2,6 +2,8 @@ package analyze
 
 import (
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -244,6 +246,61 @@ func TestNoRootDockerfileKeepsAllCandidates(t *testing.T) {
 	}
 	if len(res.Profile.Services) != 2 {
 		t.Fatalf("expected both packaging candidates visible, got %+v", res.Profile.Services)
+	}
+}
+
+// Builds that share a directory must not share a service name: two "docker"
+// services failed the workload gate as duplicates, hiding the multi-image
+// refusal, and every per-service fact and assumption id appeared twice.
+func TestServiceNamesAreUniquePerDockerfile(t *testing.T) {
+	cases := []struct {
+		name  string
+		files []string
+		want  []string
+	}{
+		{"suffix qualifies a shared directory", []string{"docker/Dockerfile", "docker/Dockerfile.prod"}, []string{"docker", "docker-prod"}},
+		{"every suffixed build in a directory", []string{"docker/Dockerfile.api", "docker/Dockerfile.worker"}, []string{"docker-api", "docker-worker"}},
+		{"same directory name elsewhere is numbered", []string{"apps/web/Dockerfile", "legacy/web/Dockerfile"}, []string{"web", "web-2"}},
+		{"distinct names are unchanged", []string{"api/Dockerfile.prod", "worker/Dockerfile"}, []string{"api", "worker"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, f := range tc.files {
+				if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(f)), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				writeFile(t, dir, f, "FROM x\nEXPOSE 80\n")
+			}
+			res, err := Dir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, s := range res.Profile.Services {
+				got = append(got, s.Name)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("service names = %v, want %v", got, tc.want)
+			}
+			ids := map[string]bool{}
+			for _, a := range res.Profile.Assumptions {
+				if ids["assumption "+a.ID] {
+					t.Errorf("duplicate assumption id %q", a.ID)
+				}
+				ids["assumption "+a.ID] = true
+			}
+			for _, f := range res.Profile.Facts {
+				if ids["fact "+f.ID] {
+					t.Errorf("duplicate fact id %q", f.ID)
+				}
+				ids["fact "+f.ID] = true
+			}
+			err = profile.WorkloadError(&res.Profile)
+			if err == nil || !strings.Contains(err.Error(), "multi-image") {
+				t.Errorf("two builds must reach the multi-image refusal, got %v", err)
+			}
+		})
 	}
 }
 

@@ -372,8 +372,9 @@ func synthesize(d detection) (*Result, error) {
 			profile.Assumption{ID: "capacity", Statement: "Confirm expected traffic, availability and recovery needs, and select the tier in neckbeard.yaml"},
 		)
 	} else {
+		names := serviceNames(dockerfiles)
 		for i, df := range dockerfiles {
-			name := serviceNameFor(df, i)
+			name := names[i]
 			svc := profile.Service{Name: name, Kind: "http", Dockerfile: df}
 			applyHTTPServiceDefaults(&p, &questions, &svc, df, exposePorts[df], healthPath, healthPaths)
 			p.Assumptions = append(p.Assumptions, profile.Assumption{
@@ -948,13 +949,49 @@ func serviceNameFor(dockerfile string, i int) string {
 	if dir != "." {
 		return sanitizeName(filepath.Base(dir))
 	}
-	if suffix := strings.TrimPrefix(filepath.Base(dockerfile), "Dockerfile"); suffix != "" {
-		return sanitizeName(strings.TrimLeft(suffix, ".-_"))
+	if suffix := dockerfileSuffix(dockerfile); suffix != "" {
+		return sanitizeName(suffix)
 	}
 	if i == 0 {
 		return "web"
 	}
 	return fmt.Sprintf("web-%d", i)
+}
+
+// dockerfileSuffix is what follows "Dockerfile" in a build's file name: "prod"
+// for Dockerfile.prod, "" for a plain Dockerfile.
+func dockerfileSuffix(dockerfile string) string {
+	return strings.TrimLeft(strings.TrimPrefix(filepath.Base(dockerfile), "Dockerfile"), ".-_")
+}
+
+// serviceNames names one draft service per Dockerfile. Builds that share a
+// directory (docker/Dockerfile beside docker/Dockerfile.prod) would otherwise
+// share its name, and a duplicate name fails the workload gate before the
+// multi-image refusal can say what is actually wrong. A colliding name is
+// qualified with the build's own suffix (docker-prod), then numbered.
+func serviceNames(dockerfiles []string) []string {
+	names := make([]string, len(dockerfiles))
+	count := map[string]int{}
+	for i, df := range dockerfiles {
+		names[i] = serviceNameFor(df, i)
+		count[names[i]]++
+	}
+	for i, df := range dockerfiles {
+		if count[names[i]] < 2 || filepath.Dir(df) == "." {
+			continue
+		}
+		if suffix := dockerfileSuffix(df); suffix != "" {
+			names[i] = sanitizeName(names[i] + "-" + suffix)
+		}
+	}
+	used := map[string]bool{}
+	for i, name := range names {
+		for n := 2; used[names[i]]; n++ {
+			names[i] = fmt.Sprintf("%s-%d", name, n)
+		}
+		used[names[i]] = true
+	}
+	return names
 }
 
 func sanitizeName(s string) string {
