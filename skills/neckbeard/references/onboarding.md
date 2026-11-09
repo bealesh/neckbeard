@@ -15,7 +15,9 @@ creation and environment-manifest consumption are not implemented.
 
 An application has one image, up to 10 uniquely named HTTP/worker/cron services,
 and repository-root build context. All services declare the same Dockerfile.
-Dot-directories (`.devcontainer`, `.github`, …) are never scanned. When a
+Dot-directories (`.devcontainer`, `.github`, …) are never scanned. The scan
+stops after 5000 files; a larger repository gets a plan-gating `scan-limit`
+assumption, so read the unscanned part yourself before confirming it. When a
 repository-root `Dockerfile` exists, it is taken as the application image and
 every other candidate (`Dockerfile.base`, `packaging/`, a possible second
 service image) is listed in a plan-gating `container-images` assumption —

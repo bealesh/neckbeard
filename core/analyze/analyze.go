@@ -27,6 +27,9 @@ import (
 type Result struct {
 	Profile   profile.AppProfile
 	Questions []string
+	// Truncated reports that the walk stopped at its file limit, so the draft
+	// covers only part of the repository (assumption scan-limit).
+	Truncated bool
 }
 
 var skipDirs = map[string]bool{
@@ -157,6 +160,7 @@ func Dir(root string) (*Result, error) {
 		healthPaths   = map[string]profile.Evidence{}
 		dbURLLiterals []profile.Evidence
 		fileCount     int
+		truncated     bool
 	)
 
 	manifestPostgres := readManifestPostgresEvidence(root)
@@ -177,6 +181,7 @@ func Dir(root string) (*Result, error) {
 		}
 		fileCount++
 		if fileCount > maxFiles {
+			truncated = true
 			return fs.SkipAll
 		}
 		rel, _ := filepath.Rel(root, path)
@@ -263,6 +268,7 @@ func Dir(root string) (*Result, error) {
 		composeHits:      readComposeCapabilities(root),
 		manifestPostgres: manifestPostgres,
 		manifestORM:      manifestORM,
+		truncated:        truncated,
 	})
 }
 
@@ -281,6 +287,7 @@ type detection struct {
 	composeHits      []composeCapability
 	manifestPostgres []profile.Evidence
 	manifestORM      []profile.Evidence
+	truncated        bool // the walk stopped at maxFiles; later files were never read
 }
 
 func synthesize(d detection) (*Result, error) {
@@ -292,6 +299,17 @@ func synthesize(d detection) (*Result, error) {
 
 	p.Facts = append(p.Facts, langs...)
 	sort.Strings(dockerfiles)
+
+	// Everything below is only as complete as the walk. Stopping at the file
+	// cap silently would turn "not looked at" into "not there": a Dockerfile
+	// or DATABASE_URL read past the cap would simply be absent from the draft.
+	if d.truncated {
+		p.Assumptions = append(p.Assumptions, profile.Assumption{
+			ID:        "scan-limit",
+			Statement: fmt.Sprintf("the repository scan stopped after %d files; any Dockerfiles, environment reads, or health paths in files it did not reach are missing from this draft", maxFiles),
+		})
+		questions = append(questions, fmt.Sprintf("The scan stopped at its %d-file limit: which Dockerfiles, datastores, and environment variables are in the part of the repository it did not reach?", maxFiles))
+	}
 
 	// Services: one candidate per Dockerfile. Kind and schedule are judgment calls
 	// the agent/user must settle; the draft assumes http so `plan` runs.
@@ -521,7 +539,7 @@ func synthesize(d detection) (*Result, error) {
 		questions = append(questions, "Unsupported capabilities were detected (see the unsupported section) — how are they handled today, and is a reference to an existing service acceptable?")
 	}
 
-	return &Result{Profile: p, Questions: questions}, nil
+	return &Result{Profile: p, Questions: questions, Truncated: d.truncated}, nil
 }
 
 // manifestRule maps dependency-manifest markers onto a postgres capability signal.
