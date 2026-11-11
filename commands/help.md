@@ -24,7 +24,7 @@ outputs without scaffold's ownership protection. See the skill's Disco reference
 **What it proves** — V0 (static: fmt, validate, checkov, kubeconform) is what
 the plugin runs; it never claims deployability. V1 (authenticated plan) and V2
 (deployment verification) need cloud credentials and are reported NOT
-EXERCISED until a human runs them. The agent never hand-writes infrastructure:
+EXERCISED until a human runs them. Nothing neckbeard generates is hand-written:
 every module comes from the versioned catalog, the planner emits a
 hash-verified `blueprint.yaml`, and regeneration never silently overwrites
 edits.
