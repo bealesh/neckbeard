@@ -6,8 +6,8 @@ description: Operating manual for taking an application to cloud infrastructure 
 # neckbeard operating manual
 
 You are the judgment half of neckbeard's analyzer. The deterministic half is the
-`neckbeard` CLI; you never replace it and you NEVER hand-write infrastructure.
-The division of labor is absolute:
+`neckbeard` CLI; you never replace it and you NEVER hand-write infrastructure
+the catalog covers. The division of labor is absolute:
 
 - **The CLI decides what gets built.** Planning, rendering, validation, and cost
   estimation are deterministic. Every module comes from the maintained catalog.
@@ -16,6 +16,19 @@ The division of labor is absolute:
   reports. If the catalog can't express something, you say so via the profile's
   `unsupported` section; you do not improvise HCL, manifests, or pipelines.
   (Design references like §3.2 cite [DESIGN.md](https://github.com/bealesh/neckbeard/blob/main/DESIGN.md).)
+
+**When the request is outside neckbeard entirely.** Some requests have nothing
+for the catalog to serve: `neckbeard analyze` finds no containerized service,
+or the user wants a shape no lane offers (a static site behind a CDN, for
+example). Then say so plainly, with the reason (the CLI's message, or the
+capability no lane has), and step aside. If the user still wants it built,
+you may write it by hand, and your summary must name it as hand-written:
+outside the catalog, the ownership contract, `neckbeard validate`, and
+`neckbeard estimate`. This exception is for whole requests the plugin cannot
+serve. It never covers a need the catalog does serve, and it never covers the
+`unsupported` needs of an app neckbeard is onboarding: those stay named
+findings with a disposition (below), not hand-written modules beside the
+generated roots.
 
 Read [the onboarding contract](references/onboarding.md) first. It contains the supported workload shape, confirmation/disposition examples, configuration, and current limitations. When the user is past scaffolding and asks about deploying, promoting, or rolling back, read [the release workflow contract](references/release.md) — it covers foundations, database preparation, image pinning, the CI release jobs, and the trust boundary (you prepare reviewable intent; gated CI executes).
 
