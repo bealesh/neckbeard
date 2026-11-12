@@ -2,6 +2,7 @@ package analyze
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -447,6 +448,7 @@ func TestManifestDatastoreHeuristics(t *testing.T) {
 		name         string
 		files        map[string]string
 		wantPostgres bool
+		wantDriver   bool
 		wantORM      bool
 	}{
 		{
@@ -529,11 +531,14 @@ func TestManifestDatastoreHeuristics(t *testing.T) {
 			wantPostgres: true,
 		},
 		{
-			name: "ruby-pg-alone-not-enough",
+			// Without activerecord, pg is only evidence of a driver: no
+			// DATABASE_URL-shaped claim.
+			name: "ruby-pg-alone-is-only-a-driver",
 			files: map[string]string{
 				"Dockerfile": "FROM x\nEXPOSE 3000\n",
 				"Gemfile":    "gem \"pg\", \"~> 1.5\"\n",
 			},
+			wantDriver: true,
 		},
 	}
 
@@ -547,7 +552,7 @@ func TestManifestDatastoreHeuristics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			needFound, inferred, factClaim, ormInferred := false, false, false, false
+			needFound, inferred, factClaim, ormInferred, driverInferred := false, false, false, false, false
 			var needEv []string
 			var reasoning, assumption, ormStatement, ormReasoning string
 			for _, n := range res.Profile.Needs {
@@ -562,6 +567,9 @@ func TestManifestDatastoreHeuristics(t *testing.T) {
 				if inf.ID == "postgres-manifest" && inf.Confidence == "medium" {
 					inferred = true
 					reasoning = inf.Reasoning
+				}
+				if inf.ID == "postgres-driver-manifest" {
+					driverInferred = true
 				}
 				if inf.ID == "database-orm-manifest" {
 					ormInferred = true
@@ -598,8 +606,11 @@ func TestManifestDatastoreHeuristics(t *testing.T) {
 				if _, ok := tc.files["package.json"]; ok && !strings.Contains(reasoning, "dev-only") {
 					t.Fatal("node manifest reasoning must note the dependency may be dev-only")
 				}
-			} else if needFound || inferred {
+			} else if inferred || (needFound && !tc.wantDriver) {
 				t.Fatalf("must not infer postgres (need=%v inf=%v)", needFound, inferred)
+			}
+			if driverInferred != tc.wantDriver {
+				t.Fatalf("postgres-driver-manifest inference: got %v, want %v", driverInferred, tc.wantDriver)
 			}
 			if tc.wantORM {
 				if !ormInferred {
@@ -665,6 +676,193 @@ func TestORMHeuristicYieldsToDirectEnvRead(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("direct env read should still yield a postgres need")
+	}
+}
+
+// A PostgreSQL-only driver in a dependency manifest is evidence the app can use
+// PostgreSQL (paperless-ngx's and healthchecks' psycopg, vikunja's pgx), but
+// not of which variables carry the connection: an undecided need and a
+// medium-confidence inference, never a fact or a guessed secret name.
+func TestPostgresDriverManifests(t *testing.T) {
+	const driverAssumption = "PostgreSQL driver found in a package manifest: verify that production uses PostgreSQL, find the variables the app reads its connection from, and choose provision or reference; a driver does not establish a need for a new database."
+	cases := []struct {
+		name     string
+		manifest string
+		content  string
+		wantLine int // 0: no driver inference
+	}{
+		{"python-psycopg-extras", "pyproject.toml", "[project]\ndependencies = [\n  \"django>=5\",\n  \"psycopg[c,pool]==3.3.4\",\n]\n", 4},
+		{"python-psycopg2-binary", "requirements.txt", "Django==4.2\npsycopg2-binary==2.9.9\n", 2},
+		{"python-asyncpg-poetry", "pyproject.toml", "[tool.poetry.dependencies]\nasyncpg = \"^0.29\"\n", 2},
+		{"python-commented-out", "requirements.txt", "Django==4.2\n# psycopg==3.2\n", 0},
+		{"python-sibling-package-only", "pyproject.toml", "[project]\ndependencies = [\"psycopg-pool==3.2\"]\n", 0},
+		{"go-pgx-major-version", "go.mod", "module x\n\nrequire (\n\tgithub.com/jackc/pgx/v5 v5.11.0\n)\n", 4},
+		{"go-lib-pq-single-line", "go.mod", "module x\n\nrequire github.com/lib/pq v1.12.3\n", 3},
+		{"go-gorm-postgres-driver", "go.mod", "module x\n\nrequire (\n\tgorm.io/driver/postgres v1.6.0\n\tgorm.io/gorm v1.31.0\n)\n", 4},
+		{"go-indirect-only", "go.mod", "module x\n\nrequire (\n\tgithub.com/jackc/pgx/v5 v5.11.0 // indirect\n)\n", 0},
+		{"go-replace-only", "go.mod", "module x\n\nreplace github.com/lib/pq v1.10.0 => ../pq\n", 0},
+		{"go-replace-block-only", "go.mod", "module x\n\nreplace (\n\tgithub.com/lib/pq v1.10.0 => ../pq\n)\n", 0},
+		{"go-similar-module-path", "go.mod", "module x\n\nrequire github.com/jackc/pgxlisten v0.0.1\n", 0},
+		{"rust-tokio-postgres", "Cargo.toml", "[package]\nname = \"x\"\n\n[dependencies]\ntokio-postgres = { version = \"0.7\" }\n", 5},
+		{"rust-dependency-table", "Cargo.toml", "[package]\nname = \"x\"\n\n[dependencies.tokio-postgres]\nversion = \"0.7\"\n", 4},
+		{"rust-workspace-dependency", "Cargo.toml", "[package]\nname = \"x\"\n\n[dependencies]\ntokio-postgres.workspace = true\n", 5},
+		{"rust-unrelated-crate", "Cargo.toml", "[dependencies]\ntokio-postgres-rustls = \"0.12\"\n", 0},
+		{"maven-postgresql", "pom.xml", "<project>\n  <dependency>\n    <groupId>org.postgresql</groupId>\n    <artifactId>postgresql</artifactId>\n  </dependency>\n</project>\n", 3},
+		{"gradle-postgresql", "build.gradle", "dependencies {\n    runtimeOnly 'org.postgresql:postgresql:42.7.4'\n}\n", 2},
+		{"gradle-kotlin-postgresql", "build.gradle.kts", "dependencies {\n    runtimeOnly(\"org.postgresql:postgresql\")\n}\n", 2},
+		{"gradle-commented-out", "build.gradle", "dependencies {\n    // runtimeOnly 'org.postgresql:postgresql:42.7.4'\n}\n", 0},
+		{"maven-commented-out", "pom.xml", "<project>\n  <!-- <groupId>org.postgresql</groupId> -->\n</project>\n", 0},
+		{"rails-pg", "Gemfile", "gem 'rails', '7.2.3'\ngem 'pg'\n", 2},
+		{"ruby-commented-out", "Gemfile", "gem 'rails', '7.2.3'\n# gem 'pg'\ngem 'sqlite3'\n", 0},
+		{"elixir-postgrex-alone", "mix.exs", "defp deps do\n  [{:postgrex, \">= 0.0.0\"}]\nend\n", 2},
+		{"elixir-commented-out", "mix.exs", "defp deps do\n  [\n    # {:postgrex, \">= 0.0.0\"},\n    {:ecto_sqlite3, \"~> 0.17\"}\n  ]\nend\n", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8000\n")
+			writeFile(t, dir, tc.manifest, tc.content)
+			res, err := Dir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := res.Profile
+			var need *profile.Need
+			for i := range p.Needs {
+				if p.Needs[i].Capability == "postgres" {
+					need = &p.Needs[i]
+				}
+			}
+			var driver *profile.Inference
+			for i := range p.Inferences {
+				if p.Inferences[i].ID == "postgres-driver-manifest" {
+					driver = &p.Inferences[i]
+				}
+			}
+			if tc.wantLine == 0 {
+				if need != nil || driver != nil {
+					t.Fatalf("must not infer postgres: need=%v inference=%v", need, driver)
+				}
+				return
+			}
+			if need == nil || need.Mode != "undecided" {
+				t.Fatalf("want an undecided postgres need, got %+v", p.Needs)
+			}
+			if len(need.Evidence) != 1 || need.Evidence[0] != (profile.Evidence{File: tc.manifest, Line: tc.wantLine}) {
+				t.Fatalf("need must cite %s:%d, got %+v", tc.manifest, tc.wantLine, need.Evidence)
+			}
+			if driver == nil || driver.Confidence != "medium" {
+				t.Fatalf("want a medium-confidence postgres-driver-manifest inference, got %+v", p.Inferences)
+			}
+			if !strings.Contains(driver.Reasoning, "other database engines") || !strings.Contains(driver.Reasoning, "dev-only") {
+				t.Fatalf("driver reasoning must say the app may use another engine and the dependency may be dev-only: %q", driver.Reasoning)
+			}
+			for _, inf := range p.Inferences {
+				if inf.ID == "postgres-manifest" {
+					t.Fatal("a driver alone must not claim a DATABASE_URL-shaped connection")
+				}
+			}
+			var assumption string
+			for _, a := range p.Assumptions {
+				if a.ID == "postgres-mode" {
+					assumption = a.Statement
+				}
+			}
+			if assumption != driverAssumption {
+				t.Fatalf("postgres-mode must describe the driver evidence, got %q", assumption)
+			}
+			for _, s := range p.Secrets {
+				if s.Name == "DATABASE_URL" {
+					t.Fatal("a driver does not name its connection variable; DATABASE_URL must not be guessed")
+				}
+			}
+			for _, f := range p.Facts {
+				if strings.Contains(strings.ToLower(f.Statement), "postgres") {
+					t.Fatalf("manifest markers must not become facts: %q", f.Statement)
+				}
+			}
+			out, err := yaml.Marshal(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := schemas.ValidateYAML("app-profile", out); err != nil {
+				t.Fatalf("draft profile violates the schema: %v\n%s", err, out)
+			}
+		})
+	}
+}
+
+// Stronger postgres evidence wins over a bare driver: a direct env read, a
+// quoted "DATABASE_URL" literal, a DATABASE_URL-shaped manifest marker, or a
+// postgres image in the root compose file (listmonk's shape).
+func TestPostgresDriverYieldsToStrongerEvidence(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+		want  string // the inference that must carry the postgres need; "" for a fact
+	}{
+		{
+			name: "direct-env-read",
+			files: map[string]string{
+				"go.mod":  "module x\n\nrequire github.com/jackc/pgx/v5 v5.11.0\n",
+				"main.go": `url := os.Getenv("DATABASE_URL")`,
+			},
+		},
+		{
+			name: "database-url-literal",
+			files: map[string]string{
+				"go.mod":    "module x\n\nrequire github.com/jackc/pgx/v5 v5.11.0\n",
+				"config.go": `cfg.Load("DATABASE_URL")`,
+			},
+			want: "postgres-indirect",
+		},
+		{
+			name: "activerecord-and-pg",
+			files: map[string]string{
+				"Gemfile": "gem \"activerecord\", \"~> 7.0\"\ngem \"pg\", \"~> 1.5\"\n",
+			},
+			want: "postgres-manifest",
+		},
+		{
+			name: "compose-postgres-image",
+			files: map[string]string{
+				"go.mod":             "module x\n\nrequire github.com/lib/pq v1.12.3\n",
+				"docker-compose.yml": "services:\n  app:\n    build: .\n  db:\n    image: postgres:17-alpine\n",
+			},
+			want: "compose-postgres",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "Dockerfile", "FROM x\nEXPOSE 8000\n")
+			for name, content := range tc.files {
+				writeFile(t, dir, name, content)
+			}
+			res, err := Dir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			needs := 0
+			for _, n := range res.Profile.Needs {
+				if n.Capability == "postgres" {
+					needs++
+				}
+			}
+			if needs != 1 {
+				t.Fatalf("want exactly one postgres need, got %d", needs)
+			}
+			var got []string
+			for _, inf := range res.Profile.Inferences {
+				got = append(got, inf.ID)
+				if inf.ID == "postgres-driver-manifest" {
+					t.Fatal("stronger postgres evidence must win over the driver inference")
+				}
+			}
+			if tc.want != "" && !slices.Contains(got, tc.want) {
+				t.Fatalf("want inference %q, got %v", tc.want, got)
+			}
+		})
 	}
 }
 

@@ -160,6 +160,7 @@ func Dir(root string) (*Result, error) {
 	)
 
 	manifestPostgres := readManifestPostgresEvidence(root)
+	manifestPgDriver := readManifestPostgresDriverEvidence(root)
 	manifestORM := readManifestORMEvidence(root)
 
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -262,6 +263,7 @@ func Dir(root string) (*Result, error) {
 		dbURLLiterals:    dbURLLiterals,
 		composeHits:      readComposeCapabilities(root),
 		manifestPostgres: manifestPostgres,
+		manifestPgDriver: manifestPgDriver,
 		manifestORM:      manifestORM,
 	})
 }
@@ -280,13 +282,14 @@ type detection struct {
 	dbURLLiterals    []profile.Evidence
 	composeHits      []composeCapability
 	manifestPostgres []profile.Evidence
+	manifestPgDriver []profile.Evidence
 	manifestORM      []profile.Evidence
 }
 
 func synthesize(d detection) (*Result, error) {
 	root, dockerfiles, exposePorts, langs := d.root, d.dockerfiles, d.exposePorts, d.langs
 	envHits, healthPaths, dbURLLiterals := d.envHits, d.healthPaths, d.dbURLLiterals
-	composeHits, manifestPostgres, manifestORM := d.composeHits, d.manifestPostgres, d.manifestORM
+	composeHits, manifestPostgres, manifestPgDriver, manifestORM := d.composeHits, d.manifestPostgres, d.manifestPgDriver, d.manifestORM
 	p := profile.AppProfile{Version: 1}
 	var questions []string
 
@@ -492,6 +495,26 @@ func synthesize(d detection) (*Result, error) {
 		p.Secrets = append(p.Secrets, profile.SecretRef{Name: "DATABASE_URL"})
 		seenNeed["postgres"] = true
 	}
+	// A PostgreSQL-only driver (psycopg, pgx, the pg gem …) is evidence the app
+	// can use PostgreSQL. It names no connection variable, and multi-engine apps
+	// ship several drivers, so the inference says exactly that and adds no secret.
+	// A compose postgres image is the stronger signal (the engine the app runs
+	// beside) and keeps the need when both are present.
+	composePostgres := slices.ContainsFunc(composeHits, func(h composeCapability) bool { return h.Capability == "postgres" })
+	if !seenNeed["postgres"] && !composePostgres && len(manifestPgDriver) > 0 {
+		p.Needs = append(p.Needs, profile.Need{Capability: "postgres", Mode: "undecided", Evidence: manifestPgDriver})
+		p.Inferences = append(p.Inferences, profile.Inference{
+			ID:         "postgres-driver-manifest",
+			Statement:  "the app can connect to PostgreSQL: a PostgreSQL driver is a dependency",
+			Confidence: "medium",
+			Reasoning:  "a PostgreSQL client library was found in a package manifest but no direct DATABASE_URL environment read was detected. The dependency may be optional or dev-only, and the app may support other database engines — verify which engine production uses and which variables carry its connection",
+		})
+		p.Assumptions = append(p.Assumptions, profile.Assumption{
+			ID:        "postgres-mode",
+			Statement: "PostgreSQL driver found in a package manifest: verify that production uses PostgreSQL, find the variables the app reads its connection from, and choose provision or reference; a driver does not establish a need for a new database.",
+		})
+		seenNeed["postgres"] = true
+	}
 	// prisma/sequelize are multi-engine ORMs: they are not evidence of postgres.
 	if !seenNeed["postgres"] && len(manifestORM) > 0 {
 		p.Inferences = append(p.Inferences, profile.Inference{
@@ -556,6 +579,43 @@ var postgresManifestRules = []manifestRule{
 	},
 }
 
+// postgresDriverManifestRules name PostgreSQL-only client libraries. A driver
+// shows the app can talk to PostgreSQL, not that production does or which
+// variables carry the connection, so a hit yields a weaker inference than the
+// DATABASE_URL-shaped markers above and no secret name.
+var postgresDriverManifestRules = []manifestRule{
+	{
+		files: []string{"requirements.txt", "pyproject.toml"},
+		anyOf: []string{"psycopg", "psycopg2", "psycopg2-binary", "asyncpg", "pg8000"},
+		match: matchPythonManifestDep,
+	},
+	{
+		files: []string{"go.mod"},
+		anyOf: []string{"github.com/jackc/pgx", "github.com/lib/pq", "gorm.io/driver/postgres"},
+		match: matchGoModuleDep,
+	},
+	{
+		files: []string{"Cargo.toml"},
+		anyOf: []string{"tokio-postgres"},
+		match: matchCargoDep,
+	},
+	{
+		files: []string{"pom.xml", "build.gradle", "build.gradle.kts"},
+		anyOf: []string{"org.postgresql"},
+		match: matchJVMDep,
+	},
+	{
+		files: []string{"Gemfile"},
+		anyOf: []string{"pg"},
+		match: matchRubyManifestDep,
+	},
+	{
+		files: []string{"mix.exs"},
+		anyOf: []string{"postgrex"},
+		match: matchElixirManifestDep,
+	},
+}
+
 var nodeORMManifestRules = []manifestRule{
 	{
 		files: []string{"package.json"},
@@ -579,11 +639,44 @@ func matchNodeManifestDep(line, marker string) bool {
 }
 
 func matchElixirManifestDep(line, marker string) bool {
+	if strings.HasPrefix(strings.TrimSpace(line), "#") {
+		return false
+	}
 	return regexp.MustCompile(`\{:` + regexp.QuoteMeta(marker) + `\b`).MatchString(line)
 }
 
 func matchRubyManifestDep(line, marker string) bool {
+	if strings.HasPrefix(strings.TrimSpace(line), "#") {
+		return false
+	}
 	return regexp.MustCompile(`gem\s+['"]` + regexp.QuoteMeta(marker) + `['"]`).MatchString(line)
+}
+
+// matchGoModuleDep matches a direct requirement on the module or one of its
+// major versions (pgx/v5). Indirect requirements are another module's
+// dependency, and replace directives are not requirements.
+func matchGoModuleDep(line, marker string) bool {
+	if strings.Contains(line, "// indirect") || strings.Contains(line, "=>") {
+		return false
+	}
+	return regexp.MustCompile(`^\s*(?:require\s+)?` + regexp.QuoteMeta(marker) + `(?:/v\d+)?\s+v\d`).MatchString(line)
+}
+
+// matchCargoDep matches `name = …`, dotted keys (`name.workspace = true`) and
+// `[dependencies.name]` table headers.
+func matchCargoDep(line, marker string) bool {
+	m := regexp.QuoteMeta(marker)
+	return regexp.MustCompile(`^\s*(?:` + m + `\s*(?:\.\s*[\w-]+\s*)?=|\[(?:[\w.-]+\.)?dependencies\.` + m + `\s*\])`).MatchString(line)
+}
+
+// matchJVMDep matches the group id in a Maven <groupId> or a Gradle coordinate.
+func matchJVMDep(line, marker string) bool {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") || strings.HasPrefix(trimmed, "<!--") {
+		return false
+	}
+	m := regexp.QuoteMeta(marker)
+	return regexp.MustCompile(`<groupId>\s*` + m + `\s*</groupId>|["']` + m + `:`).MatchString(line)
 }
 
 // readManifestPostgresEvidence scans root dependency manifests for allowlisted
@@ -591,6 +684,10 @@ func matchRubyManifestDep(line, marker string) bool {
 // inference, never a fact.
 func readManifestPostgresEvidence(root string) []profile.Evidence {
 	return readManifestEvidence(root, postgresManifestRules)
+}
+
+func readManifestPostgresDriverEvidence(root string) []profile.Evidence {
+	return readManifestEvidence(root, postgresDriverManifestRules)
 }
 
 func readManifestORMEvidence(root string) []profile.Evidence {

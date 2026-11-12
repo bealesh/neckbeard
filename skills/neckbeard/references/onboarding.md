@@ -62,12 +62,17 @@ findings; confirm dependencies only when application configuration supports them
 
 **Needs can be missing entirely — review datastores as a first-class step.**
 Deterministic detection only sees direct environment reads, quoted
-`"DATABASE_URL"` literals, and env-template declarations. Framework helpers
-hide the rest (Django's `dj_database_url`, Rails credentials, typed config
-wrappers): read the app's actual configuration code (settings.py,
-config/runtime.exs, …) and add any datastore the draft missed, with file:line
-evidence. A web framework with no database in its draft is almost always a
-detection gap, not a stateless app.
+`"DATABASE_URL"` literals, env-template declarations, root compose images, and
+an allowlist of root dependency-manifest markers. A PostgreSQL driver in a
+manifest (psycopg, pgx, the `pg` gem, …) lands as the
+`postgres-driver-manifest` inference with no secret name: find the variables
+the app actually reads its connection from (`DB_HOST`, `PAPERLESS_DBHOST`, …)
+and whether PostgreSQL is the production engine or one of several it supports.
+Framework helpers hide the rest (Rails credentials, typed config wrappers):
+read the app's actual configuration code (settings.py, config/runtime.exs, …)
+and add any datastore the draft missed, with file:line evidence. A web
+framework with no database in its draft is almost always a detection gap, not
+a stateless app.
 
 **Process roles.** Model long-running daemons (Celery workers, an in-app
 scheduler like celery beat) as `kind: worker` with an explicit `command`; use
